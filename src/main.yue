@@ -1,5 +1,7 @@
 local *
 
+import 'cc.strings' as :wrap
+
 macro version = ->
   "'#{os.date!}'"
 _VERSION = $version!
@@ -16,11 +18,14 @@ main = ->
   error 'unreachable'
 
 trigger_by_time = (ctx) ->
-  timer_id = os.startTimer 60
   while true
-    _, id = os.pullEvent 'timer'
-    if id == timer_id
-      ctx.active = true
+    timer_id = os.startTimer 60 * 5
+    local id
+    repeat
+      _, id = os.pullEvent 'timer'
+    until id == timer_id
+    print 'activating due to timer'
+    ctx.active = true
 
 trigger_by_redstone = (ctx) ->
   sides = redstone.getSides!
@@ -33,6 +38,7 @@ trigger_by_redstone = (ctx) ->
         high = true
         break
     if high
+      print 'activating due to redstone'
       ctx.active = true
 
 react = (ctx) ->
@@ -51,7 +57,7 @@ react = (ctx) ->
     state = reactor\state!
 
     { :action_required, :recommended_action } = ai\request_advice state
-    if action_required
+    if not action_required
       print 'no action required'
       continue
 
@@ -66,7 +72,7 @@ react = (ctx) ->
 
 print_report = (printer, state, recommended_action) ->
   if not printer.newPage!
-    return 'error: cannot print due to missing paper or ink'
+    return 'error: cannot print due to missing paper, ink or output space'
 
   state_entries = [ v for _, v in pairs state ]
   table.sort state_entries, (a, b) -> a.name, b.name
@@ -74,14 +80,78 @@ print_report = (printer, state, recommended_action) ->
   { :hour, :min, :sec } = os.date '!*t'
   time_str = "#{hour}:#{min}:#{sec}"
 
-  printer.setPageTitle 'Skala Reactor Report'
-  printer.write 'Reactor state:\n'
-  for state_entry in *state_entries
-    printer.write "#{time_str}: #{state_entry.name}: #{state_entry.value}\n"
-  printer.write 'Recommended action:\n'
-  printer.write recommended_action
+  width, height = printer.getPageSize!
 
-  printer.endPage!
+  lines = with {}
+    [] = '>> S.K.A.L.A. report'
+    [] = ">> (#{time_str})"
+
+    [] = ''
+    [] = '> Recommendation:'
+    [] = ''
+    [] = recommended_action
+
+    [] = ''
+    [] = '> Reactor state:'
+    [] = ''
+    longest_name = 0
+    longest_value = 0
+    entries = with {}
+      for state_entry in *state_entries
+        if state_entry.print?
+          if not state_entry.print
+            continue
+
+        name = state_entry.print_name ?? state_entry.name
+        if #name > longest_name
+          longest_name = #name
+
+        value = state_entry.print_value ?? state_entry.value
+        if #value > longest_value
+          longest_value = #value
+
+        [] =
+          :name
+          :value
+    if longest_name + longest_value + 2 <= width
+      for { :name, :value } in *entries
+        padding = ' '\rep 2 + longest_name - #name
+        [] = "#{name}#{padding}#{value}"
+    else
+      for { :name, :value } in *entries
+        [] = "#{name}: #{value}"
+
+  pages = with {}
+    current_page = {}
+    for line in *lines
+      for l in *wrap line, width
+        current_page[] = l
+        if #current_page == height
+          [] = current_page
+          current_page = {}
+    if #current_page > 0
+      [] = current_page
+
+  if #pages > printer.getInkLevel!
+    return "insufficient ink for #{#pages} pages"
+  if #pages > printer.getPaperLevel!
+    return "insufficient paper for #{#pages} pages"
+
+  for i = 1, #pages
+    page = pages[i]
+
+    if i > 1
+      printer.newPage!
+
+    if #pages > 1
+      printer.setPageTitle "Skala Reactor Report (#{i}/#{#pages})"
+    else
+      printer.setPageTitle "Skala Reactor Report"
+    for line_num = 1, #page
+      printer.setCursorPos 1, line_num
+      printer.write page[line_num]
+
+    printer.endPage!
 
   nil
 
@@ -102,20 +172,19 @@ class Ai
       [] = '\n'
     prompt = table.concat prompt_parts, ' '
 
-    local raw_advice
-    with assert io.popen 'qwen-vl chat'
-      print 'writing prompt'
-      \write prompt
-      print 'flushing'
-      \flush!
-      print 'reading advice'
-      raw_advice = \read '*a'
-      \close!
-
-    print "got raw advice: #{raw_advice}"
+    -- local raw_advice
+    -- with assert io.popen 'qwen-vl chat'
+    --   print 'writing prompt'
+    --   \write prompt
+    --   print 'flushing'
+    --   \flush!
+    --   print 'reading advice'
+    --   raw_advice = \read '*a'
+    --   \close!
+    raw_advice = "core temperature critical. Increase temperature immediately."
 
     recommended_action = nil
-    action_required = (raw_advice\sub 1, 3)\lower!\match '^No.'
+    action_required = not (raw_advice\sub 1, 3)\lower!\match '^No.'
     if action_required
       recommended_action = raw_advice
     {
@@ -139,6 +208,7 @@ class Reactor
     with {}
       .status =
         name: 'reactor'
+        print_name: 'status'
         value: switch @reactor.getStatus!
           when true
             'active'
@@ -148,33 +218,43 @@ class Reactor
             error 'unreachable'
       .temperature =
         name: 'core temperature'
-        value: "#{@reactor.getTemperature! - KELVIN_OFFSET}°C"
+        print_name: 'core temp'
+        value: '%.2f°C'\format @reactor.getTemperature! - KELVIN_OFFSET
+        print_value: '%.2fC'\format @reactor.getTemperature! - KELVIN_OFFSET
       .coolant_filled =
         name: 'coolant level'
-        value: "#{100 * @reactor.getCoolantFilledPercentage!}%"
+        print_name: 'coolant lvl'
+        value: '%.2f%%'\format 100 * @reactor.getCoolantFilledPercentage!
       .heated_coolant_filled =
         name: 'heated coolant level'
-        value: "#{100 * @reactor.getHeatedCoolantFilledPercentage!}%"
+        print_name: 'hot coolant lvl'
+        value: '%.2f%%'\format 100 * @reactor.getHeatedCoolantFilledPercentage!
       .fuel_filled =
         name: 'fuel level'
-        value: "#{100 * @reactor.getFuelFilledPercentage!}%"
+        print_name: 'fuel lvl'
+        value: '%.2f%%'\format 100 * @reactor.getFuelFilledPercentage!
       .waste_filled =
         name: 'waste level'
-        value: "#{100 * @reactor.getWasteFilledPercentage!}%"
+        print_name: 'waste lvl'
+        value: '%.2f%%'\format 100 * @reactor.getWasteFilledPercentage!
       .actual_burn_rate =
         name: 'burn rate'
-        value: "#{@reactor.getActualBurnRate! * TICKS_PER_SECOND}mB/s"
+        value: '%.2fmB/s'\format @reactor.getActualBurnRate! * TICKS_PER_SECOND
       .target_burn_rate =
         name: 'target burn rate'
-        value: "#{@reactor.getBurnRate! * TICKS_PER_SECOND}mB/s"
+        print_name: 'goal burn rate'
+        value: '%.2fmB/s'\format @reactor.getBurnRate! * TICKS_PER_SECOND
+        print: false
       .damage_percent =
         name: "reactor's damage"
-        value: "#{100 * @reactor.getDamagePercent!}%"
+        print_name: 'damage'
+        value: '%.2f%%'\format 100 * @reactor.getDamagePercent!
       .heating_rate =
         name: 'heating rate'
-        value: "#{@reactor.getHeatingRate! * TICKS_PER_SECOND}mB/s"
+        value: '%.2fmB/s'\format @reactor.getHeatingRate! * TICKS_PER_SECOND
       .boil_efficiency =
         name: 'boil efficiency'
-        value: "#{100 * @reactor.getBoilEfficiency!}%"
+        print_name: 'boil effncy'
+        value: '%.2f%%'\format 100 * @reactor.getBoilEfficiency!
 
 main!

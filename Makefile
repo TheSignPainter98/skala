@@ -4,7 +4,7 @@ OBJECTS = $(patsubst %.yue,%.lua,$(SOURCES))
 
 all: skala
 
-skala: src/main.lua
+skala: src/main.lua $(OBJECTS)
 	cp $< $@
 
 install: skala
