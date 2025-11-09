@@ -1,0 +1,139 @@
+local *
+
+main = ->
+  ai = Ai 'http://localhost:8326'
+
+  first = true
+  while true
+    if not first
+      os.sleep 60
+    first = false
+
+    reactor, err = Reactor::find!
+    if err?
+      print "cannot find reactor: #{err}"
+      continue
+    state = reactor\state!
+
+    { :action_required, :recommended_action } = ai\request_advice state
+    if action_required
+      print 'no action required'
+      continue
+
+    printer = peripheral.find 'printer'
+    if not printer?
+      print 'error: no printer'
+      continue
+    err = print_report printer, state, recommended_action
+    if err?
+      print "cannot print report: #{err}"
+      continue
+
+print_report = (printer, state, recommended_action) ->
+  if not printer.newPage!
+    return 'error: cannot print due to missing paper or ink'
+
+  state_entries = [ v for _, v in pairs state ]
+  table.sort state_entries, (a, b) -> a.name, b.name
+
+  { :hour, :min, :sec } = os.date '!*t'
+  time_str = "#{hour}:#{min}:#{sec}"
+
+  printer.setPageTitle 'Skala Reactor Report'
+  printer.write 'Reactor state:\n'
+  for state_entry in *state_entries
+    printer.write "#{time_str}: #{state_entry.name}: #{state_entry.value}\n"
+  printer.write 'Recommended action:\n'
+  printer.write recommended_action
+
+  printer.endPage!
+
+  nil
+
+fe_to_j = (fe) -> fe * 2.5
+
+class Ai
+  new: (@address) =>
+    assert @address, 'no address'
+
+  request_advice: (state) =>
+    prompt_parts = with {}
+      [] = 'Be concise.'
+      [] = 'Do not patronise.'
+      [] = 'You are a nuclear reactor control computer.'
+      for _, v in pairs state
+        [] = "The #{v.name} is at #{v.value}."
+      [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
+    prompt = table.concat prompt_parts, ' '
+
+    print prompt
+
+    local raw_advice
+    with assert io.popen 'qwen-vl chat'
+      \write prompt
+      \flush!
+      raw_advice = \read '*a'
+      \close!
+
+    recommended_action = nil
+    action_required = (raw_advice\sub 1, 10)\lower!\match '^No.'
+    if action_required
+      recommended_action = raw_advice
+    {
+      :action_required
+      :recommended_action
+    }
+
+class Reactor
+  new: (@reactor) =>
+
+  @find: =>
+    reactor = peripheral.find 'fissionReactorLogicAdapter'
+    if not reactor?
+      return nil, 'cannot find fission reactor logic adaptor'
+    ret = @@ reactor
+    ret, nil
+
+  state: =>
+    with {}
+      .status =
+        name: 'reactor'
+        value: switch @reactor.getStatus!
+          when true
+            'active'
+          when false
+            'inactive'
+          else
+            error 'unreachable'
+      .temperature =
+        name: 'core temperature'
+        value: "#{@reactor.getTemperature! + 300} Celsius"
+      .coolant_filled =
+        name: 'coolant level'
+        value: "#{100 * @reactor.getCoolantFilledPercentage!}%"
+      .heated_coolant_filled =
+        name: 'heated coolant level'
+        value: "#{100 * @reactor.getHeatedCoolantFilledPercentage!}%"
+      .fuel_filled =
+        name: 'fuel level'
+        value: "#{100 * @reactor.getFuelFilledPercentage!}%"
+      .waste_filled =
+        name: 'waste level'
+        value: "#{100 * @reactor.getWasteFilledPercentage!}%"
+      .actual_burn_rate =
+        name: 'burn rate'
+        value: "#{@reactor.getActualBurnRate!}mB/t"
+      .target_burn_rate =
+        name: 'target burn rate'
+        value: "#{@reactor.getBurnRate!}mB/t"
+      .damage_percent =
+        name: "reactor's damage"
+        value: "#{100 * @reactor.getDamagePercent!}%"
+      .heating_rate =
+        name: 'heating rate'
+        value: "#{@reactor.getHeatingRate!}mb/t"
+      .boil_efficiency =
+        name: 'boil efficiency'
+        value: "#{100 * @reactor.getBoilEfficiency!}%"
+
+main!
