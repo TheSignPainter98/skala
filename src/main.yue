@@ -1,13 +1,44 @@
 local *
 
+unpack ??= table.unpack
+
 main = ->
+  ctx =
+    active: true
+  parallel.waitForAny unpack
+    * -> trigger_by_time ctx
+    * -> trigger_by_redstone ctx
+    * -> react ctx
+  error 'unreachable'
+
+trigger_by_time = (ctx) ->
+  timer_id = os.startTimer 60
+  while true
+    _, id = os.pullEvent 'timer'
+    if id == timer_id
+      ctx.active = true
+
+trigger_by_redstone = (ctx) ->
+  sides = redstone.getSides!
+  while true
+    os.pullEvent 'redstone'
+
+    high = false
+    for side in *sides
+      if redstone.getInput side
+        high = true
+        break
+    if high
+      ctx.active = true
+
+react = (ctx) ->
   ai = Ai 'http://localhost:8326'
 
-  first = true
   while true
-    if not first
-      os.sleep 60
-    first = false
+    if not ctx.active
+      coroutine.yield!
+      continue
+    ctx.active = false
 
     reactor, err = Reactor::find!
     if err?
@@ -64,16 +95,20 @@ class Ai
       for _, v in pairs state
         [] = "The #{v.name} is at #{v.value}."
       [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
+      [] = '\n'
     prompt = table.concat prompt_parts, ' '
-
-    print prompt
 
     local raw_advice
     with assert io.popen 'qwen-vl chat'
+      print 'writing prompt'
       \write prompt
+      print 'flushing'
       \flush!
+      print 'reading advice'
       raw_advice = \read '*a'
       \close!
+
+    print "got raw advice: #{raw_advice}"
 
     recommended_action = nil
     action_required = (raw_advice\sub 1, 10)\lower!\match '^No.'
@@ -95,6 +130,8 @@ class Reactor
     ret, nil
 
   state: =>
+    TICKS_PER_SECOND = 20
+    KELVIN_OFFSET = 273.15
     with {}
       .status =
         name: 'reactor'
@@ -107,7 +144,7 @@ class Reactor
             error 'unreachable'
       .temperature =
         name: 'core temperature'
-        value: "#{@reactor.getTemperature! + 300} Celsius"
+        value: "#{@reactor.getTemperature! - KELVIN_OFFSET} Celsius"
       .coolant_filled =
         name: 'coolant level'
         value: "#{100 * @reactor.getCoolantFilledPercentage!}%"
@@ -122,16 +159,16 @@ class Reactor
         value: "#{100 * @reactor.getWasteFilledPercentage!}%"
       .actual_burn_rate =
         name: 'burn rate'
-        value: "#{@reactor.getActualBurnRate!}mB/t"
+        value: "#{@reactor.getActualBurnRate! * TICKS_PER_SECOND}mB/s"
       .target_burn_rate =
         name: 'target burn rate'
-        value: "#{@reactor.getBurnRate!}mB/t"
+        value: "#{@reactor.getBurnRate! * TICKS_PER_SECOND}mB/s"
       .damage_percent =
         name: "reactor's damage"
         value: "#{100 * @reactor.getDamagePercent!}%"
       .heating_rate =
         name: 'heating rate'
-        value: "#{@reactor.getHeatingRate!}mb/t"
+        value: "#{@reactor.getHeatingRate! * TICKS_PER_SECOND}mB/s"
       .boil_efficiency =
         name: 'boil efficiency'
         value: "#{100 * @reactor.getBoilEfficiency!}%"
