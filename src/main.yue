@@ -56,11 +56,13 @@ react = (ctx) ->
       continue
     state = reactor\state!
 
+    print 'analysing reactor state'
     { :action_required, :recommended_action } = ai\request_advice state
     if not action_required
       print 'no action required'
       continue
 
+    print 'writing report'
     printer = peripheral.find 'printer'
     if not printer?
       print 'no printer'
@@ -165,7 +167,7 @@ class Ai
     prompt_parts = with {}
       [] = 'Be concise.'
       [] = 'Do not patronise.'
-      [] = 'You are a nuclear reactor control computer.'
+      [] = 'You are an RBMK nuclear reactor control computer.'
       for _, v in pairs state
         [] = "The #{v.name} is #{v.value}."
       [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
