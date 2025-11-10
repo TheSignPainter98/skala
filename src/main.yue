@@ -79,8 +79,11 @@ print_report = (printer, state, recommended_action) ->
   state_entries = [ v for _, v in pairs state ]
   table.sort state_entries, (a, b) -> a.name, b.name
 
-  { :hour, :min, :sec } = os.date '!*t'
-  time_str = "#{hour}:#{min}:#{sec}"
+  time = os.time 'ingame'
+  hour, hour_frac = math.modf time
+  minute, minute_frac = math.modf 60 * hour_frac
+  second, _ = math.modf 60 * minute_frac
+  time_str = '%02d:%02d:%02d'\format hour, minute, second
 
   width, height = printer.getPageSize!
 
@@ -225,11 +228,11 @@ class Reactor
         print_value: '%.2fC'\format @reactor.getTemperature! - KELVIN_OFFSET
       .coolant_filled =
         name: 'coolant level'
-        print_name: 'coolant lvl'
+        print_name: "c'lnt lvl"
         value: '%.2f%%'\format 100 * @reactor.getCoolantFilledPercentage!
       .heated_coolant_filled =
         name: 'heated coolant level'
-        print_name: 'hot coolant lvl'
+        print_name: "hot c'lnt lvl"
         value: '%.2f%%'\format 100 * @reactor.getHeatedCoolantFilledPercentage!
       .fuel_filled =
         name: 'fuel level'
@@ -241,11 +244,11 @@ class Reactor
         value: '%.2f%%'\format 100 * @reactor.getWasteFilledPercentage!
       .actual_burn_rate =
         name: 'burn rate'
-        value: '%.2fmB/s'\format @reactor.getActualBurnRate! * TICKS_PER_SECOND
+        value: '%.2gmB/s'\format @reactor.getActualBurnRate! * TICKS_PER_SECOND
       .target_burn_rate =
         name: 'target burn rate'
         print_name: 'goal burn rate'
-        value: '%.2fmB/s'\format @reactor.getBurnRate! * TICKS_PER_SECOND
+        value: '%.2gmB/s'\format @reactor.getBurnRate! * TICKS_PER_SECOND
         print: false
       .damage_percent =
         name: "reactor's damage"
@@ -253,7 +256,7 @@ class Reactor
         value: '%.2f%%'\format 100 * @reactor.getDamagePercent!
       .heating_rate =
         name: 'heating rate'
-        value: '%.2fmB/s'\format @reactor.getHeatingRate! * TICKS_PER_SECOND
+        value: '%.2gmB/s'\format @reactor.getHeatingRate! * TICKS_PER_SECOND
       .boil_efficiency =
         name: 'boil efficiency'
         print_name: 'boil effncy'
