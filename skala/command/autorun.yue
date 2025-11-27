@@ -1,0 +1,57 @@
+local *
+
+import 'skala.clap' as :Flag, :Param, :Subcommand
+import 'skala.quicktype' as :is, :declare_type, :F
+import 'skala.util.toml'
+
+import 'skala.command.control'
+import 'skala.command.sherbina'
+import 'skala.command.killswitch'
+
+export CONFIG_FILE = 'skala.toml'
+
+declare_type 'skala.Config', [[{
+  control: ?control.Args,
+  killswitch: ?killswitch.Args,
+  sherbina: ?sherbina.Args,
+}]]
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'autorun'
+    \description 'start this skala node from written config'
+
+export main = (args) ->
+  config, err = get_config!
+  if err?
+    print err
+    return
+  run config
+
+export run = F '({}) -> <>', (args) ->
+  import 'skala.spec' as :repr
+  print repr args
+  if args.control?
+    control.main args.control
+  else if args.sherbina?
+    sherbina.main args.sherbina
+  else if args.killswitch?
+    killswitch.main args.killswitch
+  else
+    error 'unreachable'
+
+get_config = F '() -> <?skala.Config, ?string>', ->
+  local raw_config
+  with? io.open CONFIG_FILE, 'r'
+    raw_config = assert \read '*a'
+    assert \close!
+  if not raw_config?
+    return nil, "config not present, run `skala install' first"
+
+  config, err = toml.decode raw_config
+  if err?
+    return nil, err
+
+  _, err = is 'skala.Config', config
+  if err?
+    return nil, err
+  config, nil

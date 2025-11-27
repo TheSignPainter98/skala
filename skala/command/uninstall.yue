@@ -1,0 +1,8 @@
+import 'skala.clap' as :Subcommand, :Param
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'uninstall'
+    \description 'remove autostart shim'
+
+export main = (args) ->
+  fs.delete 'startup.lua'

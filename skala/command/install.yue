@@ -1,0 +1,68 @@
+local *
+
+import 'skala.quicktype' as :F
+import 'skala.clap' as :Flag, :Param, :Subcommand
+import 'skala.command.autorun' as :CONFIG_FILE
+
+import 'skala.command.control'
+import 'skala.command.killswitch'
+import 'skala.command.sherbina'
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'install'
+    \description 'create autostart shim'
+    \add with Flag 'pastebin'
+      \description 'hash of pastebin file to download'
+      \takes_param!
+    \add with Flag 'force'
+      \description 'overwrite existing startup.lua'
+    \add with Param 'kind'
+      \description 'the kind of this node'
+      \options
+        * 'control'
+        * 'sherbina'
+        * 'killswitch'
+
+export main = (args) ->
+  autodownload_shim = ""
+  if args.pastebin?
+    autodownload_shim = "
+      if redstone.getAnalogInput('top') > 4 then
+        print('downloading skala')
+        shell.run('pastebin', 'get', '#{args.pastebin}', '.skala~')
+
+        print('applying update')
+        fs.move('.skala~', 'skala')
+      end
+    "
+  code = "
+    #{autodownload_shim}
+    shell.run('skala', 'autorun')
+  "
+
+  if not args.force
+    -- Race condition here :)
+    with? io.open 'startup.lua', 'r'
+      assert \close!
+      print "file `startup.lua' already exists."
+      print "pass --force to overwrite it"
+      return
+  with assert io.open 'startup.lua', 'w+'
+    assert \write code
+    assert \close!
+
+  config = config_for args.kind
+  with assert io.open CONFIG_FILE, 'w+'
+    assert \write config
+    assert \close!
+
+config_for = F '(string) -> string', (kind) ->
+  switch kind
+    when 'control'
+      control.DEFAULT_CONFIG
+    when 'killswitch'
+      killswitch.DEFAULT_CONFIG
+    when 'sherbina'
+      sherbina.DEFAULT_CONFIG
+    else
+      error "unknown skala node kind `#{kind}'"

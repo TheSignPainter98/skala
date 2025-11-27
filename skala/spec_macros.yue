@@ -1,0 +1,17 @@
+-- macro label = (expr) ->
+
+export macro expect_that = (expr, matcher) ->
+  eqs = '='
+  while expr\match eqs
+    eqs ..= '='
+  label = "[#{eqs}[#{expr}]#{eqs}]"
+  location = '"#{$FILE}:#{$LINE}"'
+  "require('shunt.spec')._expect_that #{label}, #{expr}, (#{matcher}), #{location}"
+
+export macro assert_that = (expr, matcher) ->
+  eqs = '='
+  while expr\match eqs
+    eqs ..= '='
+  label = "[#{eqs}[#{expr}]#{eqs}]"
+  location = '"#{$FILE}:#{$LINE}"'
+  "require('shunt.spec')._assert_that #{label}, #{expr}, (#{matcher}), #{location}"

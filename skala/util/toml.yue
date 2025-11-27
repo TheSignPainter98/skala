@@ -1,0 +1,461 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F, :Parser, :Symbol
+
+export decode = (raw) ->
+  parser = Decoder Lexer raw
+  ast, err = parser\parse!
+  if err?
+    return nil, err
+  ast\construct_value!, nil
+
+-- Minimal TOML parser. NB, this does NOT currently support:
+-- - Quotes in strings
+-- - Non-literal strings
+-- - Inline tables
+-- - Inline arrays
+class Decoder extends Parser
+  new: (@lexer) =>
+
+  parse: =>
+    local ret, err
+    try
+      ret = @parse_file!
+      @expect T_EOF
+    catch err2
+      err = err2
+    if err?
+      return nil, err
+    ret, nil
+
+  parse_file: =>
+    @ignore_any T_NEWLINE
+    if @lexer\peek!.type == T_EOF
+      return Ast!
+
+    root_section = nil
+    if @lexer\peek!.type != T_BRACKET_OPEN
+      root_section = Section nil, @parse_section_body!
+      @ignore_any T_NEWLINE
+
+    named_sections = nil
+    if @lexer\peek!.type != T_EOF
+      named_sections = @repeat_until @\parse_section, T_EOF
+    Ast root_section, named_sections
+
+  parse_section: =>
+    header = @parse_section_header!
+
+    @expect T_NEWLINE
+    @ignore_any T_NEWLINE
+
+    body = switch @lexer\peek!.type
+      when T_BRACKET_OPEN, T_EOF
+        nil
+      else
+        @parse_section_body!
+
+    Section header, body
+
+  parse_section_header: =>
+    @expect T_BRACKET_OPEN
+    is_array_of_tables = @maybe T_BRACKET_OPEN
+
+    key = @parse_key!
+
+    if is_array_of_tables
+      @expect T_BRACKET_CLOSE
+    @expect T_BRACKET_CLOSE
+
+    if is_array_of_tables
+      ArrayOfTablesHeader key
+    else
+      TableHeader key
+
+  parse_section_body: =>
+    @parse_repeat_separated @\parse_entry, T_NEWLINE,
+      allow_repeated_separator: true,
+      separator_trails_before:
+        * T_BRACKET_OPEN
+        * T_EOF
+
+  parse_entry: =>
+    key = @parse_key!
+    @expect T_EQUALS
+    value = @parse_value!
+    Entry key, value
+
+  parse_key: =>
+    Key @parse_repeat_separated @\parse_key_part, T_DOT
+
+  parse_key_part: =>
+    @expect T_KEY_LITERAL
+
+  parse_value: =>
+    Value @select
+      * token: T_BOOLEAN
+      * token: T_STRING
+      * token: T_NUMBER
+
+class Ast
+  new: (@root_section=nil, @named_sections={}) =>
+    if @root_section? and @root_section.header?
+      error "internal error: root section has header"
+    for named_section in *@named_sections
+      if not named_section.header?
+        error "internal error: non-root section has no header"
+
+  construct_value: =>
+    tab = {}
+    if @root_section?
+      for entry in *@root_section.entries
+        entry\construct_value_in tab
+    for named_section in *@named_sections
+      named_section\construct_value_in tab
+    tab
+
+class Section
+  new: (@header, @entries={}) =>
+
+  construct_value_in: (tab) =>
+    if @header?
+      tab = @header\acquire_target tab
+    for entry in *@entries
+      entry\construct_value_in tab
+
+class TableHeader
+  new: (@key) =>
+
+  acquire_target: (tab) =>
+    tab, key = @key\acquire_target tab
+    if not tab[key]?
+      tab[key] = {}
+    tab[key]
+
+class ArrayOfTablesHeader
+  new: (@key) =>
+
+  acquire_target: (tab) =>
+    tab, key = @key\acquire_target tab
+    if not tab[key]?
+      tab[key] = {}
+    tab = tab[key]
+
+    target = {}
+    tab[] = target
+    target
+
+class Entry
+  new: (@key, @value) =>
+
+  construct_value_in: (tab) =>
+    tab, key = @key\acquire_target tab
+    tab[key] = @value\construct_value!
+
+class Key
+  new: (@parts) =>
+
+  acquire_target: (tab) =>
+    for part in *@parts[,-1]
+      if not tab[part]?
+        tab[part] = {}
+      tab = tab[part]
+    tab, @parts[#@parts]
+
+class Value
+  new: (@value) =>
+
+  construct_value: =>
+    @value
+
+-- Tokens
+T_KEY_LITERAL = <tostring>: => '<key-literal>'
+T_BOOLEAN = <tostring>: => '<boolean>'
+T_NUMBER = <tostring>: => '<number>'
+T_STRING = <tostring>: => '<string>'
+T_BRACE_OPEN = <tostring>: => "'{'"
+T_BRACE_CLOSE = <tostring>: => "'}'"
+T_BRACKET_OPEN = <tostring>: => "'['"
+T_BRACKET_CLOSE = <tostring>: => "']'"
+T_EQUALS = <tostring>: => "'='"
+T_COMMA = <tostring>: => "','"
+T_DOT = <tostring>: => "'.'"
+T_NEWLINE = <tostring>: => "'\\n'"
+T_EOF = <tostring>: => '<eof>'
+
+class Lexer
+  new: (input) =>
+    @index = 1
+    @done = false
+    @peeked = nil
+    @tokens = coroutine.wrap ->
+      while @index <= #input
+        ty, value, bytes_consumed = if comment = input\match '^#[^\r\n]*', @index
+          nil, nil, #comment
+        else if whitespace = input\match '^[ \t]+', @index
+          nil, nil, #whitespace
+        else if string = input\match "^'''([^']*)'''", @index
+          T_STRING, string, #string + 6
+        else if string = input\match "^'([^'\r\n]*)'", @index
+          T_STRING, string, #string + 2
+        else if number = input\match '^%-?[0-9]*%.[0-9]+', @index
+          T_NUMBER, (assert tonumber number), #number
+        else if number = input\match '^%-?[0-9]+', @index
+          T_NUMBER, (assert tonumber number), #number
+        else if boolean_true = input\match '^true', @index
+          T_BOOLEAN, true, #boolean_true
+        else if boolean_false = input\match '^false', @index
+          T_BOOLEAN, false, #boolean_false
+        else if key = input\match '^[a-zA-Z0-9_-]+', @index
+          T_KEY_LITERAL, key, #key
+        else if match = input\match '^=', @index
+          T_EQUALS, nil, #match
+        else if match = input\match '^{', @index
+          T_BRACE_OPEN, nil, #match
+        else if match = input\match '^}', @index
+          T_BRACE_CLOSE, nil, #match
+        else if match = input\match '^%[', @index
+          T_BRACKET_OPEN, nil, #match
+        else if match = input\match '^]', @index
+          T_BRACKET_CLOSE, nil, #match
+        else if match = input\match '^,', @index
+          T_COMMA, nil, #match
+        else if match = input\match '^%.', @index
+          T_DOT, nil, #match
+        else if match = input\match '^[\r\n]', @index
+          T_NEWLINE, nil, #match
+        else
+          error "unexpected character '#{input\sub @index, @index}' in toml '#{input}'"
+
+        @index += bytes_consumed
+        if not ty?
+          continue
+        coroutine.yield Symbol ty, value
+      coroutine.yield Symbol T_EOF
+
+  peek: =>
+    if @done
+      return nil
+
+    if @peeked?
+      return @peeked
+
+    @peeked = @tokens!
+    if not @peeked
+      @done = true
+    @peeked
+
+  next: =>
+    if @done
+      return nil
+
+    if @peeked?
+      peeked = @peeked
+      @peeked = nil
+      peeked
+    else
+      ret = @tokens!
+      if not ret?
+        @done = true
+      ret
+
+-- spec ->
+--   import 'shunt.spec_macros' as $
+--
+--   import 'shunt.spec' as :describe, :it, :matchers
+--
+--   import deep_eq, eq, errors, matches from matchers
+--
+--   describe 'Lexer', ->
+--     tokens = (raw) ->
+--       assert raw
+--       with {}
+--         for token in (Lexer raw).tokens
+--           [] = token
+--
+--     it 'emits structural tokens', ->
+--       $expect_that (tokens '{}[],=.\r\n'), deep_eq
+--         * Symbol T_BRACE_OPEN
+--         * Symbol T_BRACE_CLOSE
+--         * Symbol T_BRACKET_OPEN
+--         * Symbol T_BRACKET_CLOSE
+--         * Symbol T_COMMA
+--         * Symbol T_EQUALS
+--         * Symbol T_DOT
+--         * Symbol T_NEWLINE
+--         * Symbol T_NEWLINE
+--         * Symbol T_EOF
+--
+--     it 'emits values', ->
+--       $expect_that (tokens [['hello' '''he\nllo''' 123 -1234.5 true false]]), deep_eq
+--         * Symbol T_STRING, 'hello'
+--         * Symbol T_STRING, 'he\\nllo'
+--         * Symbol T_NUMBER, 123
+--         * Symbol T_NUMBER, -1234.5
+--         * Symbol T_BOOLEAN, true
+--         * Symbol T_BOOLEAN, false
+--         * Symbol T_EOF
+--
+--     it 'ignores comments', ->
+--       $expect_that (tokens '#hello\n#world'), deep_eq
+--         * Symbol T_NEWLINE
+--         * Symbol T_EOF
+--
+--     it 'rejects unexpectec characters', ->
+--       $expect_that (-> tokens '~'), errors matches [[unexpected character '~']]
+--
+--     describe '\\peek', ->
+--       it 'matches \\next', ->
+--         lexer = Lexer '{}'
+--         $assert_that lexer\peek!, deep_eq Symbol T_BRACE_OPEN
+--         $assert_that lexer\peek!, deep_eq Symbol T_BRACE_OPEN
+--         $assert_that lexer\next!, deep_eq Symbol T_BRACE_OPEN
+--         $assert_that lexer\peek!, deep_eq Symbol T_BRACE_CLOSE
+--         $assert_that lexer\peek!, deep_eq Symbol T_BRACE_CLOSE
+--         $assert_that lexer\next!, deep_eq Symbol T_BRACE_CLOSE
+--
+--       it 'returns EOF at EOF', ->
+--         lexer = Lexer ''
+--         $expect_that lexer\peek!, deep_eq Symbol T_EOF
+--         $expect_that lexer\peek!, deep_eq Symbol T_EOF
+--
+--   describe 'Decoder', ->
+--     parse_ast = (input) ->
+--       tokens = (raw) ->
+--         assert raw
+--         with {}
+--           for token in (Lexer raw).tokens
+--             [] = token
+--       (Decoder Lexer input)\parse!
+--
+--     it 'accepts empty', ->
+--       $expect_that (parse_ast ''), deep_eq Ast!
+--       $expect_that (parse_ast '\n'), deep_eq Ast!
+--
+--     it 'accepts root table', ->
+--       $expect_that (parse_ast '\nkey=true'), deep_eq Ast Section nil,
+--         * Entry (Key {'key'}), Value true
+--       $expect_that (parse_ast 'key=1234\nkey=-1234.5'), deep_eq Ast Section nil,
+--         * Entry (Key {'key'}), Value 1234
+--         * Entry (Key {'key'}), Value -1234.5
+--       $expect_that (parse_ast "key='aa'\n\nkey='aa'"), deep_eq Ast Section nil,
+--         * Entry (Key {'key'}), Value 'aa'
+--         * Entry (Key {'key'}), Value 'aa'
+--       $expect_that (parse_ast 'key=true\nkey=false\n'), deep_eq Ast Section nil,
+--         * Entry (Key {'key'}), Value true
+--         * Entry (Key {'key'}), Value false
+--
+--     it 'accepts composite keys', ->
+--       $expect_that (parse_ast 'key1.key2=true'), deep_eq Ast Section nil,
+--         * Entry (Key {'key1', 'key2'}), Value true
+--
+--     it 'accepts named sections', ->
+--       $expect_that (parse_ast "
+--
+--         [table]
+--
+--         key = 'value'
+--
+--         [[table.array]]
+--
+--         key = 'value'
+--
+--       "), deep_eq Ast nil,
+--         * Section (TableHeader Key {'table'}),
+--           * Entry (Key {'key'}), Value 'value'
+--         * Section (ArrayOfTablesHeader Key {'table', 'array'}),
+--           * Entry (Key {'key'}), Value 'value'
+--
+--     it 'accepts both root and named sections', ->
+--       $expect_that (parse_ast "
+--         key = 'value'
+--         [table]
+--         key = 'value'
+--       "), deep_eq Ast (Section nil, {Entry (Key {'key'}), Value 'value'}),
+--         * Section (TableHeader Key {'table'}), {Entry (Key {'key'}), Value 'value'}
+--
+--     it 'accepts empty sections', ->
+--       $expect_that (parse_ast "
+--         [table1]
+--         [table2]
+--         [[array]]
+--         [table3]
+--       "), deep_eq Ast nil,
+--         * Section (TableHeader Key {'table1'})
+--         * Section (TableHeader Key {'table2'})
+--         * Section (ArrayOfTablesHeader Key {'array'})
+--         * Section (TableHeader Key {'table3'})
+--
+--   describe 'Ast', ->
+--     it 'constructs the root section', ->
+--       ast = Ast Section nil,
+--         * Entry (Key {'key1'}), Value true
+--         * Entry (Key {'key2', 'key3'}), Value 'hello'
+--       $expect_that ast\construct_value!, deep_eq
+--         key1: true
+--         key2:
+--           key3: 'hello'
+--
+--     it 'constructs table sections', ->
+--       ast = Ast nil,
+--         * Section (TableHeader Key {'table1'}),
+--           * Entry (Key {'key1'}), Value true
+--           * Entry (Key {'key2', 'key3'}), Value 'hello'
+--         * Section (TableHeader Key {'table1'}),
+--           * Entry (Key {'key4'}), Value 'world'
+--         * Section (TableHeader Key {'table2', 'table3'}),
+--           * Entry (Key {'key5'}), Value 'hello'
+--         * Section (TableHeader Key {'table2', 'table3'}),
+--           * Entry (Key {'key6'}), Value 'world'
+--       $expect_that ast\construct_value!, deep_eq
+--         table1:
+--           key1: true
+--           key2:
+--             key3: 'hello'
+--           key4: 'world'
+--         table2:
+--           table3:
+--             key5: 'hello'
+--             key6: 'world'
+--
+--     it 'constructs array of tables sections', ->
+--       ast = Ast nil,
+--         * Section (ArrayOfTablesHeader Key {'table1'}),
+--           * Entry (Key {'key1'}), Value true
+--           * Entry (Key {'key2', 'key3'}), Value 'hello'
+--         * Section (ArrayOfTablesHeader Key {'table1'}),
+--           * Entry (Key {'key4'}), Value 'hello'
+--         * Section (ArrayOfTablesHeader Key {'table2', 'table3'}),
+--           * Entry (Key {'key1'}), Value true
+--           * Entry (Key {'key2', 'key3'}), Value 'hello'
+--         * Section (ArrayOfTablesHeader Key {'table2', 'table3'}),
+--           * Entry (Key {'key4'}), Value 'hello'
+--       $expect_that ast\construct_value!, deep_eq
+--         table1:
+--           * key1: true
+--             key2:
+--               key3: 'hello'
+--           * key4: 'hello'
+--         table2:
+--           table3:
+--             * key1: true
+--               key2:
+--                 key3: 'hello'
+--             * key4: 'hello'
+--
+--   describe 'decode', ->
+--     it 'returns an empty table on empty input', ->
+--       v, err = decode ''
+--       $expect_that v, deep_eq {}
+--       $expect_that err, eq nil
+--
+--     it 'parses toml and returns its value', ->
+--       v, err = decode "hello = 'world'"
+--       $expect_that v, deep_eq
+--         hello: 'world'
+--       $expect_that err, eq nil
+--
+--     it 'reports errors', ->
+--       v, err = decode '['
+--       $expect_that v, eq nil
+--       $expect_that err, matches 'expected'

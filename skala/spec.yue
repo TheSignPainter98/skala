@@ -1,0 +1,798 @@
+local *
+
+spec_fns = nil
+
+verbose = false
+export set_log_verbosity = (v=true) ->
+  verbose = v
+log = (msg) ->
+  if verbose
+    print msg!
+
+export spec = (fn) ->
+  if not spec_fns?
+    spec_fns = {}
+  spec_fns[] = fn
+
+root_spec = nil
+current_spec = nil
+current_spec_kind = 'describe'
+export describe = (what, fn) ->
+  declare_spec_section 'describe', what, fn
+
+export it = (what, fn) ->
+  declare_spec_section 'it', what, fn
+
+declare_spec_section = (kind, what, fn) ->
+  if not root_spec?
+    root_spec = Spec::root!
+  if not current_spec?
+    current_spec = root_spec
+
+  if current_spec.kind != 'describe'
+    error "cannot use `#{kind}` in `#{current_spec.kind}` spec"
+
+  switch kind
+    when 'describe'
+      parent_spec = current_spec
+
+      current_spec = Spec kind, what, parent_spec
+      fn!
+
+      parent_spec\add_child current_spec
+      current_spec = parent_spec
+    when 'it'
+      current_spec\add_child Test what, fn, current_spec
+    else
+      error "internal error: unknown kind #{repr kind}"
+
+class Spec
+  @root: =>
+    Spec 'describe', nil, nil
+
+  new: (@kind, @name, @parent) =>
+    @children = {}
+
+  add_child: (child) =>
+    @children[] = child
+
+  desc: =>
+    rev_parts = with {@name}
+      spec = @parent
+      while spec?
+        [] = spec.name
+        spec = spec.parent
+    parts = with {}
+      n = #rev_parts
+      for i = 1, n
+        [i] = rev_parts[n - i + 1]
+    table.concat parts, ' '
+
+  test: (filter=nil) =>
+    for child in *@children
+      child\test filter
+
+FATAL_TEST_ERROR_MARKER = 'INTERNAL ERROR: FATAL TEST ERROR'
+
+class Test
+  new: (@name, @assertions_fn, @spec) =>
+
+  @num_run: 0
+  @num_failures: 0
+  @current_run_failures: nil
+
+  test: (filter=nil) =>
+    if filter?
+      desc = @desc!
+      if not desc\match filter
+        log -> "* skipping #{desc}"
+        return
+    else
+      log -> "* running #{@desc!}"
+    @@num_run += 1
+
+    @@current_run_failures = {}
+    print_calls = {}
+    old_print = print
+    global print = (...) ->
+      print_calls[] = {...}
+    try
+      @assertions_fn!
+    catch err
+      if not err\match FATAL_TEST_ERROR_MARKER
+        Test::fail "caught error: #{debug.traceback err, 2}"
+    print = old_print
+
+    failures = @@current_run_failures
+    @@current_run_failures = nil
+
+    if #failures == 0
+      return
+
+    if #print_calls > 0
+      print '--- START of print output ---'
+      print table.concat [ table.concat [ tostring print_call_part for print_call_part in *print_call_parts ], '\t' for print_call_parts in *print_calls], '\n'
+      print '--- END of print output ---'
+
+    print "* #{@desc!}:"
+    for failure in *failures
+      print "  * #{reflow '    ', failure}"
+
+  desc: =>
+    "#{@spec\desc!} #{@name}"
+
+  @fail: (cause, message) =>
+    @@num_failures += 1
+    cause_string = switch type cause
+      when 'string'
+        cause
+      when 'table'
+        { :value_label, :location, :expected, :actual_repr, :explanation } = cause
+        value_label_line = ''
+        if value_label?
+          value_label_line = "value: #{value_label}\n"
+
+        "#{value_label_line}expected: #{reflow '    ', expected, 70}\nactual: #{reflow '    ', actual_repr, 70},\n  #{reflow '  ', explanation, 70}\nat: #{location}"
+      else
+        error "internal error: invalid matcher return: #{repr cause}"
+    if message?
+      @@current_run_failures[] = "#{message}: #{cause_string}"
+    else
+      @@current_run_failures[] = cause_string
+
+  @fatal: (cause, message) =>
+    @@fail cause, message
+    error FATAL_TEST_ERROR_MARKER
+
+export expect_that = (actual, matcher) ->
+  _expect_that nil, actual, matcher, nil
+
+export _expect_that = (value_label, actual, matcher, location) ->
+  if not Test.current_run_failures?
+    error 'internal error: expect_that call must be within an `it` call'
+
+  if matcher\matches actual
+    return
+
+  location ??= get_caller_location 'expect_that'
+  Test::fail
+    :value_label
+    :location
+    expected: matcher\describe!
+    actual_repr: matcher\actual_repr?! ?? repr actual
+    explanation: matcher\explain_match actual
+
+export assert_that = (actual, matcher) ->
+  _assert_that nil, actual, matcher, nil
+
+export _assert_that = (value_label, actual, matcher, location) ->
+  if not Test.current_run_failures?
+    error 'internal error: assert_that call must be within an `it` call'
+
+  if matcher\matches actual
+    return
+
+  location ??= get_caller_location 'assert_that'
+  Test::fatal
+    :value_label
+    :location
+    expected: matcher\describe!
+    actual_repr: matcher\actual_repr?! ?? repr actual
+    explanation: matcher\explain_match actual
+
+--- Get location of the caller of the function which called this function.
+get_caller_location = (kind) ->
+  { :currentline, :short_src, :what } = debug.getinfo 3, 'Sl'
+  switch what
+    when 'C', 'tail'
+      "last #{kind} call (debug info lost)"
+    else
+      "#{short_src}:#{currentline}"
+
+class Anything
+  matches: (actual) =>
+    true
+
+  explain_match: (actual) =>
+    "which #{@describe!}"
+
+  describe: (is_match=true) =>
+    "is anything"
+
+class Some
+  matches: (actual) =>
+    actual?
+
+  explain_match: (actual) =>
+    "which #{@describe!}"
+
+  describe: (is_match=true) =>
+    "is non-nil"
+
+class Not
+  new: (@inner) =>
+
+  matches: (actual) =>
+    not @inner\matches actual
+
+  explain_match: (actual) =>
+    @inner\explain_match actual
+
+  describe: (is_match=true) =>
+    @inner\describe not is_match
+
+class Eq
+  new: (@expected) =>
+
+  matches: (actual) =>
+    @expected == actual
+
+  explain_match: (actual) =>
+    "which #{@describe @matches actual}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "is equal to #{repr @expected}"
+    else
+      "isn't equal to #{repr @expected}"
+
+class Compare
+  new: (@kind, @value) =>
+
+  matches: (actual) =>
+    switch @kind
+      when '=='
+        actual == @value
+      when '<'
+        actual < @value
+      when '<='
+        actual <= @value
+      when '>'
+        actual > @value
+      when '>='
+        actual >= @value
+      else
+        error "internal error: unrecognised comparison: #{repr @kind}"
+
+  explain_match: (actual) =>
+    "which #{@describe @matches actual}"
+
+  describe: (is_match=true) =>
+    comparison_name = switch @kind
+      when '=='
+        "equal to"
+      when '<'
+        "less than"
+      when '<='
+        "at most"
+      when '>'
+        "greater than"
+      when '>='
+        "at least"
+      else
+        error "internal error: unrecognised comparison: #{repr @kind}"
+    if is_match
+      "is #{comparison_name} #{repr @value}"
+    else
+      "isn't #{comparison_name} #{repr @value}"
+
+class Near
+  new: (@expected, @delta=0.00001) =>
+
+  matches: (actual) =>
+    if 'number' != type actual
+      return false
+    (math.abs actual - @expected) <= math.abs @delta * @expected
+
+  explain_match: (actual) =>
+    "which #{@describe @matches actual}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "is near #{@expected} (Δ#{@delta}x)"
+    else
+      "isn't near #{@expected} (Δ#{@delta}x)"
+
+class DeepEq
+  new: (@expected) =>
+
+  matches: (actual) =>
+    @deep_equal @expected, actual
+
+  deep_equal: (a, b, a_stack_set={}, b_stack_set={}) =>
+    if a == b
+      return true
+
+    type_a = type a
+    type_b = type b
+    if type_a != type_b
+      return false
+
+    if type_a != 'table'
+      return false
+    for ka, va in pairs a
+      vb = b[ka]
+
+      if a_stack_set[va] and b_stack_set[vb]
+        return true
+      a_stack_set[va] = true
+      if vb?
+        b_stack_set[vb] = true
+      if not @deep_equal va, vb, a_stack_set, b_stack_set
+        return false
+      a_stack_set[va] = nil
+      b_stack_set[vb] = nil
+    for kb, _ in pairs b
+      if not a[kb]?
+        return false
+    true
+
+  explain_match: (actual) =>
+    "which #{@describe @matches actual}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "is deeply equal to #{repr @expected}"
+    else
+      "isn't deeply equal to #{repr @expected}"
+
+class Type
+  new: (@type) =>
+
+  matches: (actual) =>
+    @type == type actual
+
+  explain_match: (actual) =>
+    "which #{@describe @matches actual}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "has type #{@type}"
+    else
+      "does not have type #{@type}"
+
+class Matches
+  new: (@pat) =>
+
+  matches: (actual) =>
+    ('string' == type actual) and
+      (actual\match @pat)?
+
+  explain_match: (actual) =>
+    if 'string' != type actual
+      return "which is a #{type actual}"
+    "which #{@describe @matches actual}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "matches #{repr @pat}"
+    else
+      "doesn't match #{repr @pat}"
+
+class Len
+  new: (@inner) =>
+
+  matches: (actual) =>
+    ty = type actual
+    (ty == 'string' or ty == 'table') and @inner\matches #actual
+
+  explain_match: (actual) =>
+    switch type actual
+      when 'string', 'table'
+        "which has length #{#actual} #{@inner\explain_match #actual}"
+      else
+        "which is a #{type actual}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "has a length which #{@inner\describe!}"
+    else
+      "doesn't have a length which #{@inner\describe!}"
+
+class ToStringsAs
+  new: (@inner) =>
+
+  matches: (actual) =>
+    @inner\matches tostring actual
+
+  explain_match: (actual) =>
+    tostring_actual = tostring actual
+    "which tostrings as '#{tostring_actual}' #{@inner\explain_match tostring_actual}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "tostrings as a string which #{@inner\describe true}"
+    else
+      "doesn't tostrings as a string which #{@inner\describe false}"
+
+class NoErrors
+  new: =>
+    @error_set = false
+    @error = nil
+
+  actual_repr: =>
+    "-> #{@error_repr!}"
+
+  error_repr: =>
+    if @error?
+      "error #{repr @error}"
+    else
+      "no error"
+
+  get_err: (fn) =>
+    if @error_set
+      return @error
+
+    try
+      fn!
+    catch err
+      @error = err
+    @error_set = true
+    @error
+
+  matches: (fn) =>
+    not (@get_err fn)?
+
+  explain_match: (fn) =>
+    "which #{@describe @matches fn}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "doesn't throw an error"
+    else
+      "throws an error"
+
+class Errors
+  new: (@inner) =>
+    @error_set = false
+    @error = nil
+
+  actual_repr: =>
+    "-> #{@error_repr!}"
+
+  error_repr: =>
+    if @error?
+      "error #{repr @error}"
+    else
+      "no error"
+
+  get_err: (fn) =>
+    if @error_set
+      return @error
+
+    try
+      fn!
+    catch err
+      @error = err
+    @error_set = true
+    @error
+
+  matches: (fn) =>
+    err = @get_err fn
+    if not err?
+      return false
+    @inner\matches err
+
+  explain_match: (fn) =>
+    err = @get_err fn
+    if err?
+      "which throws #{@error_repr!} #{@inner\explain_match err}"
+    else
+      "which doesn't throw an error"
+
+  describe: (is_match=true) =>
+    if is_match
+      "throws an error which #{@inner\describe!}"
+    else
+      "doesn't throw an error"
+
+class Contains
+  new: (@kind, @inner) =>
+    @pretty_kind = if @kind == 'key-value'
+      'key-value pair'
+    else
+      @kind
+
+  matches: (actual) =>
+    actual? and (@find_match actual)?
+
+  find_match: (actual) =>
+    for key, value in pairs actual
+      to_check = switch @kind
+        when 'key'
+          key
+        when 'value'
+          value
+        when 'key-value'
+          :key, :value
+        else
+          error "internal error: unknown kind #{repr @kind}"
+      if @inner\matches to_check
+        return to_check
+    nil
+
+  explain_match: (actual) =>
+    if 'table' != type actual
+      "which is a #{type actual}"
+    else if match = @find_match actual
+      "which contains #{repr match} #{@inner\explain_match match}"
+    else
+      "which does not contain any #{@pretty_kind} which #{@inner\describe!}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "contains a value which #{@inner\describe!}"
+    else
+      "does not contain any #{@pretty_kind} which #{@inner\describe!}"
+
+class Each
+  new: (@kind, @inner) =>
+    @pretty_kind = if @kind == 'key-value'
+      'key-value pair'
+    else
+      @kind
+
+  matches: (actual) =>
+    actual? and not (@find_non_match actual)?
+
+  find_non_match: (actual) =>
+    for key, value in pairs actual
+      to_check = switch @kind
+        when 'key'
+          key
+        when 'value'
+          value
+        when 'key-value'
+          :key, :value
+        else
+          error "internal error: unknown kind #{repr @kind}"
+      if not @inner\matches to_check
+        return to_check
+    nil
+
+  explain_match: (actual) =>
+    if 'table' != type actual
+      "is a #{actual}"
+    else  if non_match = @find_non_match actual
+      "in which some element #{@inner\describe false}"
+    else
+      "in which each element #{@inner\describe true}"
+
+  describe: (is_match=true) =>
+    if is_match
+      "consists of #{@pretty_kind} which #{@inner\describe!}"
+    else
+      "contains a #{@pretty_kind} which #{@inner\describe!}"
+
+class Fields
+  new: (fields) =>
+    @fields = [ {:field, :matcher} for field, matcher in pairs fields ]
+    table.sort @fields, (a, b) ->
+      taf = type a.field
+      tbf = type b.field
+      if taf != tbf or taf == 'number'
+        return false
+      a.field < b.field
+
+  matches: (actual) =>
+    actual? and not (@find_non_match actual)?
+
+  find_non_match: (actual) =>
+    for {:field, :matcher} in *@fields
+      if not matcher\matches actual[field]
+        return field, matcher
+    nil
+
+  explain_match: (actual) =>
+    if 'table' != type actual
+      return "is a #{type actual}"
+
+    non_match_field, non_match_matcher = @find_non_match actual
+    if not non_match_field?
+      field_descriptions = [ "there is a field '#{field}' #{matcher\explain_match actual[field]}" for {:field, :matcher} in *@fields ]
+      "in which:\n  #{table.concat field_descriptions, '\n  '}"
+    else
+      "in which field #{repr non_match_field} #{non_match_matcher\explain_match actual[non_match_field]}"
+
+  describe: (is_match=true) =>
+    field_descriptions = [ "there is a field '#{field}' which #{matcher\describe!}" for {:field, :matcher} in *@fields ]
+    if is_match
+      "is a table in which:\n  #{table.concat field_descriptions, '\n  '}"
+    else
+      "isn't a table in which:\n  #{table.concat field_descriptions, '\n  '}"
+
+visible_chars = with {}
+  ['('] = true
+  [')'] = true
+  ['['] = true
+  [']'] = true
+  ['{'] = true
+  ['}'] = true
+  ['!'] = true
+  ['"'] = true
+  ["'"] = true
+  ['$'] = true
+  ['%'] = true
+  ['^'] = true
+  ['&'] = true
+  ['*'] = true
+  ['-'] = true
+  ['_'] = true
+  ['+'] = true
+  ['='] = true
+  [':'] = true
+  [' '] = true
+  ['\t'] = true
+  ['.'] = true
+  [','] = true
+  ['/'] = true
+  ['\\'] = true
+  ['>'] = true
+  ['<'] = true
+  ['!'] = true
+  ['?'] = true
+  ['#'] = true
+  ['|'] = true
+  ['~'] = true
+  a = string.byte 'a'
+  for i = 0, 25
+    [string.char a + i] = true
+  A = string.byte 'A'
+  for i = 0, 25
+    [string.char A + i] = true
+  zero = string.byte '0'
+  for i = 0, 9
+    [string.char zero + i] = true
+export repr = =>
+  table.concat with {}
+    stack={}
+    repr_impl = =>
+      for elem in *stack
+        if rawequal @, elem
+          [] = '...'
+          return
+      stack[] = @
+
+      switch type @
+        when 'string'
+          [] = "'"
+          for i = 1, #@
+            c = @\sub i, i
+            if visible_chars[c]
+              [] = c
+            else
+              [] = "\\x%02x"\format string.byte @, i
+          [] = "'"
+        when 'table'
+          if @.<>? and @.<tostring>?
+            [] = tostring @
+          else if is_list @
+            [] = '['
+            first = true
+            for elem in *@
+              if not first
+                [] = ', '
+              first = false
+
+              repr_impl elem
+            [] = ']'
+          else
+            [] = '{'
+            first = true
+            keys = [ key for key, _ in pairs @ ]
+            if can_sort keys
+              table.sort keys, (a, b) ->
+                ta = type a
+                tb = type b
+                if ta != tb or ta == 'number'
+                  return false
+                a < b
+            for key in *keys
+              value = @[key]
+              if not first
+                [] = ', '
+              first = false
+
+              repr_impl key
+              [] = ': '
+              repr_impl value
+            [] = '}'
+        else
+          [] = tostring @
+
+      stack[#stack] = nil
+    repr_impl @
+
+is_list = (table) ->
+  max_key = 0
+  num_keys = 0
+  for k, _ in pairs table
+    num_keys += 1
+    if 'number' != type k
+      return false
+    if max_key < k
+      max_key = k
+  max_key == num_keys and num_keys > 0
+
+can_sort = (list) ->
+  for elem in *list
+    switch type elem
+      when 'boolean', 'string', 'number'
+        continue
+      when 'table'
+        if not table.<>? or not table.<lt>?
+          return false
+      else
+        return false
+  true
+
+export clone = (value) ->
+  switch type value
+    when 'nil', 'boolean', 'number', 'string'
+      value -- Immutable.
+    when 'table'
+      with {}
+        for k, v in pairs value
+          [clone k] = clone v
+    else
+      error "cannot clone a #{type value} (#{value})"
+
+export matchers =
+  anything: -> Anything!
+  some: -> Some!
+  not_: (matcher) -> Not matcher
+  eq: (value) -> Compare '==', value
+  deep_eq: (value) -> DeepEq value
+  lt: (value) -> Compare '<', value
+  le: (value) -> Compare '<=', value
+  gt: (value) -> Compare '>', value
+  ge: (value) -> Compare '>=', value
+  len: (matcher) -> Len matcher
+  matches: (pattern) -> Matches pattern
+  near: (value, delta) -> Near value, delta
+  tostrings_as: (matcher) -> ToStringsAs matcher
+  contains_key: (matcher) -> Contains 'key', matcher
+  contains_value: (matcher) -> Contains 'value', matcher
+  contains_pair: (matcher) -> Contains 'key-value', matcher
+  each_key: (matcher) -> Each 'key', matcher
+  each_value: (matcher) -> Each 'value', matcher
+  each_pair: (matcher) -> Each 'key-value', matcher
+  no_errors: -> NoErrors!
+  errors: (matcher) -> Errors matcher
+  has_type: (typ) -> Type typ
+  has_fields: (fields) -> Fields fields
+
+reflow = (prefix, string, width=80) ->
+  lines = with {}
+    chunk_len = width - #prefix
+    first_line = true
+    for line in string\gmatch '[^\r\n]*'
+      for i = 1, #line, chunk_len
+        chunk = line\sub i, i + chunk_len - 1
+        if first_line
+          [] = chunk
+        else
+          [] = prefix .. chunk
+        first_line = false
+  table.concat lines, '\n'
+
+testing = false
+export running_tests = () -> testing
+
+export run_tests = (filter) ->
+  -- Gather specs
+  if not spec_fns?
+    return
+  for spec_fn in *spec_fns
+    spec_fn!
+
+  testing = true
+  root_spec?\test filter
+  testing = false
+
+  log ->
+    "#{Test.num_run} checks run"
+  ok = Test.num_failures == 0
+  if not ok
+    print "#{Test.num_failures} checks failed!"
+  ok

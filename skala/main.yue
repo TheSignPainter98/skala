@@ -1,0 +1,42 @@
+local *
+
+-- Changes global state, this must come first
+require 'skala.compat'
+
+import 'skala.clap' as :ArgParser
+
+import 'skala.command.autorun'
+import 'skala.command.control'
+import 'skala.command.install'
+import 'skala.command.killswitch'
+import 'skala.command.sherbina'
+import 'skala.command.uninstall'
+
+main = (raw_args) ->
+  args, ok = parse_args raw_args
+  if not ok
+    return
+
+  if args.autorun?
+    autorun.main args.autorun
+  else if args.install?
+    install.main args.install
+  else if args.uninstall?
+    uninstall.main args.uninstall
+  else
+    autorun.run args
+
+parse_args = (args) ->
+  parser = with ArgParser 'skala'
+    \version '1.0'
+    \description 'reactor control system'
+
+  autorun.register_args parser
+  control.register_args parser
+  sherbina.register_args parser
+  install.register_args parser
+  uninstall.register_args parser
+
+  parser\parse args
+
+main {...}

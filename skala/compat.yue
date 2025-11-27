@@ -1,0 +1,26 @@
+local *
+
+if not unpack?
+  global unpack = table.unpack
+
+-- Compat
+if not fs?
+  global fs = {}
+fs.move ??= (src, dest) ->
+  -- Dear god, the security!
+  os.execute "mv #{src} #{dest}"
+fs.delete ??= (path) ->
+  -- Dear god, the security!
+  os.execute "rm #{path}"
+fs.list ??= (dir) ->
+  with {}
+    -- Dear god, the security!
+    proc = io.popen "ls -1 #{dir}"
+    local line
+    repeat
+      line = proc\read '*l'
+      [] = line
+    until line == nil
+    proc\close!
+os.sleep ??= (seconds) ->
+  os.execute "sleep #{seconds}"

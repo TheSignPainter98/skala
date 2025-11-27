@@ -2,10 +2,11 @@ LUA = luajit
 SOURCES = $(shell find -name '*.yue')
 OBJECTS = $(patsubst %.yue,%.lua,$(SOURCES))
 
-all: skala
+all: bin/skala
 
-skala: src/main.lua $(OBJECTS)
-	cp $< $@
+bin/skala: skala/main.lua moonpack.lua $(OBJECTS)
+	@mkdir -p bin/
+	$(LUA) moonpack.lua $< -o $@
 
 install: skala
 
@@ -14,6 +15,8 @@ install: skala
 	@touch $@
 .PRECIOUS: %.lua
 
+moonpack.yue: skala/clap.lua
+
 clean:
-	$(RM) skala $(OBJECTS) moonpack.lua
+	$(RM) bin/skala $(OBJECTS) moonpack.lua
 .PHONY: clean

@@ -1,0 +1,551 @@
+local *
+local Flag -- `local *` does not cover exports
+local Param -- `local *` does not cover exports
+local Subcommand -- `local *` does not cover exports
+
+unpack ??= table.unpack ?? (tab) ->
+  -- Rough fallback for luajit.
+  {e1, e2, e3, e4, e5, e6, e7, e8, e9, e10, _limit} = tab
+  switch #tab
+    when 0
+      return
+    when 1
+      return e1
+    when 2
+      return e1, e2
+    when 3
+      return e1, e2, e3
+    when 4
+      return e1, e2, e3, e4
+    when 5
+      return e1, e2, e3, e4, e5
+    when 6
+      return e1, e2, e3, e4, e5, e6
+    when 7
+      return e1, e2, e3, e4, e5, e6, e7
+    when 8
+      return e1, e2, e3, e4, e5, e6, e7, e8
+    when 9
+      return e1, e2, e3, e4, e5, e6, e7, e8, e9
+    when 10
+      return e1, e2, e3, e4, e5, e6, e7, e8, e9, e10
+  error 'cannot unpack table: too many values to unpack'
+
+EXIT = <tostring>: => "<exit>"
+SELF = <tostring>: => '<self>'
+
+export class Flag
+  new: (@_name) =>
+    @_dest = @_name\gsub '-', '_'
+    @_takes_param = false
+    @_default = false
+    @_value_name = 'value'
+    @_short = '-' .. @_name\sub 1, 1
+    @_long = if #@_name > 1
+      '--' .. @_name\gsub ' ', '-'
+    else
+      nil
+    @_global = false
+    @_required = false
+    @_hidden = false
+    @_description = nil
+    @_options = nil
+    @_transform = nil
+
+  dest: (@_dest) => @
+  short: (@_short) => @
+  long: (@_long) => @
+  hidden: =>
+    @_hidden = true
+    @
+  required: =>
+    @_required = true
+    @
+  global: =>
+    @_global = true
+  description: (@_description) => @
+  options: (@_options) => @
+  transform: (@_transform) => @
+
+  takes_param: () =>
+    @_takes_param = true
+    @
+  default: (@_default) =>
+    if 'boolean' == type @_default
+      error 'boolean default flag arguments not currently supported'
+    @takes_param!
+    @
+
+  value_name: (@_value_name) => @
+
+  _repr: => @_short or @_long
+  _long_repr: =>
+    if @_short? and @_long?
+      " #{@_short}, #{@_long}"
+    else if @_short?
+      " #{@_short}"
+    else
+      @_long
+      -- "    #{@_long}"
+
+export class Param
+  new: (@_name) =>
+    @_dest = @_name\gsub '-', '_'
+    @_arg_name = nil
+    @_required = true
+    @_description = nil
+    @_options = nil
+    @_transform = nil
+    @_capture_remainder = false
+
+  dest: (@_dest) => @
+  arg_name: (@_arg_name) => @
+  default: (@_default) =>
+    @_required = false
+    @
+  description: (@_description) => @
+  options: (@_options) => @
+  transform: (@_transform) => @
+  capture_remainder: =>
+    @_capture_remainder = true
+    @_required = false
+    @
+
+  _repr: =>
+    name = @_arg_name or @_name
+    if not @_capture_remainder
+      return name
+    "#{name}..."
+
+export class Subcommand
+  new: (@_name) =>
+    @_parent_command = nil
+    @_dest = @_name\gsub '-', '_'
+    @_version = nil
+    @_flags = {}
+    @_params = {}
+    @_subcommands = {}
+    @_hidden = false
+    @_add_help = true
+    @_description = nil
+    @_auto_args_added = false
+
+  dest: (@_dest) => @
+  version: (@_version) => @
+  add: (arg) =>
+    arg_type = arg.<>?.__class?.__name
+    switch arg_type
+      when 'Flag'
+        @_flags[] = arg
+      when 'Param'
+        @_params[] = arg
+      when 'Subcommand'
+        arg._parent_command = @
+        @_subcommands[] = arg
+      else
+        error "cannot use a #{type arg} as an arg"
+    @
+
+  hidden: =>
+    @_hidden = true
+    @
+
+  no_help: =>
+    @_add_help = false
+    @
+  description: (@_description) => @
+
+  _parse: (args, global_flags, global_values={}, path={}) =>
+    ret = with <index>: global_values
+      for flag in *@_flags
+        if flag._global
+          continue -- Handled elsewhere.
+        [flag._dest] = flag._default
+      for param in *@_params
+        [param._dest] = if param._capture_remainder
+          {}
+        else
+          param._default
+
+    flag_map = with {}
+      declare = (flag) ->
+        if flag._short
+          [flag._short] = flag
+        if flag._long
+          [flag._long] = flag
+      for flag in *global_flags
+        declare flag
+      for flag in *@_flags
+        declare flag
+
+    subcommand_map = { sc._name, sc for sc in *@_subcommands }
+
+    curr_param = 1
+    i = 0
+    while i < #args
+      i += 1
+      arg = args[i]
+      if '-' == arg\sub 1, 1
+        flag = flag_map[arg]
+        if not flag?
+          return nil, "unknown flag #{arg}\n#{@_usage_message path}"
+        flag_value = if not flag._takes_param
+          true
+        else
+          i += 1
+          flag_arg = args[i]
+          if not flag_arg?
+            return nil, "flag #{arg} expected an argument\n#{@_usage_message path}"
+
+          if transform = flag._transform
+            transformed, err = transform flag_arg
+            if err?
+              return nil, "cannot parse '#{flag_arg}': #{err}\n#{@_usage_message path}"
+            transformed
+          else
+            flag_arg
+
+        if flag._global
+          ret.<index>[flag._dest] = flag_value
+        else
+          ret[flag._dest] = flag_value
+      else if param = @_params[curr_param]
+        arg_value = if transform = param._transform
+          transformed, err = transform arg
+          if err?
+            return nil, "failed to parse #{arg}: #{err}\n#{@_usage_message path}"
+          transformed
+        else
+          arg
+        if param._capture_remainder
+          ret[param._dest][] = arg_value
+        else
+          ret[param._dest] = arg_value
+          curr_param += 1
+      else if command = subcommand_map[arg]
+        path[] = arg
+        subcommand_ret, err = command\_parse [ a for a in *args[i+1,] ], global_flags, global_values, path
+        if err?
+          return nil, err
+        ret[command._dest] = subcommand_ret
+        break
+      else
+        return nil, "unexpected argument '#{arg}'\n#{@_usage_message path}"
+
+    if ret._usage
+      print @_usage_message path
+      return nil, EXIT
+    if help = ret._help
+      if help == true
+        print @_help_message path
+        return nil, EXIT
+
+      if 'table' != type help
+        error "internal error: unexpected help type #{type help}"
+
+      if help.command?
+        if help.command != SELF
+          path[#path] = help.command
+        else
+          path[#path] = nil
+      if help.command == SELF
+        print @_help_message path
+        return nil, EXIT
+      if sc = subcommand_map[help.command]
+        print sc\_help_message path
+        return nil, EXIT
+      return nil, "no such subcommand '#{help.command}'\n#{@_usage_message path}"
+    if ret._version
+      print @_version_message path
+      return nil, EXIT
+
+    for flag in *@_flags
+      with flag
+        arg = flag[._dest]
+        if not arg and ._required
+          return nil, "flag '#{\_repr!}' required\n#{@_usage_message path}"
+        if arg and ._options
+          ok = false
+          for option in *._options
+            if arg == option
+              ok = true
+              break
+          if not ok
+            return nil, "flag '#{\_repr!}' has incorrect value, got '#{arg}' but expected one of #{table.concat ._options, ', '}\n#{@_usage_message path}"
+    for param in *@_params
+      with param
+        arg = ret[._dest]
+        if not arg and ._required
+          options_repr = if ._options
+            " (accepts: #{table.concat ._options, ', '})"
+          else
+            ""
+          return nil, "argument '#{\_repr!}' required#{options_repr}\n#{@_usage_message path}"
+        if arg and ._options
+          ok = false
+          for option in *._options
+            if arg == option
+              ok = true
+              break
+          if not ok
+            return nil, "argument '#{\_repr!}' has incorrect value, got '#{arg}' but expected one of #{table.concat ._options, ', '}\n#{@_usage_message path}"
+    if #@_subcommands > 0
+      command_specified = false
+      for command in *@_subcommands
+        if ret[command._dest]?
+          command_specified = true
+          break
+      if not command_specified
+        return nil, "command required\n#{@_usage_message path}"
+
+    ret, nil
+
+  _add_auto_args: =>
+    if @_add_help
+      if #@_subcommands > 0
+        @add with Subcommand 'help'
+          \dest '_help'
+          \description 'print help and exit'
+          \add with Param 'command'
+            \description 'print help for the given command and exit'
+            \default SELF
+      else
+        @add with Flag 'help'
+          \dest '_usage'
+          \description 'print usage and exit'
+          \long nil
+        @add with Flag 'help'
+          \dest '_help'
+          \description 'print help and exit'
+          \short nil
+
+    if @_version?
+      @add with Flag 'version'
+        \dest '_version'
+        \description 'print version'
+        \short nil
+
+  _validate_spec: (is_root=true) =>
+    if #@_params > 0 and #@_subcommands > 0
+      return "cannot have both parameters and subcommands in command #{@_name}"
+
+    with {}
+      for flag in *@_flags
+        if [flag._short] or [flag._long]
+          return "duplicate flag: #{flag\_repr!}"
+        if flag._short
+          [flag._short] = true
+        if flag._long
+          [flag._long] = true
+
+    if not is_root
+      for flag in *@_flags
+        if flag._global
+          return "cannot declare #{flag._name} as global: not in root command"
+
+
+    arg_dests = { flag._dest, true for flag in *@_flags }
+    remainder_capturer = nil
+    for param in *@_params
+      dest = param._dest
+      if arg_dests[dest]
+        return "duplicate parameter name: #{dest}"
+      arg_dests[dest] = true
+
+      if param._capture_remainder
+        if remainder_capturer?
+          return "parameters '#{remainder_capturer._name}' and '#{param._name}' both capture remainder args"
+        remainder_capturer = param
+
+        if param._default
+          return "capture-remainder does not support a default"
+
+    for subcommand in *@_subcommands
+      dest = subcommand._dest
+      if arg_dests[dest]?
+        return "duplicate subcommand name: #{dest}"
+      arg_dests[dest] = true
+
+      if err = subcommand\_validate_spec false
+        return err
+
+    if #@_params > 0 and #@_subcommands > 0
+      return "command cannot have both params and subcommands"
+
+    nil
+
+  _usage_message: (path={}) =>
+    path_repr = table.concat path, ' '
+    table.concat with {'Usage: ', path_repr, ' '}
+      first_arg = true
+      for flag in *@_sorted_flags!
+        if flag._hidden
+          continue
+        if not first_arg
+          [] = ' '
+        first_arg = false
+
+        if not flag._required
+          [] = '['
+        [] = flag\_repr!
+        if flag._takes_param
+          [] = ' '
+          [] = flag._value_name
+        if not flag._required
+          [] = ']'
+
+      for param in *@_params
+        if not first_arg
+          [] = ' '
+        first_arg = false
+
+        if not param._required
+          [] = '['
+        [] = param\_repr!
+        if not param._required
+          [] = ']'
+
+      if #@_subcommands > 0
+        if not first_arg
+          [] = ' '
+        [] = '<command>'
+
+  _help_message: (path={})=>
+    lines = with {}
+      if @_description?
+        [] = table.concat with {}
+          [] = table.concat path, ' '
+          [] = " - #{@_description}"
+
+      [] = ''
+      [] = @_usage_message path
+
+      if #@_subcommands > 0
+        [] = ''
+        [] = 'Commands:'
+
+        longest_subommand_repr_len = math.max unpack [ #sc\_repr! for sc in *@_subcommands when not sc._hidden ]
+        sorted_subcommands = [ sc for sc in *@_subcommands when not sc._hidden ]
+        table.sort sorted_subcommands, (sc1, sc2) -> sc1._name < sc2._name
+        for subcommand in *sorted_subcommands
+          repr = subcommand\_repr!
+          if description = subcommand._description
+            padding = ' '\rep longest_subommand_repr_len - #repr
+            [] = "  #{repr}#{padding}  #{description}"
+          else
+            [] = "  #{repr}"
+
+      if #@_params > 0
+        [] = ''
+        [] = 'Arguments:'
+
+        longest_param_repr_len = math.max unpack [ #p\_repr! for p in *@_params ]
+        for param in *@_params
+          repr = param\_repr!
+          padding = ' '\rep longest_param_repr_len - #repr
+          description = param._description ?? ""
+          default_repr = if default = param._default
+            " (default: #{default})"
+          else
+            ""
+          options_repr = if options = param._options
+            " (one of: #{table.concat options, ', '})"
+          else
+            ""
+          rhs_width = (term?.getSize! ?? 80) - (longest_param_repr_len + 3)
+          rhs_words = "#{description}#{default_repr}#{options_repr}"\gmatch '(%S+)'
+          rhs_lines = with {}
+            curr_line = {}
+            curr_line_len = 0
+            for word in rhs_words
+              if #word > rhs_width
+                if #curr_line > 0
+                  [] = table.concat curr_line, ' '
+                [] = word
+                curr_line = {}
+                continue
+
+              if curr_line_len + 1 + #word > rhs_width
+                [] = table.concat curr_line, ' '
+                curr_line = {word}
+                curr_line_len = #word
+                continue
+
+              curr_line[] = word
+              curr_line_len += 1 + #word
+            if #curr_line > 0
+              [] = table.concat curr_line, ' '
+
+          [] = " #{repr}#{padding}  #{table.concat rhs_lines, '\n' .. ' '\rep longest_param_repr_len + 3}"
+
+      if #@_flags > 0
+        [] = ''
+        [] = 'Flags:'
+
+        longest_local_flag_repr_len = math.max 0, unpack [ #p\_long_repr! for p in *@_flags ]
+        longest_global_flag_repr_len = math.max 0, unpack [ #p\_long_repr! for p in *@_global_flags! ]
+        longest_flag_repr_len = math.max longest_local_flag_repr_len, longest_global_flag_repr_len
+        for flag in *@_sorted_flags!
+          if flag._hidden
+            continue
+
+          repr = flag\_long_repr!
+          if description = flag._description
+            padding = ' '\rep longest_flag_repr_len - #repr
+            [] = " #{repr}#{padding}  #{description}"
+          else
+            [] = " #{repr}"
+
+    table.concat lines, '\n'
+
+  _sorted_flags: =>
+    ret = { ...@_flags, ...@_global_flags!}
+    table.sort ret, (flag1, flag2) ->
+      name1 = (flag1._short or flag1._long)\match '[^-]+$'
+      name2 = (flag2._short or flag2._long)\match '[^-]+$'
+      name1 < name2
+    ret
+
+  _global_flags: =>
+    with {}
+      if @_parent_command?
+        root = @
+        while root._parent_command?
+          root = root._parent_command
+        for flag in *root._flags
+          if flag._global
+            [] = flag
+
+  _version_message: (path={}) =>
+    parts = {...path}
+    if @_version?
+      parts[] = @_version
+    table.concat parts, ' '
+
+  _repr: => @_name
+
+export class ArgParser extends Subcommand
+  new: (@_name) => super @_name
+
+  parse: (args) =>
+    if not @_auto_args_added
+      @_add_auto_args!
+      for subcommand in *@_subcommands
+        subcommand\_add_auto_args!
+    @_auto_args_added = true
+
+    if err = @_validate_spec!
+      print err
+      return nil, false
+
+    global_flags = [ flag for flag in *@_flags when flag._global]
+    global_values = with {}
+      for global_flag in *global_flags
+        [global_flag._dest] = global_flag._default
+    ret, err = @_parse args, global_flags, global_values, {@_name}
+    if err?
+      if err == EXIT
+        return nil, false
+      print err
+      return nil, false
+    ret, true

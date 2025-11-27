@@ -1,3 +1,0 @@
-fs.delete 'skala'
-shell.run 'pastebin get 1RrKg2Db skala'
-shell.run 'skala'

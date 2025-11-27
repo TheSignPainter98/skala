@@ -1,0 +1,178 @@
+local *
+
+import 'skala.clap' as :ArgParser, :Flag, :Param
+
+main = (args) ->
+  args, ok = parse_args args
+  if not ok
+    return
+  if args.test
+    run_tests!
+    return
+
+  entry_point = SourceFile::from_path args.entry_point
+  to_preload = with entry_point\gather_required_sources!
+    for extra_file in *args.extra_files
+      [] = SourceFile::from_path extra_file
+
+  packed = do
+    packed_lines = {}
+    seen_files = {}
+    for file in *to_preload
+      if seen_files[file.mod]
+        continue
+      seen_files[file.mod] = true
+
+      file\fmt_as_preload packed_lines
+    entry_point\fmt_as_entrypoint packed_lines
+    packed_lines[] = ''
+    table.concat packed_lines, '\n'
+
+  if args.no_output
+    return
+
+  output_path = args.output ?? args.entry_point\gsub '%.lua$', ''
+  if output_path\match '/'
+    fs.makeDir output_path\match '^(.*)/'
+  output_file = io.open output_path, 'w+'
+  if not output_file
+    error "cannot open #{output_path}"
+  output_file\write packed
+  output_file\close!
+
+parse_args = (args) ->
+  parser = with ArgParser 'moonpack'
+    \version '1.0'
+    \description 'a static linker for lua'
+    \add with Flag 'output'
+      \description 'output binary name'
+      \default nil
+    -- \add with Flag 'test'
+    --   \description 'run tests'
+    --   \short nil
+    \add with Flag 'no-output'
+      \description 'skip writing output'
+    \add with Param 'entry-point'
+      \description 'entry point'
+    \add with Param 'extra-files'
+      \description 'files to force moonpack to include'
+      \capture_remainder!
+  parser\parse args
+
+class SourceFile
+  @from_mod: (mod) =>
+    path = "#{mod\gsub '%.', '/'}.lua"
+    SourceFile mod, path
+
+  @from_path: (path) =>
+    if not path\match '%.lua$'
+      error "cannot generate module name of #{path}: not a lua file"
+    mod = (path\sub 1, -#".lua" - 1)\gsub '/', '.'
+    SourceFile mod, path
+
+  new: (@mod, @path) =>
+    @yue_path = if @path\match '%.lua$'
+      (@path\sub 1, -5) .. '.yue'
+
+    lines = {}
+    required_mods = {}
+    for line in io.lines @path
+      lines[] = line
+
+      if require_call_arg = line\match 'require%(([^)]*)%)'
+        mod = require_call_arg\sub 2, -2
+        if not mod\match '^[a-zA-Z0-9._]*$'
+          error "cannot use '#{mod}' as a module name"
+        required_mods[] = mod
+    @lines = lines
+    @required_mods = required_mods
+
+  gather_required_sources: (seen={}, stack={}, sources={}) =>
+    with sources
+      seen[@mod] = true
+      stack[] = @
+      for required_mod in *@required_mods
+        for i, file_in_stack in pairs stack
+          if required_mod == file_in_stack.mod
+            stack[] = file_in_stack
+            error "import cycle detected: #{table.concat [ mod.path for mod in *stack[i,] ], ' -> '}"
+
+        if seen[required_mod]
+          continue
+
+        if required_mod\match '^cc%.'
+          continue
+        child_src = SourceFile::from_mod required_mod
+        [] = child_src
+        child_src\gather_required_sources seen, stack, sources
+
+      stack[#stack] = nil
+
+  fmt_as_preload: (packed_lines={}) =>
+    with packed_lines
+      [] = "package.preload['#{@mod}'] = function(...)"
+      @fmt_lines packed_lines
+      [] = "end"
+
+  fmt_as_entrypoint: (packed_lines={}) =>
+    @fmt_lines packed_lines
+
+  fmt_lines: (packed_lines) =>
+    with packed_lines
+      lineno = 0
+      for line in *@lines
+        lineno += 1
+        [] = @fmt_line lineno, line
+
+  fmt_line: (lineno, line) =>
+    if line_content, src_lineno = line\match '(.*) %-%- ([0-9]+)$'
+      "#{line_content} -- #{@yue_path ?? @path}:#{src_lineno}"
+    else
+      line
+
+_G.fs ??= {
+  find: (pattern) ->
+    ret = {}
+    with io.popen "bash -c \"ls -1 #{pattern} 2>/dev/null\""
+      ret = [ path for path in \lines! when #path != 0 ]
+      \close!
+    ret
+
+  isDir: (path) ->
+    local resp
+    with io.popen "[ -d '#{path}' ] && echo true || echo false"
+      resp = \read '*a'
+      \close!
+    (resp\match 'true')?
+
+  exists: (path) ->
+    handle = io.open path, 'r'
+    if handle?
+      handle\close!
+    handle?
+
+  makeDir: (path) ->
+    os.execute "mkdir -p '#{path}'"
+}
+
+-- spec ->
+--   import 'skala.spec' as :describe, :it
+--
+--   describe 'module_name', ->
+--     it 'rejects non-lua files', ->
+--       local err
+--       try
+--         module_name 'main.rs'
+--       catch err2
+--         err = err2
+--       assert err, 'expected an error'
+--
+--     it 'handles simple names', ->
+--       name = module_name 'foo.lua'
+--       assert name == 'foo', "got #{name}"
+--
+--     it 'handles nested names', ->
+--       name = module_name 'foo/bar/baz.lua'
+--       assert name == 'foo.bar.baz', "got #{name}"
+
+main {...}

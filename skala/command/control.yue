@@ -1,14 +1,20 @@
 local *
 
-import 'cc.strings' as :wrap
+-- import 'cc.strings' as :wrap
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.clap' as :Subcommand
 
-macro version = ->
-  "'#{os.date!}'"
-_VERSION = $version!
+export register_args = (parser) ->
+  parser\add with Subcommand 'control'
+    \description 'default reactor control system'
 
-unpack ??= table.unpack
+declare_type 'control.Args', [[{}]]
 
-main = ->
+export DEFAULT_CONFIG = '
+[control]
+'
+
+export main = F '(control.Args) -> <>', (args) ->
   ctx =
     active: true
   parallel.waitForAny unpack
@@ -261,5 +267,3 @@ class Reactor
         name: 'boil efficiency'
         print_name: 'boil effncy'
         value: '%.2f%%'\format 100 * @reactor.getBoilEfficiency!
-
-main!

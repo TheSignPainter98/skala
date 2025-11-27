@@ -1,0 +1,11 @@
+export macro T = (ty, expr) ->
+  if os.getenv 'DEBUG'
+    "T #{ty}, #{expr}"
+  else
+    expr
+
+export macro F = (ty, expr) ->
+  if os.getenv 'DEBUG'
+    "F #{ty}, #{expr}"
+  else
+    expr

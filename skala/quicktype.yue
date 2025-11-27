@@ -1,0 +1,2030 @@
+local *
+local Symbol
+
+import 'skala.spec' as :repr, :spec
+
+export T = (type_spec, value) ->
+  if skip_typechecking
+    return
+  t_impl type_spec, value
+
+t_impl = (type_spec, value) ->
+  if not type_spec?
+    error 'cannot typecheck: no type spec provided'
+
+  checker = type_checker type_spec
+  err = check checker, value
+  if err?
+    error err, 2
+  value
+
+export is = (type_spec, value) ->
+  if not type_spec?
+    error 'cannot typecheck: no type spec provided'
+
+  local err
+  try
+    T type_spec, value
+  catch err2
+    err = err2
+  not err?, err
+
+macro debug = (block) ->
+  if false
+    return block
+  ''
+
+export COLLECT_STATS = false
+
+type_checkers = {}
+type_checker = (type_spec) ->
+  type_checkers[type_spec] ?? do
+    -- Slow path: parse and generate checker
+    checker = (parse type_spec)\checker!\build!
+
+    type_checkers[type_spec] = checker
+    checker
+
+export F = (type_spec, fn) ->
+  if skip_typechecking
+    return
+  if not type_spec?
+    error 'cannot typecheck: no type spec provided'
+  if 'function' != type fn
+    error 'cannot typecheck: no function provided'
+
+  fn_type = function_type type_spec
+
+  return_types = fn_type\return_checkers!
+  n_return_types = #return_types
+  check_returns = (...) ->
+    for i = 1, n_return_types
+      err = check return_types[i], select i, ...
+      if err?
+        error "return value #{i} incorrect: #{err} (checking #{fn_type})", 2
+    for i = n_return_types+1, (select '#', ...)
+      checker = return_types[i]
+      if not checker?
+        error "function returned too many values: expected #{n_return_types} but got #{select '#', ...} (checking #{fn_type})", 2
+      err = check checker, (select i, ...)
+      if err?
+        error "return value #{i} incorrect: #{err} (checking #{fn_type})", 2
+    ...
+
+  param_types = fn_type\param_checkers!
+  n_param_types = #param_types
+  (...) ->
+    if skip_typechecking
+      return fn ...
+
+    for i = 1, n_param_types
+      err = check param_types[i], (select i, ...)
+      if err?
+        error "argument #{i} incorrect: #{err} (checking #{fn_type})", 3
+    for i = n_param_types+1, select '#', ...
+      checker = param_types[i]
+      if not checker?
+        error "function given too many arguments: expected #{n_param_types} but got #{select '#', ...} (checking #{fn_type})", 3
+      err = check checker, (select i, ...)
+      if err?
+        error "argument #{i} incorrect: #{err} (checking #{fn_type})", 3
+
+    check_returns fn ...
+
+function_types = {}
+function_type = (type_spec) ->
+  function_types[type_spec] ?? do
+    -- Slow path: parse type spec
+    parsed_type = parse type_spec
+    if not (parsed_type\is Function) and not parsed_type\is Method
+      error "cannot typecheck: expected a function type"
+
+    function_types[type_spec] = parsed_type
+    parsed_type
+
+export is_valid_type_spec = (type_spec) ->
+  ret = true
+  try
+    parse type_spec
+  catch _
+    ret = false
+  ret
+
+parse = (type_spec) ->
+  type_spec_parser = TypeSpecParser Lexer type_spec
+  type_spec_parser\parse!
+
+export class Parser
+  new: (@lexer) =>
+  parse: =>
+    error 'unimplemented'
+
+  parse_repeat_separated: (elem_parser, sep_token, opts={}) =>
+    {
+      :separator_trails_before
+      :allow_repeated_separator
+    } = opts
+    if not separator_trails_before? or 'table' != type separator_trails_before[1]
+      separator_trails_before = {separator_trails_before}
+
+    with {}
+      [] = elem_parser!
+      tok = @lexer\peek!
+      while tok? and tok.type == sep_token
+        @lexer\next!
+        if allow_repeated_separator
+          @ignore_any sep_token
+        tok = @lexer\peek!
+        if tok? and contains tok.type, separator_trails_before
+          break
+
+        [] = elem_parser!
+        tok = @lexer\peek!
+
+  repeat_until: (elem_parser, until_tok) =>
+    with {}
+      while @lexer\peek!.type != until_tok
+        [] = elem_parser!
+
+  expect: (expected_token) =>
+    token = @lexer\next!
+    if not token?
+      error "unexpected EOF"
+    if token.type != expected_token
+      error "expected #{expected_token}, got #{token}"
+    token.value ?? token.type
+
+  ignore_any: (expected_token) =>
+    next_token = @lexer\peek!
+    while next_token? and next_token.type == expected_token
+      @expect expected_token
+      next_token = @lexer\peek!
+
+  maybe: (expected_token) =>
+    token = @lexer\peek!
+    if not token?
+      return nil
+    if token.type != expected_token
+      return nil
+    @lexer\next!
+    token.value ?? token.type
+
+  select: (options) =>
+    next_token = @lexer\peek!
+    if not next_token?
+      error "unexpected EOF"
+
+    i = 1
+    while options[i]
+      option = options[i]
+      if option.token == next_token.type
+        return if action = option.action
+          action!
+        else
+          @expect option.token
+      i += 1
+
+    if options.otherwise?
+      return options.otherwise!
+
+    options_repr = table.concat [ tostring option.token for option in *options ], ', '
+    error "expected one of #{options_repr}, got #{next_token.type}"
+
+  sequence: (expected_tokens) =>
+    with {}
+      for { token: expected_token, :action } in *expected_tokens
+        if expected_token?
+          token = @lexer\next!
+          if not token?
+            error "unexpected EOF"
+          if token.type != expected_token
+            error "expected #{expected_token}, got #{token.type}"
+          [] = token.value ?? 0
+        else if action?
+          [] = action!
+        else
+          error "sequence element must have expected_token or action"
+
+contains = (needle, haystack) ->
+  for elem in *haystack
+    if needle == elem
+      return true
+  false
+
+class TypeSpecParser extends Parser
+  parse: =>
+    ret = @parse_type!
+    if @lexer\peek!
+      error "type spec has trailing characters: '#{@lexer.type_spec}'"
+    ret
+
+  parse_type: =>
+    if @maybe T_BANG
+      return Never!
+
+    @parse_type_disjunction!
+
+  parse_type_disjunction: =>
+    disjunction = @parse_repeat_separated @\parse_type_conjunction, T_PIPE
+    if #disjunction == 1
+      disjunction[1] -- Single element
+    else
+      Disjunction disjunction
+
+  parse_type_conjunction: =>
+    conjunction = @parse_repeat_separated @\parse_optional_type, T_PLUS
+    if #conjunction == 1
+      conjunction[1] -- Single element
+    else
+      Conjunction conjunction
+
+  parse_optional_type: =>
+    @select
+      * token: T_QUESTION
+        action: ->
+          @expect T_QUESTION
+          Optional @parse_specific_type!
+      otherwise: ->
+        @parse_specific_type!
+
+  parse_specific_type: =>
+    @select
+      * token: T_NAME
+        action: @\parse_named_type
+      * token: T_PREFIXED_NAME
+        action: @\parse_prefixed_named_type
+      * token: T_BOOLEAN
+        action: @\parse_boolean_type
+      * token: T_NUMBER
+        action: @\parse_number_type
+      * token: T_STRING
+        action: @\parse_string_type
+      * token: T_BRACKET_OPEN
+        action: @\parse_array
+      * token: T_PAREN_OPEN
+        action: @\parse_tuple_or_function
+      * token: T_TILDE
+        action: @\parse_table_like
+      * token: T_BRACE_OPEN
+        action: @\parse_table
+
+  parse_named_type: =>
+    named_type @expect T_NAME
+
+  parse_prefixed_named_type: =>
+    prefixed_named_type @expect T_PREFIXED_NAME
+
+  parse_boolean_type: =>
+    BooleanType @expect T_BOOLEAN
+
+  parse_number_type: =>
+    NumberType @expect T_NUMBER
+
+  parse_string_type: =>
+    StringType @expect T_STRING
+
+  parse_array: (is_table_like=false) =>
+    {_, elem_type, _} = @sequence
+      * token: T_BRACKET_OPEN
+      * action: @\parse_type
+      * token: T_BRACKET_CLOSE
+    (Array elem_type)
+      \table_like is_table_like
+
+  parse_tuple_or_function: (is_table_like=false) =>
+    @expect T_PAREN_OPEN
+    local types
+    if @maybe T_PAREN_CLOSE
+      types = {}
+    else
+      {types, _} = @sequence
+        * action: ->
+          @parse_repeat_separated @\parse_function_io_type, T_COMMA, separator_trails_before: T_PAREN_CLOSE
+        * token: T_PAREN_CLOSE
+    function_arrow = (@maybe T_THIN_ARROW) ?? @maybe T_FAT_ARROW
+    if not function_arrow?
+      for ty in *types
+        if ty\is Remainder
+          error 'tuple type cannot contain varargs'
+      return (Tuple types)
+        \table_like is_table_like
+
+    if is_table_like
+      local ty
+      if function_arrow == T_THIN_ARROW
+        ty = 'functions'
+      else
+        ty = 'methods'
+      error "#{ty} cannot be table-like"
+
+    for ty in *types[,-1]
+      if ty\is Remainder
+        error 'varargs can only be declared at end of a param type list'
+
+    last_ty = types[#types]
+    if last_ty? and last_ty\is Remainder
+      types.<> = __index: => last_ty.type
+      types[#types] = nil
+
+    switch function_arrow
+      when T_THIN_ARROW
+        Function types, @parse_return_type!
+      when T_FAT_ARROW
+        Method types, @parse_return_type!
+      else
+        error "internal error: unknown function arrow type: #{function_arrow}"
+
+  parse_return_type: =>
+    @select
+      * token: T_ANGLE_OPEN
+        action: ->
+          @expect T_ANGLE_OPEN
+          if @maybe  T_ANGLE_CLOSE
+            return {}
+          types = @parse_repeat_separated @\parse_function_io_type, T_COMMA, separator_trails_before: T_ANGLE_CLOSE
+          @expect T_ANGLE_CLOSE
+
+          for ty in *types[,-1]
+            if ty\is Remainder
+              error 'variable returns can only be declared at end of a return type list'
+
+          last_ty = types[#types]
+          if last_ty? and last_ty\is Remainder
+            types.<> = __index: => last_ty.type
+            types[#types] = nil
+
+          types
+      otherwise: ->
+        ty = @parse_function_io_type!
+        if ty\is Remainder
+          <index>: => ty.type
+        else
+          { ty }
+
+  parse_function_io_type: =>
+    ty = @parse_type!
+    if (@maybe T_DOTDOTDOT)?
+      Remainder ty
+    else
+      ty
+
+  parse_table_like: =>
+    @expect T_TILDE
+    @select
+      * token: T_BRACE_OPEN
+        action: -> @parse_table true
+      * token: T_BRACKET_OPEN
+        action: -> @parse_array true
+      * token: T_PAREN_OPEN
+        action: -> @parse_tuple_or_function true
+
+  parse_table: (is_table_like=false) =>
+    {_, table, _} = @sequence
+      * token: T_BRACE_OPEN
+      * action: -> @parse_table_content is_table_like
+      * token: T_BRACE_CLOSE
+    table
+
+  parse_table_content: (is_table_like=false) =>
+    if (@lexer\peek! ?? {}).type == T_BRACE_CLOSE
+      return (Struct nil, {})
+        \table_like is_table_like
+
+    local metatable_type
+    if (@maybe T_ANGLE_OPEN)?
+      @expect T_ANGLE_CLOSE
+      @expect T_COLON
+      metatable_type = @parse_type!
+      checkpoint = @lexer\checkpoint!
+      @maybe T_COMMA
+      if (@lexer\peek! ?? {}).type == T_BRACE_CLOSE
+        return (Struct metatable_type, {})
+          \table_like is_table_like
+      @lexer\restore checkpoint
+      @expect T_COMMA
+
+    checkpoint = @lexer\checkpoint!
+    is_struct = (@maybe T_NAME)? and (@maybe T_COLON)?
+    @lexer\restore checkpoint
+
+    if is_struct
+      return (Struct metatable_type, @parse_repeat_separated @\parse_field, T_COMMA, separator_trails_before: T_BRACE_CLOSE)
+        \table_like is_table_like
+
+    first_type = @parse_type!
+    table_content_type = @select
+      * token: T_BRACE_CLOSE
+        action: -> 'set'
+      * token: T_THIN_ARROW
+        action: -> 'mapping'
+
+    switch table_content_type
+      when 'set'
+        (Set metatable_type, first_type)
+          \table_like is_table_like
+      when 'mapping'
+        { _, maps_to } = @sequence
+          * token: T_THIN_ARROW
+          * action: @\parse_type
+        (Mapping metatable_type, first_type, maps_to)
+          \table_like is_table_like
+      else
+        error "internal error: illegal table contents type: #{repr table_content_type}"
+
+  parse_field: =>
+    {name, _, type} = @sequence
+      * token: T_NAME
+      * token: T_COLON
+      * action: @\parse_type
+    Field name, type
+
+-- Tokens
+T_PAREN_OPEN = <tostring>: => "'('"
+T_PAREN_CLOSE = <tostring>: => "')'"
+T_BRACE_OPEN = <tostring>: => "'{'"
+T_BRACE_CLOSE = <tostring>: => "'}'"
+T_BRACKET_OPEN = <tostring>: => "'['"
+T_BRACKET_CLOSE = <tostring>: => "']'"
+T_ANGLE_OPEN = <tostring>: => '"<"'
+T_ANGLE_CLOSE = <tostring>: => '">"'
+T_TILDE = <tostring>: => '~'
+T_COMMA = <tostring>: => "','"
+T_COLON = <tostring>: => "':'"
+T_BANG = <tostring>: => "'!'"
+T_THIN_ARROW = <tostring>: => "'->'"
+T_FAT_ARROW = <tostring>: => "'=>'"
+T_DOTDOTDOT = <tostring>: => "'...'"
+T_QUESTION = <tostring>: => "'?'"
+T_PLUS = <tostring>: => "'+'"
+T_PIPE = <tostring>: => "'|'"
+T_NAME = <tostring>: => "<name>"
+T_PREFIXED_NAME = <tostring>: => "<prefixed-name>"
+T_BOOLEAN = <tostring>: => "<boolean>"
+T_NUMBER = <tostring>: => "<number>"
+T_STRING = <tostring>: => "<string>"
+
+class Lexer
+  new: (@type_spec) =>
+    @index = 1
+    @done = false
+    @peeked = nil
+    @tokens = coroutine.wrap ->
+      while @index <= #type_spec
+        ty, value, bytes_consumed = if match = type_spec\match '^%-%-[^\r\n]*', @index
+          nil, nil, #match
+        else if whitespace = type_spec\match '^[ \t\r\n]+', @index
+          nil, nil, #whitespace
+        else if match = type_spec\match '^%(', @index
+          T_PAREN_OPEN, nil, #match
+        else if match = type_spec\match '^%)', @index
+          T_PAREN_CLOSE, nil, #match
+        else if match = type_spec\match '^,', @index
+          T_COMMA, nil, #match
+        else if match = type_spec\match '^{', @index
+          T_BRACE_OPEN, nil, #match
+        else if match = type_spec\match '^}', @index
+          T_BRACE_CLOSE, nil, #match
+        else if match = type_spec\match '^%[', @index
+          T_BRACKET_OPEN, nil, #match
+        else if match = type_spec\match '^]', @index
+          T_BRACKET_CLOSE, nil, #match
+        else if match = type_spec\match '^:', @index
+          T_COLON, nil, #match
+        else if match = type_spec\match '^!', @index
+          T_BANG, nil, #match
+        else if match = type_spec\match '^->', @index
+          T_THIN_ARROW, nil, #match
+        else if match = type_spec\match '^=>', @index
+          T_FAT_ARROW, nil, #match
+        else if match = type_spec\match '^%.%.%.', @index
+          T_DOTDOTDOT, nil, #match
+        else if match = type_spec\match '^<', @index
+          T_ANGLE_OPEN, nil, #match
+        else if match = type_spec\match '^>', @index
+          T_ANGLE_CLOSE, nil, #match
+        else if match = type_spec\match '^?', @index
+          T_QUESTION, nil, #match
+        else if match = type_spec\match '^+', @index
+          T_PLUS, nil, #match
+        else if match = type_spec\match '^|', @index
+          T_PIPE, nil, #match
+        else if match = type_spec\match '^true', @index
+          T_BOOLEAN, true, #match
+        else if match = type_spec\match '^false', @index
+          T_BOOLEAN, false, #match
+        else if prefixed_name = type_spec\match '^([a-zA-Z_][a-zA-Z0-9_]*[a-zA-Z0-9_]%.[a-zA-Z_][a-zA-Z0-9_]*[a-zA-Z0-9_])', @index
+          T_PREFIXED_NAME, prefixed_name, #prefixed_name
+        else if name = type_spec\match '^([a-zA-Z_][a-zA-Z0-9_-]*[a-zA-Z0-9_])', @index
+          T_NAME, name, #name
+        else if number = type_spec\match '^%-?[0-9]*%.[0-9]+', @index
+          T_NUMBER, (assert tonumber number), #number
+        else if number = type_spec\match '^%-?[0-9]+', @index
+          T_NUMBER, (assert tonumber number), #number
+        else if string = type_spec\match [[^"([^"]*)"]], @index
+          T_STRING, string, #string + 2
+        else if match = type_spec\match '^~', @index
+          T_TILDE, nil, #match
+        else
+          error "unexpected character '#{type_spec\sub @index, @index}' in type spec '#{type_spec}'"
+
+        @index += bytes_consumed
+        if not ty?
+          continue
+        coroutine.yield Symbol ty, value
+
+  peek: =>
+    if @done
+      return nil
+
+    if @peeked?
+      return @peeked
+
+    @peeked = @tokens!
+    if not @peeked
+      @done = true
+    @peeked
+
+  next: =>
+    if @done
+      return nil
+
+    if @peeked?
+      peeked = @peeked
+      @peeked = nil
+      peeked
+    else
+      ret = @tokens!
+      if not ret?
+        @done = true
+      ret
+
+  checkpoint: =>
+    Checkpoint @index, @peeked
+
+  restore: (checkpoint) =>
+    { :index, :peeked } = checkpoint
+    @index = index
+    @peeked = peeked
+
+class Checkpoint
+  new: (@index, @peeked) =>
+
+export class Symbol
+  new: (@type, @value=nil) =>
+
+  __tostring: =>
+    if @value?
+      "#{@type}(#{@value})"
+    else
+      "#{@type}"
+
+known_primitives =
+  nil: true
+  boolean: true
+  number: true
+  string: true
+  function: true
+  table: true
+  thread: true
+  userdata: true
+
+named_type = (name) ->
+  if known_primitives[name]?
+    Primitive name
+  else if name == 'any'
+    Any!
+  else if name == 'some'
+    Some!
+  else if not name\match '^[A-Z]'
+    error "cannot use '#{name}' as user type name: name must start with an uppercase letter"
+  else
+    UserType name
+
+prefixed_named_type = (prefixed_name) ->
+  prefix, name = prefixed_name\match '^([^.]+)%.([^.]*)$'
+  if not prefix? or not name?
+    error "internal error: cannot parse prefixed name '#{prefixed_name}'"
+  if known_primitives[prefix]?
+    error "cannot use '#{prefix}' as type-prefix: must not be a primitive"
+  if not prefix\match '^[a-z]'
+    error "cannot use '#{prefix}' as type-prefix: must start with a lowercase letter"
+  if not name\match '^[A-Z]'
+    error "cannot use '#{name}' as disambiguated type name: must start with an uppercase letter"
+  UserType prefixed_name
+
+class Is
+  is: (ty) =>
+    @.<class>.__name == ty.__base.__class.__name
+
+class Primitive using Is
+  new: (@name) =>
+
+  __tostring: => @name
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, @name
+
+class Any using Is
+  __tostring: =>
+    'any'
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    checker_builder -- No checks required.
+
+class Some using Is
+  __tostring: =>
+    'some'
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_NON_NIL
+
+class Never using Is
+  __tostring: =>
+    '!'
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_NEVER
+
+class UserType using Is
+  new: (@name) =>
+
+  __tostring: => @name
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      parsed_user_type = user_types[@name]
+      if not parsed_user_type? or checker_builder\already_building @
+        \add C_PUSH_CHECKER, @name
+      else
+        \push_building @
+        parsed_user_type\checker checker_builder
+        \pop_building @
+
+class SingletonType using Is
+  new: (@name, @value) =>
+
+  __tostring: => @name
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_EQ, @value
+
+class BooleanType using Is
+  new: (@value) =>
+
+  __tostring: =>
+    tostring @value
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'boolean'
+      \add C_ASSERT_EQ, @value
+
+class NumberType using Is
+  new: (@value) =>
+
+  __tostring: =>
+    tostring @value
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'number'
+      \add C_ASSERT_EQ, @value
+
+class StringType using Is
+  new: (@content) =>
+
+  __tostring: =>
+    "\"#{@content}\""
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'string'
+      \add C_ASSERT_EQ, @content
+
+class Optional using Is
+  new: (@inner_type) =>
+
+  __tostring: =>
+    "?#{@inner_type}"
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      inner_skip_target = \add_with_unresolved_target C_JMP_IF_NIL
+      @inner_type\checker checker_builder
+      inner_skip_target\resolve_here!
+
+class Array using Is
+  new: (@elem_type) =>
+    @_table_like = false
+
+  table_like: (@_table_like) =>
+    @
+
+  __tostring: =>
+    "[#{@elem_type}]"
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    if @_table_like
+      error "table-like arrays are not supported"
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'table'
+      \add C_PUSH, 1
+
+      loop_start = \add_labelled C_GET_FIELD
+
+      loop_exit_target = \add_with_unresolved_target C_JMP_IF_NIL
+      @elem_type\checker checker_builder
+      \add C_POP
+      \add C_INCR
+      \add C_JMP, loop_start.index
+
+      loop_exit_target\resolve_here!
+      \add C_POP
+      \add C_DECR
+      \add C_ASSERT_LEN
+      \add C_POP
+
+class Tuple using Is
+  new: (@elem_types) =>
+    @_table_like = false
+
+  table_like: (@_table_like) =>
+    @
+
+  __tostring: =>
+    elem_type_reprs = [ tostring elem_type for elem_type in *@elem_types ]
+    "(#{table.concat elem_type_reprs, ', '})"
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    if @_table_like
+      error "table-like arrays are not supported"
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'table'
+
+      for i = 1, #@elem_types
+        \add C_PUSH, i
+        \add C_GET_FIELD
+        @elem_types[i]\checker checker_builder
+        \add C_POP
+        \add C_POP
+
+class Struct using Is
+  new: (@metatable_type, @fields) =>
+    @_table_like = false
+
+  table_like: (@_table_like) =>
+    @
+
+  __tostring: =>
+    field_reprs = [ tostring field for field in *@fields ]
+    "{#{table.concat field_reprs, ', '}}"
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      if @_table_like
+        \add C_ASSERT_TABLE_LIKE
+      else
+        \add C_ASSERT_PRIMITIVE, 'table'
+
+      if @metatable_type?
+        \add C_PUSH_METATABLE
+        @metatable_type\checker checker_builder
+        \add C_POP
+      for field in *@fields
+        \add C_PUSH, field.name
+        \add C_GET_FIELD
+        field\checker checker_builder
+        \add C_POP
+        \add C_POP
+
+class Field using Is
+  new: (@name, @type) =>
+
+  __tostring: =>
+    "#{@name}: #{@type}"
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    @type\checker checker_builder
+
+class Set using Is
+  new: (@metatable_type, @elem_type) =>
+    @_table_like = false
+
+  table_like: (@_table_like) =>
+    @
+
+  __tostring: =>
+    "{#{@elem_type}}"
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    if @_table_like
+      error "table-like arrays are not supported"
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'table'
+
+      if @metatable_type?
+        \add C_PUSH_METATABLE
+        @metatable_type\checker checker_builder
+        \add C_POP
+
+      \add C_PUSH, V_NIL
+      \add C_NEXT
+
+      loop_start_label = \add_with_unresolved_target C_JMP_IF_NIL
+      \add C_ASSERT_TRUTHY
+      \add C_POP
+      @elem_type\checker checker_builder
+
+      \add C_NEXT
+      \add C_JMP, loop_start_label.index
+
+      loop_start_label\resolve_here!
+      \add C_POP
+      \add C_POP
+
+class Mapping using Is
+  new: (@metatable_type, @in_type, @out_type) =>
+    @_table_like = false
+
+  table_like: (@_table_like) =>
+    @
+
+  __tostring: =>
+    "{#{@in_type} -> #{@out_type}}"
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    if @_table_like
+      error "table-like arrays are not supported"
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'table'
+
+      if @metatable_type?
+        \add C_PUSH_METATABLE
+        @metatable_type\checker checker_builder
+        \add C_POP
+
+      \add C_PUSH, V_NIL
+      \add C_NEXT
+
+      loop_start_label = \add_with_unresolved_target C_JMP_IF_NIL
+
+      @out_type\checker checker_builder
+      \add C_POP
+      @in_type\checker checker_builder
+
+      \add C_NEXT
+      \add C_JMP, loop_start_label.index
+
+      loop_start_label\resolve_here!
+      \add C_POP
+      \add C_POP
+
+class Function using Is
+  new: (@param_types, @return_types) =>
+    @remainder_param_type = param_types.<>?.__index?!
+    @remainder_return_type = return_types.<>?.__index?!
+    @_param_checkers = nil
+    @_return_checkers = nil
+
+  param_checkers: =>
+    if param_checkers = @_param_checkers
+      return param_checkers
+    param_checkers = with <>: {}
+      for param_type in *@param_types
+        [] = param_type\checker!\build!
+      if @param_types.<>?
+        if remainder_type = @remainder_param_type
+          remainder_type_checker = remainder_type\checker!\build!
+          .<index> = => remainder_type_checker
+    @_param_checkers = param_checkers
+    param_checkers
+
+  return_checkers: =>
+    if return_checkers = @_return_checkers
+      return return_checkers
+    return_checkers = with <>: {}
+      for return_type in *@return_types
+        [] = return_type\checker!\build!
+      if @return_types.<>?
+        if remainder_type = @remainder_return_type
+          remainder_type_checker = remainder_type\checker!\build!
+          .<index> = => remainder_type_checker
+    @_return_checkers = return_checkers
+    return_checkers
+
+  __tostring: =>
+    table.concat with {}
+      [] = '('
+      first_param = true
+      for param_type in *@param_types
+        if not first_param
+          [] = ", "
+        first_param = false
+
+        [] = tostring param_type
+      if @remainder_param_type?
+        if not first_param
+          [] = ', '
+        [] = tostring @remainder_param_type
+        [] = '...'
+      [] = ') -> '
+      if #@return_types == 1
+        if @remainder_return_type?
+          [] = tostring @remainder_return_type
+          [] = '...'
+        else
+          [] = tostring @return_types[1]
+      else
+        [] = '<'
+        first_ret = true
+        for return_type in *@return_types
+          if not first_ret
+            [] = ", "
+          first_ret = false
+          [] = tostring return_type
+        if @remainder_return_type?
+          if not first_ret
+            [] = ', '
+          [] = tostring @remainder_return_type
+          [] = '...'
+        [] = '>'
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_ASSERT_PRIMITIVE, 'function'
+
+class Method extends Function
+  new: (param_types, return_types) =>
+    super { Some!, ...param_types }, return_types
+
+  __tostring: =>
+    table.concat with {}
+      [] = '('
+      first_param = true
+      for param_type in *@param_types[2,]
+        if not first_param
+          [] = ", "
+        first_param = false
+
+        [] = tostring param_type
+      if @remainder_param_type?
+        if not first_param
+          [] = ', '
+        [] = tostring @remainder_param_type
+        [] = '...'
+      [] = ') => '
+      if #@return_types == 1
+        if @remainder_return_type?
+          [] = tostring @remainder_return_type
+          [] = '...'
+        else
+          [] = tostring @return_types[1]
+      else
+        [] = '<'
+        first_ret = true
+        for return_type in *@return_types
+          if not first_ret
+            [] = ", "
+          first_ret = false
+          [] = tostring return_type
+        if @remainder_return_type?
+          if not first_ret
+            [] = ', '
+          [] = tostring @remainder_return_type
+          [] = '...'
+        [] = '>'
+
+class Remainder using Is
+  new: (@type) =>
+
+  __tostring: =>
+    "#{@type}..."
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    error 'internal error: Remainder unresolved in AST'
+
+class Disjunction using Is
+  new: (@types) =>
+    if #@types <= 1
+      error 'internal error: disjunction has too few elements'
+
+  __tostring: =>
+    table.concat [tostring ty for ty in *@types], '|'
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      \add C_PUSH_UNION_CTX, @
+      next_variant_jump = \add_with_unresolved_target C_SET_UNION_BAIL_TARGET
+      @types[1]\checker checker_builder
+
+      ok_jumps = {}
+      for ty in *@types[2,]
+        ok_jumps[] = \add_with_unresolved_target C_JMP
+
+        next_variant_jump\resolve_here!
+        \add C_CLEAR_BAILING
+        next_variant_jump = \add_with_unresolved_target C_SET_UNION_BAIL_TARGET
+        ty\checker checker_builder
+
+      next_variant_jump\resolve_here!
+      for ok_jump in *ok_jumps
+        ok_jump\resolve_here!
+      \add C_POP_UNION_CTX
+
+class Conjunction using Is
+  new: (@types) =>
+
+  __tostring: =>
+    table.concat [tostring ty for ty in *@types], '+'
+
+  checker: (checker_builder=CheckerBuilder!) =>
+    with checker_builder
+      for ty in *@types
+        ty\checker checker_builder
+
+class CheckerBuilder
+  new: =>
+    @instructions = {}
+    @user_type_stack = {}
+
+  add: (op, arg='_') =>
+    @instructions[] = op
+    @instructions[] = arg
+
+  add_labelled: (op, arg='_') =>
+    label = @make_label!
+    @add op, arg
+    label
+
+  add_with_unresolved_target: (op) =>
+    label = @make_label!
+    @add op, LABEL_PLACEHOLDER
+    label
+
+  make_label: =>
+    Label @instructions
+
+  build: =>
+    @validate!
+    @instructions
+
+  validate: =>
+    for instruction in *@instructions
+      if instruction == LABEL_PLACEHOLDER
+        error "unresolved placeholder in check program:\n#{repr @instructions}"
+
+  already_building: (user_type) =>
+    for user_type_being_checked in *@user_type_stack
+      if user_type.name == user_type_being_checked.name
+        return true
+    false
+
+  push_building: (user_type) =>
+    @user_type_stack[] = user_type
+
+  pop_building: (user_type) =>
+    if @user_type_stack[#@user_type_stack] != user_type
+      error "internal error: user type stack mismanaged, expected #{user_type.name} at the top of #{repr @user_type_stack}"
+    @user_type_stack[#@user_type_stack] = nil
+
+class Label
+  new: (@instructions) =>
+    @index = #@instructions + 1
+
+  resolve_here: =>
+    @instructions[@index + 1] = #@instructions + 1
+
+C_PUSH = <tostring>: => '<push>'
+C_PUSH_METATABLE = <tostring>: => '<push-metatable>'
+C_POP = <tostring>: => '<pop>'
+C_ASSERT_NON_NIL = <tostring>: => '<assert-non-nil>'
+C_ASSERT_PRIMITIVE = <tostring>: => '<assert-primitive>'
+C_ASSERT_TABLE_LIKE = <tostring>: => '<assert-table-like>'
+C_ASSERT_TRUTHY = <tostring>: => '<assert-truthy>'
+C_ASSERT_LEN = <tostring>: => '<assert-len>'
+C_ASSERT_EQ = <tostring>: => '<assert-eq>'
+C_ASSERT_NEVER = <tostring>: => '<assert-never>'
+C_GET_FIELD = <tostring>: => '<field>'
+C_INCR = <tostring>: => '<incr>'
+C_DECR = <tostring>: => '<decr>'
+C_NEXT = <tostring>: => '<next>'
+C_JMP = <tostring>: => '<jmp>'
+C_JMP_IF_NIL = <tostring>: => '<jnil>'
+C_PUSH_CHECKER = <tostring>: => '<push-checker>'
+C_PUSH_UNION_CTX = <tostring>: => '<push-union-ctx>'
+C_CLEAR_BAILING = <tostring>: => '<clear-bailing>'
+C_SET_UNION_BAIL_TARGET = <tostring>: => '<set-union-bail-target>'
+C_POP_UNION_CTX = <tostring>: => '<pop-union-ctx>'
+V_NIL = <tostring>: => 'nil'
+
+checker_program_repr = (checker) ->
+  table.concat ["#{i}:\t#{repr checker[i]}\t#{checker[i+1]}" for i = 1, #checker, 2], '\n\t'
+
+LABEL_PLACEHOLDER = <tostring>: => '<LABEL-PLACEHOLDER>'
+
+export MAX_CHECKER_DEPTH = 1000
+stack_size = 0
+stack = {}
+keys_used = {} -- NB: this is a {number->?Key}
+num_unions = 0
+union_depths = {}
+union_bail_jumps = {}
+root_union = nil
+num_running_checkers = 0
+instruction_counts = {}
+macro check_error = (msg) ->
+  lines = with {}
+    [] = 'msg = if num_unions == 0'
+    [] = '  pretty_key_parts = {}'
+    [] = '  for i = 1, stack_size'
+    [] = '    pretty_key_parts[] = keys_used[i] -- Compact'
+    [] = '  if #pretty_key_parts > 0'
+    [] = '    pretty_key = "(at field .#{table.concat pretty_key_parts, "."})"'
+    [] = "    #{msg} .. ' ' .. pretty_key"
+    [] = '  else'
+    [] = "    #{msg}"
+    [] = 'else'
+    [] = '  nil'
+
+    [] = 'new_size = union_depths[num_unions] ?? 0'
+    [] = 'for i = new_size + 1, stack_size'
+    [] = '  stack[i] = nil'
+    [] = 'stack_size = new_size'
+
+    [] = 'if num_unions == initial_unions'
+    [] = '  return msg'
+    [] = 'pc = union_bail_jumps[num_unions] - 2'
+    [] = 'bailing = true'
+  table.concat lines, '\n'
+check = (check_prog, value, root=true) ->
+  $debug do
+    if root
+      print '='\rep 80
+    else
+      print '-'\rep 80
+
+  if root
+    -- Prime stack.
+    stack_size = 1
+    stack[1] = value
+    num_running_checkers = 1
+    root_union = 0
+    num_unions = 0
+    initial_unions = 0
+  initial_stack_size = stack_size
+  initial_num_running_checkers = num_running_checkers
+  initial_unions = num_unions
+
+  if num_running_checkers >= MAX_CHECKER_DEPTH
+    return "type checker recursed too many times (#{num_running_checkers} times). If this is okay, increase the MAX_CHECKER_DEPTH"
+
+  $debug do
+    print "running checker:\n\t#{checker_program_repr check_prog}"
+  with check_prog
+    local pc
+    bailing = false
+
+    pc = -1
+    while true
+      pc += 2
+      instruction = [pc]
+      if instruction == nil
+        break
+
+      if COLLECT_STATS
+        instruction_counts[instruction] = if v = instruction_counts[instruction]
+          v + 1
+        else
+          1
+
+      $debug do
+        print "stack state #{instruction}@#{pc} [#{stack_size}]:\n\t#{table.concat [ repr stack[i] for i = 1, stack_size], ', '}"
+
+      switch instruction
+        when C_PUSH
+          arg = [pc + 1]
+          if arg == V_NIL
+            arg = nil
+          stack_size += 1
+          stack[stack_size] = arg
+        when C_PUSH_METATABLE
+          mt = stack[stack_size].<>
+          stack_size += 1
+          stack[stack_size] = mt
+          keys_used[stack_size] = '<>'
+        when C_POP
+          stack[stack_size] = nil
+          keys_used[stack_size] = nil
+          stack_size -= 1
+        when C_ASSERT_NON_NIL
+          if stack[stack_size] == nil
+            $check_error "incorrect type: expected some but got nil"
+        when C_ASSERT_PRIMITIVE
+          ty = type stack[stack_size]
+          arg = [pc + 1]
+          if ty != arg
+            $check_error "incorrect type: expected #{arg} but got #{ty} (#{repr stack[stack_size]})"
+        when C_ASSERT_TABLE_LIKE
+          value = stack[stack_size]
+          ty = type value
+          if 'table' != ty and
+              'string' != ty and
+              (not value.<>? or not value.<index>?)
+            $check_error "incorrect type: expected indexable but got #{ty}"
+        when C_ASSERT_TRUTHY
+          if not stack[stack_size]
+            $check_error "incorrect type: expected a truthy value but got #{stack[stack_size]}"
+        when C_ASSERT_LEN
+          actual_len = #stack[stack_size-1]
+          counted_len = stack[stack_size]
+          if counted_len != actual_len
+            $check_error "incorrect type: expected array but got table (#{repr stack[stack_size]})"
+        when C_ASSERT_EQ
+          if stack[stack_size] != [pc + 1]
+            $check_error "incorrect type: expected #{type [pc + 1]} #{repr [pc + 1]} but got #{repr stack[stack_size]}"
+        when C_ASSERT_NEVER
+          $check_error 'never expected a value here'
+        when C_GET_FIELD
+          stack_size += 1
+          stack[stack_size] = stack[stack_size-2][stack[stack_size-1]]
+          keys_used[stack_size] = stack[stack_size-1]
+        when C_INCR
+          stack[stack_size] += 1
+        when C_DECR
+          stack[stack_size] -= 1
+        when C_NEXT
+          tab = stack[stack_size-1]
+          idx = stack[stack_size]
+          next_idx, value = next tab, idx
+          stack[stack_size] = next_idx
+          stack_size += 1
+          stack[stack_size] = value
+        when C_JMP
+          pc = [pc + 1] - 2
+        when C_JMP_IF_NIL
+          if not stack[stack_size]?
+            pc = [pc + 1] - 2
+        when C_PUSH_CHECKER
+          arg = [pc + 1]
+          checker = type_checkers[arg]
+          if not checker?
+            return "cannot typecheck: type #{arg} not defined"
+          if #checker == 2 and #check_prog == 2
+            -- Avoid infinite loop on undefined types
+            { ccmd, carg } = checker
+            if [pc] == ccmd and arg == carg
+              return "cannot typecheck: type #{arg} not defined"
+
+          num_running_checkers += 1
+          err = check checker, nil, false
+          num_running_checkers -= 1
+
+          if err?
+            if num_unions == 0
+              return err
+
+            bailing = true
+            pc = union_bail_jumps[num_unions] - 2
+        when C_CLEAR_BAILING
+          bailing = false
+        when C_SET_UNION_BAIL_TARGET
+          union_bail_jumps[num_unions] = [pc + 1]
+        when C_PUSH_UNION_CTX
+          num_unions += 1
+          union_depths[num_unions] = #stack
+          if num_unions == 1
+            root_union = [pc + 1]
+        when C_POP_UNION_CTX
+          union_bail_jumps[num_unions] = nil
+          union_depths[num_unions] = nil
+          num_unions -= 1
+
+          tmp_root_union = root_union
+          if num_unions == 0
+            root_union = nil
+          if bailing
+            if num_unions == 0
+              $check_error "incorrect type: expected #{tmp_root_union} but got #{type stack[stack_size]} (#{repr stack[stack_size]})"
+            else
+              $check_error! -- Unwind.
+        else
+          error "internal error: illegal type-checker VM instruction #{[pc]}@#{pc}"
+    $debug do
+      print "FINAL stack state #{check_prog[pc-2]}@#{pc-2} [#{stack_size}]:\n\t#{table.concat [ "#{i}:\t#{repr stack[i]}" for i = 1, stack_size], '\n\t'}"
+
+    ending_stack_size = stack_size
+    if root
+      -- Reset stack.
+      stack[1] = nil
+      stack_size = 0
+    if num_running_checkers != initial_num_running_checkers
+      error "internal error: checker depth incorrectly handled: expected #{initial_num_running_checkers} but got #{num_running_checkers}"
+    if ending_stack_size != initial_stack_size
+      error "internal error: value stack incorrectly handled (#{repr check_prog})"
+  nil
+
+user_types = {}
+export declare_type = (name, type_spec) ->
+  if not name?
+    error "declare_type requires a name"
+  if 'string' != type name
+    error "declare_type requires a string name"
+  if not type_spec?
+    error "declare_type requires a type_spec"
+  if 'string' != type type_spec
+    error "declare_type requires a string type_spec"
+
+  prefix, unprefixed_name = name\match '^([^.]+)%.([^.]*)$'
+  unprefixed_name ??= name
+
+  if prefix?
+    if known_primitives[prefix]?
+      error "cannot use '#{prefix}' as type-prefix: must not be a primitive"
+    if not prefix\match '^[a-z]'
+      error "cannot use '#{prefix}' as type-prefix: must start with a lowercase letter"
+
+  if #unprefixed_name < 2
+    error "cannot declare type '#{unprefixed_name}': name too short"
+  if not (unprefixed_name\sub 1, 1)\match '^[A-Z_]$'
+    error "cannot declare type '#{unprefixed_name}': user types must start with uppercase or '_'"
+  if not unprefixed_name\match '^[a-zA-Z0-9_-]*[a-zA-Z0-9_]$'
+    error "cannot declare type '#{unprefixed_name}': not a valid identifier"
+
+  if user_types[name]?
+    error "cannot redefine type '#{unprefixed_name}'"
+  parsed_type = parse type_spec
+  user_types[name] = parsed_type
+  type_checkers[name] = parsed_type\checker!\build!
+
+declare_type 'Self', 'some'
+
+export declare_singleton_type = (value) ->
+  if not value?
+    error "declare_singleton_type requires a value"
+  if 'table' != type value
+    error "declare_singleton_type requires a table value"
+
+  name = tostring value
+  if #name < 2
+    error "cannot declare type '#{name}': name too short"
+  if not (name\sub 1, 1)\match '^[A-Z_]$'
+    error "cannot declare type '#{name}': user types must start with an uppercase letter or '_'"
+  if not name\match '^[a-zA-Z0-9_-]*[a-zA-Z0-9_]$'
+    error "cannot declare type '#{name}': not a valid identifier"
+  if user_types[name]?
+    error "cannot redefine type '#{name}'"
+
+  ty = SingletonType name, value
+  user_types[name] = ty
+  type_checkers[name] = ty\checker!\build!
+
+skip_typechecking = false
+export deactivate_typechecks = ->
+  skip_typechecking = true
+
+export stats = ->
+  stats_arr = [:instruction, :count for instruction, count in pairs instruction_counts]
+  table.sort stats_arr, (a, b) -> a.count > b.count
+  stats_arr
+
+-- spec ->
+--   import 'shunt.spec_macros' as $
+--
+--   import 'shunt.spec' as :describe, :it, :matchers
+--
+--   import anything, contains_value, deep_eq, each_value, eq, errors, has_fields, ge, gt, len, match, matches, no_errors from matchers
+--
+--   describe 'Lexer', ->
+--     tokens = (raw) ->
+--       assert raw
+--       with {}
+--         for token in (Lexer raw).tokens
+--           [] = token
+--
+--     it 'emits simple types', ->
+--       simple_types =
+--         * type nil
+--         * type false
+--         * type 0
+--         * type ""
+--         * type ->
+--         * type coroutine.create ->
+--         * 'any'
+--         * 'some'
+--       for simple_type in *simple_types
+--         $expect_that (tokens simple_type), deep_eq {
+--           Symbol T_NAME, simple_type
+--         }
+--
+--     it 'emits prefixed simple type', ->
+--       $expect_that (tokens 'prefixed.Name'), deep_eq {
+--         Symbol T_PREFIXED_NAME, 'prefixed.Name'
+--       }
+--
+--     it 'emits the never type', ->
+--       $expect_that (tokens '!'), deep_eq {
+--         Symbol T_BANG
+--       }
+--
+--     it 'emits boolean types', ->
+--       $expect_that (tokens 'true false'), deep_eq
+--         * Symbol T_BOOLEAN, true
+--         * Symbol T_BOOLEAN, false
+--
+--     it 'emits number types', ->
+--       $expect_that (tokens '123 456.654 .789 -123 -456.654 -.789'), deep_eq {
+--         Symbol T_NUMBER, 123
+--         Symbol T_NUMBER, 456.654
+--         Symbol T_NUMBER, .789
+--         Symbol T_NUMBER, -123
+--         Symbol T_NUMBER, -456.654
+--         Symbol T_NUMBER, -.789
+--       }
+--
+--     it 'emits string types', ->
+--       $expect_that (tokens '"hello" "world"'), deep_eq {
+--         Symbol T_STRING, 'hello'
+--         Symbol T_STRING, 'world'
+--       }
+--
+--     it 'emits strucural tokens', ->
+--       $expect_that (tokens '(),{}[]:->=>...?+|~'), deep_eq {
+--         Symbol T_PAREN_OPEN
+--         Symbol T_PAREN_CLOSE
+--         Symbol T_COMMA
+--         Symbol T_BRACE_OPEN
+--         Symbol T_BRACE_CLOSE
+--         Symbol T_BRACKET_OPEN
+--         Symbol T_BRACKET_CLOSE
+--         Symbol T_COLON
+--         Symbol T_THIN_ARROW
+--         Symbol T_FAT_ARROW
+--         Symbol T_DOTDOTDOT
+--         Symbol T_QUESTION
+--         Symbol T_PLUS
+--         Symbol T_PIPE
+--         Symbol T_TILDE
+--       }
+--
+--     it 'ignores whitespace', ->
+--       $expect_that (tokens ' (\tstr_ing\r)\n-> str-ing '), deep_eq {
+--         Symbol T_PAREN_OPEN
+--         Symbol T_NAME, "str_ing"
+--         Symbol T_PAREN_CLOSE
+--         Symbol T_THIN_ARROW
+--         Symbol T_NAME, "str-ing"
+--       }
+--
+--     it 'ignores comments', ->
+--       $expect_that (tokens '-- hello\n--world!'), deep_eq {}
+--
+--     it 'rejects unexpected characters', ->
+--       $expect_that (-> tokens '*'), errors matches [[unexpected character '%*']]
+--
+--     describe ':peek', ->
+--       it 'matches :next', ->
+--         lexer = Lexer '()'
+--         $assert_that lexer\peek!, deep_eq Symbol T_PAREN_OPEN
+--         $assert_that lexer\peek!, deep_eq Symbol T_PAREN_OPEN
+--         $assert_that lexer\next!, deep_eq Symbol T_PAREN_OPEN
+--         $assert_that lexer\peek!, deep_eq Symbol T_PAREN_CLOSE
+--         $assert_that lexer\peek!, deep_eq Symbol T_PAREN_CLOSE
+--         $assert_that lexer\next!, deep_eq Symbol T_PAREN_CLOSE
+--
+--       it 'returns nil at EOF', ->
+--         lexer = Lexer ''
+--         $expect_that lexer\peek!, eq nil
+--         $expect_that lexer\peek!, eq nil
+--
+--   describe 'TypeSpecParser', ->
+--     describe 'run on simple types', ->
+--       it 'accepts primitives', ->
+--         $expect_that (parse 'nil'), deep_eq Primitive type nil
+--         $expect_that (parse 'number'), deep_eq Primitive type 0
+--         $expect_that (parse 'number'), deep_eq Primitive type 0.0
+--         $expect_that (parse 'string'), deep_eq Primitive type ""
+--         $expect_that (parse 'table'), deep_eq Primitive type {}
+--         $expect_that (parse 'function'), deep_eq Primitive type ->
+--         $expect_that (parse 'thread'), deep_eq Primitive type coroutine.create ->
+--         $expect_that (parse 'userdata'), deep_eq Primitive 'userdata'
+--         $expect_that (parse 'any'), deep_eq Any!
+--         $expect_that (parse 'some'), deep_eq Some!
+--         $expect_that (parse '!'), deep_eq Never!
+--
+--       it 'accepts user types', ->
+--         $expect_that (parse 'UserType'), deep_eq UserType 'UserType'
+--
+--       it 'accepts prefixed user types', ->
+--         $expect_that (parse 'prefixed.UserType'), deep_eq UserType 'prefixed.UserType'
+--
+--       it 'accepts boolean types', ->
+--         $expect_that (parse 'true'), deep_eq BooleanType true
+--         $expect_that (parse 'false'), deep_eq BooleanType false
+--
+--       it 'accepts number types', ->
+--         $expect_that (parse '123'), deep_eq NumberType 123
+--
+--       it 'accepts string types', ->
+--         $expect_that (parse '"hello"'), deep_eq StringType 'hello'
+--
+--       it 'rejects unknown primitives', ->
+--         $expect_that (-> parse 'user'), errors matches [[cannot use 'user' as user type name: name must start with an uppercase letter]]
+--
+--       it 'rejects malformed prefixed identifiers', ->
+--         $expect_that (-> parse 'foo.'), errors matches 'foo'
+--         $expect_that (-> parse '.Bar'), errors matches "unexpected character '%.'"
+--         $expect_that (-> parse 'Foo.bar'), errors matches "cannot use 'Foo' as type%-prefix: must start with a lowercase letter"
+--         $expect_that (-> parse 'foo.bar'), errors matches "cannot use 'bar' as disambiguated type name: must start with an uppercase letter"
+--         $expect_that (-> parse 'number.Bar'), errors matches "cannot use 'number' as type%-prefix: must not be a primitive"
+--
+--       it 'rejects incomplete types', ->
+--         $expect_that (-> parse '['), errors matches [[unexpected EOF]]
+--
+--       it 'rejects inputs with trailing errors', ->
+--         $expect_that (-> parse 'string]'), errors matches 'type spec has trailing characters'
+--
+--     describe 'run on composite types', ->
+--       it 'accepts optional', ->
+--         $expect_that (parse '?nil'), deep_eq Optional Primitive 'nil'
+--         $expect_that (parse '?string'), deep_eq Optional Primitive 'string'
+--         $expect_that (parse '?() -> nil'), deep_eq Optional Function {}, {Primitive 'nil'}
+--
+--       it 'accepts arrays', ->
+--         $expect_that (parse '[string]'), deep_eq Array Primitive 'string'
+--         $expect_that (parse '[[string]]'), deep_eq Array Array Primitive 'string'
+--         $expect_that (parse '~[string]'), deep_eq (Array Primitive 'string')
+--           \table_like true
+--
+--       it 'accepts tuples', ->
+--         $expect_that (parse '()'), deep_eq Tuple {}
+--         $expect_that (parse '(nil,)'), deep_eq Tuple { Primitive 'nil' }
+--         $expect_that (parse '(nil, number)'), deep_eq Tuple { (Primitive 'nil'), Primitive 'number' }
+--         $expect_that (parse '((nil, number), string, (User, table))'), deep_eq Tuple {
+--           Tuple { (Primitive 'nil'), (Primitive 'number') },
+--           Primitive 'string',
+--           Tuple { (UserType 'User'), (Primitive 'table') },
+--         }
+--
+--         $expect_that (parse '~()'), deep_eq (Tuple {})
+--           \table_like true
+--
+--       it 'accepts sets', ->
+--         $expect_that (parse '{string}'), deep_eq Set nil, Primitive 'string'
+--         $expect_that (parse '{{string}}'), deep_eq Set nil, Set nil, Primitive 'string'
+--         $expect_that (parse '{<>: {}, string}'), deep_eq Set (Struct nil, {}), Primitive 'string'
+--
+--         $expect_that (parse '~{string}'), deep_eq (Set nil, Primitive 'string')
+--           \table_like true
+--
+--       it 'accepts mappings', ->
+--         $expect_that (parse '{boolean -> number}'), deep_eq Mapping nil, (Primitive 'boolean'), Primitive 'number'
+--         $expect_that (parse '{{boolean -> number} -> {string -> thread}}'), deep_eq Mapping nil, (Mapping nil, (Primitive 'boolean'), Primitive 'number'), Mapping nil, (Primitive 'string'), Primitive 'thread'
+--         $expect_that (parse '{<>: {}, boolean -> number}'), deep_eq Mapping (Struct nil, {}), (Primitive 'boolean'), Primitive 'number'
+--
+--         $expect_that (parse '~{boolean -> number}'), deep_eq (Mapping nil, (Primitive 'boolean'), Primitive 'number')
+--           \table_like true
+--
+--       it 'accepts structs', ->
+--         $expect_that (parse '{}'), deep_eq Struct nil, {}
+--         $expect_that (parse '{field: boolean}'), deep_eq Struct nil,
+--           * Field 'field', Primitive 'boolean'
+--         $expect_that (parse '{field: boolean,}'), deep_eq Struct nil,
+--           * Field 'field', Primitive 'boolean'
+--         $expect_that (parse '{field1: number, field2: string}'), deep_eq Struct nil,
+--           * Field 'field1', Primitive 'number'
+--           * Field 'field2', Primitive 'string'
+--         $expect_that (parse '{outer1: {inner1: boolean}, outer2: {inner2: boolean}}'), deep_eq Struct nil,
+--           * Field 'outer1', Struct nil,
+--             * Field 'inner1', Primitive 'boolean'
+--           * Field 'outer2', Struct nil,
+--             * Field 'inner2', Primitive 'boolean'
+--         $expect_that (parse '{<>: {}}'), deep_eq Struct (Struct nil, {}), {}
+--         $expect_that (parse '{<>: {},}'), deep_eq Struct (Struct nil, {}), {}
+--         $expect_that (parse '{<>: {<>: {__tostring: function}}}'), deep_eq do
+--           Struct (Struct (Struct nil, { Field '__tostring', Primitive 'function' }), {}), {}
+--
+--         $expect_that (parse '~{}'), deep_eq (Struct nil, {})
+--           \table_like true
+--
+--       it 'accepts functions', ->
+--         $expect_that (parse '() -> <>'), deep_eq Function {}, {}
+--         $expect_that (parse '() -> nil'), deep_eq Function {}, {Primitive 'nil'}
+--         $expect_that (parse '(string) -> number'), deep_eq Function {Primitive 'string'}, {Primitive 'number'}
+--         $expect_that (parse '(number, string) -> number'), deep_eq Function {(Primitive 'number'), (Primitive 'string')}, {Primitive 'number'}
+--         $expect_that (parse '(string) -> (number) -> boolean'), deep_eq Function {Primitive 'string'}, {Function {Primitive 'number'}, {Primitive 'boolean'}}
+--         $expect_that (parse '() -> <string>'), deep_eq Function {}, {(Primitive 'string')}
+--         $expect_that (parse '() -> <string,>'), deep_eq Function {}, { Primitive 'string' }
+--         $expect_that (parse '() -> <string, boolean>'), deep_eq Function {}, {(Primitive 'string'), (Primitive 'boolean')}
+--
+--         $expect_that (parse '(string...) -> number...'), deep_eq Function {<index>: => Primitive 'string'}, {<index>: => Primitive 'number'}
+--         $expect_that (parse '(string...) -> <number...>'), deep_eq Function {<index>: => Primitive 'string'}, {<index>: => Primitive 'number'}
+--         $expect_that (parse '(boolean, string...) -> <thread, number...>'), deep_eq Function {(Primitive 'boolean'), <index>: => Primitive 'string'}, {(Primitive 'thread'), <index>: => Primitive 'number'}
+--         $expect_that (parse '() -> [string]...'), deep_eq Function {}, { <index>: => Array Primitive 'string' }
+--
+--         $expect_that (-> parse '~() -> <>'), errors matches 'functions cannot be table%-like'
+--
+--       it 'accepts methods', ->
+--         $expect_that (parse '() => <>'), deep_eq Method {}, {}
+--         $expect_that (parse '() => nil'), deep_eq Method {}, {Primitive 'nil'}
+--         $expect_that (parse '(string) => number'), deep_eq Method {Primitive 'string'}, {Primitive 'number'}
+--         $expect_that (parse '(number, string) => number'), deep_eq Method {(Primitive 'number'), (Primitive 'string')}, {Primitive 'number'}
+--         $expect_that (parse '(string) => (number) => boolean'), deep_eq Method {Primitive 'string'}, {Method {Primitive 'number'}, {Primitive 'boolean'}}
+--         $expect_that (parse '() => <string>'), deep_eq Method {}, {(Primitive 'string')}
+--         $expect_that (parse '() => <string,>'), deep_eq Method {}, { Primitive 'string' }
+--         $expect_that (parse '() => <string, boolean>'), deep_eq Method {}, {(Primitive 'string'), (Primitive 'boolean')}
+--
+--         $expect_that (parse '(string...) => number...'), deep_eq Method {<index>: => Primitive 'string'}, {<index>: => Primitive 'number'}
+--         $expect_that (parse '(string...) => <number...>'), deep_eq Method {<index>: => Primitive 'string'}, {<index>: => Primitive 'number'}
+--         $expect_that (parse '(boolean, string...) => <thread, number...>'), deep_eq Method {(Primitive 'boolean'), <index>: => Primitive 'string'}, {(Primitive 'thread'), <index>: => Primitive 'number'}
+--         $expect_that (parse '() => [string]...'), deep_eq Method {}, { <index>: => Array Primitive 'string' }
+--
+--         $expect_that (-> parse '~() => <>'), errors matches 'methods cannot be table%-like'
+--
+--       it 'accepts conjunctions', ->
+--         $expect_that (parse '[string]+{number->string}+table+function'), deep_eq Conjunction
+--           * Array Primitive 'string'
+--           * Mapping nil, (Primitive 'number'), Primitive 'string'
+--           * Primitive 'table'
+--           * Primitive 'function'
+--
+--       it 'accepts disjunctions', ->
+--         $expect_that (parse '[string]|{number->string}|table|function'), deep_eq Disjunction
+--           * Array Primitive 'string'
+--           * Mapping nil, (Primitive 'number'), Primitive 'string'
+--           * Primitive 'table'
+--           * Primitive 'function'
+--         $expect_that (parse '{string|number}'), deep_eq Set nil, Disjunction
+--           * Primitive 'string'
+--           * Primitive 'number'
+--
+--       it 'gives precedence to conjunctions', ->
+--         $expect_that (parse 'string+number|boolean'), deep_eq Disjunction
+--           * Conjunction
+--             * Primitive 'string'
+--             * Primitive 'number'
+--           * Primitive 'boolean'
+--         $expect_that (parse 'string|number+boolean'), deep_eq Disjunction
+--           * Primitive 'string'
+--           * Conjunction
+--             * Primitive 'number'
+--             * Primitive 'boolean'
+--
+--   describe 'T', ->
+--     it 'requires two arguments', ->
+--       $expect_that (-> T!), errors matches 'cannot typecheck: no type spec provided'
+--
+--     it 'returns its second argument', ->
+--       value = {}
+--       $expect_that (T '{}', value), eq value
+--
+--     it 'checks primitives', ->
+--       $expect_that (-> T 'nil', nil), no_errors!
+--       $expect_that (-> T 'number', 123), no_errors!
+--       $expect_that (-> T 'string', 'some-string'), no_errors!
+--
+--       $expect_that (-> T 'nil', 123), errors matches 'incorrect type: expected nil but got number'
+--       $expect_that (-> T 'number', nil), errors matches 'incorrect type: expected number but got nil'
+--       $expect_that (-> T 'string', 123), errors matches 'incorrect type: expected string but got number'
+--
+--     it 'checks any', ->
+--       values =
+--         * 123
+--         * 'str'
+--         * {}
+--         * ->
+--         * coroutine.create ->
+--       for value in *values
+--         $expect_that (-> T 'any', value), no_errors!
+--       $expect_that (-> T 'any', nil), no_errors!
+--
+--     it 'checks some', ->
+--       values =
+--         * 123
+--         * 'str'
+--         * {}
+--         * ->
+--         * coroutine.create ->
+--       for value in *values
+--         $expect_that (-> T 'some', value), no_errors!
+--       $expect_that (-> T 'some', nil), errors matches "incorrect type: expected some but got nil"
+--
+--     it 'rejects never', ->
+--       $expect_that (-> T '!', 123), errors matches 'never expected a value here'
+--
+--     it 'rejects nonexistent types', ->
+--       $expect_that (-> T 'IDoNotExist', 123), errors matches 'cannot typecheck: type IDoNotExist not defined'
+--
+--       declare_type 'ChildDoesNotExist', 'IDoNotExist'
+--       $expect_that (-> T 'ChildDoesNotExist', 123), errors matches 'cannot typecheck: type IDoNotExist not defined'
+--
+--     it 'checks boolean types', ->
+--       $expect_that (-> T 'true', true), no_errors!
+--       $expect_that (-> T 'true', false), errors matches 'incorrect type: expected boolean true but got false'
+--       $expect_that (-> T 'true', nil), errors matches 'incorrect type: expected boolean but got nil'
+--
+--       $expect_that (-> T 'false', false), no_errors!
+--       $expect_that (-> T 'false', true), errors matches 'incorrect type: expected boolean false but got true'
+--       $expect_that (-> T 'false', nil), errors matches 'incorrect type: expected boolean but got nil'
+--
+--     it 'checks number types', ->
+--       $expect_that (-> T '123', 123), no_errors!
+--       $expect_that (-> T '123', 0), errors matches "incorrect type: expected number 123"
+--       $expect_that (-> T '123', {}), errors matches "incorrect type: expected number but got table"
+--
+--     it 'checks string types', ->
+--       $expect_that (-> T '"hello"', 'hello'), no_errors!
+--       $expect_that (-> T '"hello"', 'world'), errors matches "incorrect type: expected string 'hello'"
+--
+--     it 'checks singleton types', ->
+--       make_singleton = (name) -> <tostring>: => name
+--       SINGLETON = make_singleton 'Singleton'
+--       declare_singleton_type SINGLETON
+--
+--       $expect_that (-> T 'Singleton', SINGLETON), no_errors!
+--
+--       $expect_that (-> T 'Singleton', nil), errors matches "incorrect type: expected table Singleton"
+--       $expect_that (-> T 'Singleton', {}), errors matches "incorrect type: expected table Singleton"
+--       $expect_that (-> T 'Singleton', make_singleton 'Singleton'), errors matches "incorrect type: expected table Singleton"
+--
+--     it 'checks optionals', ->
+--       $expect_that (-> T '?number', nil), no_errors!
+--       $expect_that (-> T '?number', 123), no_errors!
+--       $expect_that (-> T '?number', 'str'), errors matches 'incorrect type: expected number but got string'
+--       $expect_that (-> T '?(number)', 'str'), errors matches 'incorrect type: expected table but got string'
+--
+--     it 'checks arrays', ->
+--       $expect_that (-> T '[number]', {}), no_errors!
+--       $expect_that (-> T '[number]', {123, 312}), no_errors!
+--       $expect_that (-> T '[[number]]', {{123}, {312}}), no_errors!
+--
+--       $expect_that (-> T '[string]', 123), errors matches 'incorrect type: expected table but got number'
+--       $expect_that (-> T '[[number]]', {{123}, {'asdf'}}), errors matches 'incorrect type: expected number but got string'
+--
+--       hybrid = {123, 456, 789, field: 'a'}
+--       if #hybrid != 3
+--         $expect_that (-> T '[string]', hybrid), no_errors!
+--       else
+--         $expect_that (-> T '[string]', hybrid), errors matches 'incorrect type: expected string but got number'
+--
+--     it 'checks tuples', ->
+--       $expect_that (-> T '()', {}), no_errors!
+--       $expect_that (-> T '(number, boolean, string)', {123, true, 'hello'}), no_errors!
+--       $expect_that (-> T '(number, boolean, string)', {123, true, 'hello', coroutine.create ->}), no_errors!
+--       $expect_that (-> T '((number, boolean), (string, thread))', {{123, true}, {'hello', coroutine.create ->}}), no_errors!
+--
+--       $expect_that (-> T '(number, boolean, string)', nil), errors matches 'incorrect type: expected table but got nil'
+--       $expect_that (-> T '(number, boolean, string)', {}), errors matches 'incorrect type: expected number but got nil'
+--       $expect_that (-> T '(number, boolean, string)', {123}), errors matches 'incorrect type: expected boolean but got nil'
+--       $expect_that (-> T '(number, boolean, string)', {'interloper'}), errors matches 'incorrect type: expected number but got string'
+--
+--     it 'checks sets', ->
+--       $expect_that (-> T '{number}', {}), no_errors!
+--       $expect_that (-> T '{number}', {[123]: true, [321]: {}}), no_errors!
+--       $expect_that (-> T '{{number}}', {[{123}]: true}), no_errors!
+--       $expect_that (-> T '{<>: {}, number}', <>: {}), no_errors!
+--
+--       $expect_that (-> T '{number}', nil), errors matches 'incorrect type: expected table but got nil'
+--       $expect_that (-> T '{number}', {[123]: false}), errors matches 'incorrect type: expected a truthy value but got false'
+--       $expect_that (-> T '{{number}}', {[{['asdf']: true}]: true}), errors matches 'incorrect type: expected number but got string'
+--       $expect_that (-> T '{<>: {}, number}', {}), errors matches 'incorrect type: expected table but got nil'
+--
+--     it 'checks mappings', ->
+--       $expect_that (-> T '{string -> number}', {}), no_errors!
+--       $expect_that (-> T '{number -> string}', {'hello', [10]: 'world'}), no_errors!
+--       $expect_that (-> T '{{boolean -> number} -> {string -> thread}}', {[{[true]: 123}]: {asdf: coroutine.create ->}}), no_errors!
+--       $expect_that (-> T '{<>: {}, string -> number}', <>: {}), no_errors!
+--
+--       $expect_that (-> T '{number -> string}', nil), errors matches 'incorrect type: expected table but got nil'
+--       $expect_that (-> T '{number -> string}', {123}), errors matches 'incorrect type: expected string but got number'
+--       $expect_that (-> T '{number -> string}', {'hello', 'world', 'foo', 'bar', 'baz', 123}), errors matches 'incorrect type: expected string but got number'
+--       $expect_that (-> T '{<>: {}, string -> number}', {}), errors matches 'incorrect type: expected table but got nil'
+--
+--     it 'checks structs', ->
+--       $expect_that (-> T '{}', {}), no_errors!
+--       $expect_that (-> T '{}', {123}), no_errors!
+--       $expect_that (-> T '{}', {hello: 123}), no_errors!
+--       $expect_that (-> T '{hello: string}', {hello: 'hello'}), no_errors!
+--       $expect_that (-> T '{hello: {world: string}}', {hello: world: 'world'}), no_errors!
+--       $expect_that (-> T '{hello: {world: string}, foo: boolean}', hello: {world:'asdf'}, foo: true), no_errors!
+--       $expect_that (-> T '{<>: {}}', <>: {}), no_errors!
+--
+--       $expect_that (-> T '{}', 132), errors matches 'incorrect type: expected table but got number'
+--       $expect_that (-> T '{hello: string}', {}), errors matches 'incorrect type: expected string but got nil'
+--       $expect_that (-> T '{hello: string}', hello: 123), errors matches 'incorrect type: expected string but got number'
+--       $expect_that (-> T '{hello: {world: string}}', hello: 123), errors matches 'incorrect type: expected table but got number'
+--       $expect_that (-> T '{hello: {world: string}}', hello: {}), errors matches 'incorrect type: expected string but got nil'
+--       $expect_that (-> T '{hello: {world: string}}', hello: world: 123), errors matches 'incorrect type: expected string but got number'
+--       $expect_that (-> T '{hello: {world: string}, foo: boolean}', hello: {world:'asdf'}, foo: 123), errors matches 'incorrect type: expected boolean but got number'
+--       $expect_that (-> T '{<>: {}}', {}), errors matches 'incorrect type: expected table but got nil'
+--
+--     it 'checks table-likes', ->
+--       -- Tuples are not supported.
+--       -- Arrays are not supported.
+--       -- Mappings are not supported.
+--       -- Sets are not supported.
+--       $expect_that (-> T '~{char: function}', ''), no_errors!
+--
+--     it 'checks functions', ->
+--       $expect_that (-> T '() -> nil', ->), no_errors!
+--       $expect_that (-> T '() -> nil', -> nil), no_errors!
+--       $expect_that (-> T '() -> nil', {}), errors matches 'incorrect type: expected function but got table'
+--
+--     it 'checks conjunctions', ->
+--       $expect_that (-> T '[string]+{number}', {'a', 'b', 'c'}), no_errors!
+--
+--       $expect_that (-> T 'string+number', 123), errors matches 'incorrect type: expected string but got number'
+--       $expect_that (-> T 'string+number', 'hello'), errors matches 'incorrect type: expected number but got string'
+--
+--     it 'checks disjunctions', ->
+--       $expect_that (-> T 'string|number', 'hello'), no_errors!
+--       $expect_that (-> T 'string|number', 123), no_errors!
+--       $expect_that (-> T 'string|number', true), errors matches 'incorrect type: expected string|number but got boolean'
+--
+--     it 'checks nested inline disjunctions', ->
+--       $expect_that (-> T 'number|{string|number}|string', 'hello'), no_errors!
+--       $expect_that (-> T 'number|{string|number}|string', {hello: true}), no_errors!
+--       $expect_that (-> T 'number|{string|number}|string', {[1]: true}), no_errors!
+--       $expect_that (-> T 'number|{string|number}|string', ->), errors matches 'incorrect type: expected number|{string|number}|string but got function'
+--
+--     it 'checks nested recursive disjunctions', ->
+--       declare_type 'InnerDisjunction', 'string|number'
+--       $expect_that (-> T 'boolean|InnerDisjunction|function', true), no_errors!
+--       $expect_that (-> T 'boolean|InnerDisjunction|function', 'hello'), no_errors!
+--       $expect_that (-> T 'boolean|InnerDisjunction|function', 123), no_errors!
+--       $expect_that (-> T 'boolean|InnerDisjunction|function', ->), no_errors!
+--
+--       $expect_that (-> T 'boolean|InnerDisjunction|function', {}), errors matches 'incorrect type: expected boolean|InnerDisjunction|function but got table'
+--
+--   describe 'is', ->
+--     it 'requires two arguments', ->
+--       $expect_that (-> is!), errors matches 'cannot typecheck: no type spec provided'
+--
+--     it 'returns correctly in matching case', ->
+--       ok, err = is 'string', 'asdf'
+--       $expect_that ok, eq true
+--       $expect_that err, eq nil
+--
+--     it 'returns correctly in non-matching case', ->
+--       ok, err = is 'nil', 'asdf'
+--       $expect_that ok, eq false
+--       $expect_that err, matches 'incorrect type'
+--
+--   describe 'declare_type', ->
+--     it 'requires two arguments', ->
+--       $expect_that (-> declare_type!), errors matches 'declare_type requires a name'
+--       $expect_that (-> declare_type 'TwoArgs'), errors matches 'declare_type requires a type_spec'
+--       $expect_that (-> declare_type 123, 'string'), errors matches 'declare_type requires a string name'
+--       $expect_that (-> declare_type 'TwoArgs', 123), errors matches 'declare_type requires a string type_spec'
+--
+--     it 'rejects false primitives', ->
+--       $expect_that (-> declare_type 'user', 'string'), errors matches 'user types must start with uppercase'
+--
+--     it 'rejects redefinition', ->
+--       declare_type 'AlreadyDefined', 'number'
+--       $expect_that (-> declare_type 'AlreadyDefined', 'string'), errors matches [[cannot redefine type 'AlreadyDefined']]
+--
+--     it 'supports non-recursive types', ->
+--       declare_type 'NonRecursive', '[string]'
+--       $expect_that (-> T '[NonRecursive]', {{'hello'}}), no_errors!
+--
+--       declare_type 'prefixed.NonRecursive', '[string]'
+--       $expect_that (-> T '[prefixed.NonRecursive]', {{'hello'}}), no_errors!
+--
+--     it 'supports recursive types', ->
+--       declare_type 'Recursive', '[?Recursive]'
+--       $expect_that (-> T 'Recursive', {{{{{nil}}}}}), no_errors!
+--       $expect_that (-> T 'Recursive', {{{{{'asdf'}}}}}), errors matches 'incorrect type: expected table but got string'
+--
+--       declare_type 'MutuallyRecursive1', '?MutuallyRecursive2'
+--       declare_type 'MutuallyRecursive2', 'MutuallyRecursive1'
+--       $expect_that (-> T 'MutuallyRecursive1', nil), no_errors!
+--       $expect_that (-> T 'MutuallyRecursive1', 'asdf'), errors matches 'type checker recursed too many times'
+--
+--   describe 'declare_singleton_type', ->
+--     it 'requires a valid name', ->
+--       $expect_that declare_singleton_type, errors matches 'requires a value'
+--
+--       $expect_that (-> declare_singleton_type {}), errors matches "user types must start with an uppercase letter"
+--       $expect_that (-> declare_singleton_type <tostring>: => 'Has space'), errors matches "cannot declare type 'Has space': not a valid identifier"
+--       $expect_that (-> declare_singleton_type <tostring>: => 'SingletonTable'), no_errors!
+--
+--     it 'requires a unique name', ->
+--       NAME = 'UniqueSingleton'
+--       declare_singleton_type <tostring>: => NAME
+--       $expect_that (-> declare_singleton_type <tostring>: => NAME), errors matches "cannot redefine type '#{NAME}'"
+--
+--     it 'rejects primitives', ->
+--       $expect_that (-> declare_singleton_type 123), errors matches 'declare_singleton_type requires a table value'
+--       $expect_that (-> declare_singleton_type 'hello'), errors matches 'declare_singleton_type requires a table value'
+--
+--   describe 'F', ->
+--     it 'requires two arguments', ->
+--       $expect_that (-> F!), errors matches 'cannot typecheck: no type spec provided'
+--       $expect_that (-> F '() -> nil'), errors matches 'cannot typecheck: no function provided'
+--       $expect_that (-> F '() -> nil', 'interloper'), errors matches 'cannot typecheck: no function provided'
+--
+--     it 'returns its second argument', ->
+--       f = F '(number, number) -> number', (a, b) -> a + b
+--       $expect_that (f 1, 2), eq 3
+--
+--     it 'accepts none returns', ->
+--       $expect_that (-> (F '() -> <>', ->)!), no_errors!
+--
+--     it 'accepts nil returns', ->
+--       $expect_that (-> (F '() -> nil', -> nil)!), no_errors!
+--
+--     it 'accepts absent optional arguments', ->
+--       $expect_that (-> (F '() -> ?string', ->)!), no_errors!
+--
+--     it 'accepts remainder arguments', ->
+--       $expect_that (-> (F '(string...) -> nil', ->)!), no_errors!
+--       $expect_that (-> (F '(string...) -> nil', ->) 'hello', 'world'), no_errors!
+--       $expect_that (-> (F '(number, string...) -> nil', ->) 123, 'hello', 'world'), no_errors!
+--
+--       $expect_that (-> (F '(number, string...) -> nil', (...) ->) 123, 'hello', true), errors matches 'incorrect type: expected string but got boolean'
+--
+--     it 'accepts absent optional returns', ->
+--       $expect_that (-> (F '() -> nil', ->)!), no_errors!
+--
+--     it 'accepts multiple return values', ->
+--       $expect_that (-> (F '() -> <string, boolean>', -> 'a', true)!), no_errors!
+--
+--     it 'accepts remainder return values', ->
+--       $expect_that (-> (F '() -> string...', ->)!), no_errors!
+--       $expect_that (-> (F '() -> string...', -> 'hello', 'world')!), no_errors!
+--       $expect_that (-> (F '() -> <number, string...>', -> 123, 'hello', 'world')!), no_errors!
+--
+--       $expect_that (-> (F '() -> <number, string...>', -> 123, 'hello', true)!), errors matches 'incorrect type: expected string but got boolean'
+--
+--     it 'prevents execution on invalid args', ->
+--       $expect_that (-> (F '(string) -> nil', -> error 'OH NO') 123), errors matches 'incorrect type: expected string but got number'
+--
+--     it 'rejects non-function types', ->
+--       $expect_that (-> F '{}', ->), errors matches 'cannot typecheck: expected a function type'
+--
+--     it 'rejects incorrect-type arguments', ->
+--       $expect_that (-> (F '(string) -> table', ->) 123), errors matches 'incorrect type: expected string but got number'
+--
+--     it 'rejects extra arguments', ->
+--       $expect_that (-> (F '(string) -> table', ->) 'a', 'b'), errors matches 'function given too many arguments'
+--
+--     it 'rejects incorrect-type return values', ->
+--       $expect_that (-> (F '(table) -> string', ->) {}), errors matches 'incorrect type: expected string but got nil'
+--
+--     it 'rejects extra return arguments', ->
+--       $expect_that (-> (F '() -> string', -> 'a', 'b')!), errors matches 'function returned too many values'
+--
+--     it 'rejects multiple incorrect return values', ->
+--       $expect_that (-> (F '() -> <string, boolean>', -> {}, true)!), errors matches 'incorrect type: expected string but got table'
+--       $expect_that (-> (F '() -> <string, boolean>', -> 'asdf', {})!), errors matches 'incorrect type: expected boolean but got table'
+--
+--     it 'accepts methods', ->
+--       $expect_that (-> (F '(number) => <>', =>), {}, 123), no_errors!
+--       $expect_that (-> (F '(number) => <>', =>), 'recv', 123), no_errors!
+--
+--     it 'requires a method receiver', ->
+--       $expect_that (-> (F '() => <>', =>)!), errors matches "incorrect type: expected some but got nil"
+--
+--     it 'checks never', ->
+--       $expect_that (-> (F '() -> !', ->)!), errors matches 'never expected a value here'
+--
+--   describe 'stats', ->
+--     it 'has the correct type', ->
+--       prev_collect_stats = COLLECT_STATS
+--       COLLECT_STATS = true
+--
+--       T 'string', 'hello' -- Exercise the checker
+--       stats_arr = stats!
+--       $expect_that stats_arr, len gt 0
+--       $expect_that stats_arr, each_value has_fields count: ge 0
+--
+--       COLLECT_STATS = prev_collect_stats
+--
+--   describe 'is_valid_type_spec', ->
+--     it 'returns true on valid type specs', ->
+--       $expect_that (is_valid_type_spec 'number'), eq true
+--
+--     it 'returns false on invalid type specs', ->
+--       $expect_that (is_valid_type_spec 'unknown'), eq false
+--       $expect_that (is_valid_type_spec '('), eq false
+--       $expect_that (is_valid_type_spec ')'), eq false
+--
+--   describe 'deactivate_typechecks', ->
+--     activate_typechecks = ->
+--       skip_typechecking = false
+--
+--     it 'deactivates typechecks', ->
+--       local received
+--       f = F '(number) => <>', (r) ->
+--         received = r
+--       $assert_that (-> f 'prepare for'), errors anything!
+--
+--       deactivate_typechecks!
+--       $assert_that (-> f 'unforeseen'), no_errors!
+--
+--       activate_typechecks!
+--       $assert_that (-> f 'consequences'), errors anything!

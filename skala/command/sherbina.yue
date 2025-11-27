@@ -1,0 +1,132 @@
+local *
+
+import 'skala.quicktype' as :is, :declare_type, :F
+import 'skala.clap' as :Subcommand
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'sherbina'
+    \description 'reactor logger (always watching)'
+
+declare_type 'sherbina.Args', [[{}]]
+
+export DEFAULT_CONFIG = '
+[sherbina]
+'
+
+export main = F '(sherbina.Args) -> <>', (args) ->
+  store = Store 'reactor_logs'
+
+  first = true
+  while true
+    if first
+      first = false
+    else
+      os.sleep 1
+
+    reactor =
+      getTemperature: do
+        i = 0
+        ->
+          i += 100
+          i
+    if not reactor?
+      continue
+
+    reading = take_reading reactor
+    store\store reading
+
+KELVIN_OFFSET = 273.15
+TICKS_PER_SECOND = 20
+
+take_reading = (reactor) ->
+  print 'reading reactor state'
+  with {}
+    .status = do
+      switch reactor.getStatus!
+        when true
+          'active'
+        when false
+          'inactive'
+        else
+          error 'unreachable'
+    .temperature = do
+      '%.2f°C'\format reactor.getTemperature! - KELVIN_OFFSET
+    .coolant_filled = do
+      '%.2f%%'\format 100 * reactor.getCoolantFilledPercentage!
+    .heated_coolant_filled = do
+      '%.2f%%'\format 100 * reactor.getHeatedCoolantFilledPercentage!
+    .fuel_filled = do
+      '%.2f%%'\format 100 * reactor.getFuelFilledPercentage!
+    .waste_filled = do
+      '%.2f%%'\format 100 * reactor.getWasteFilledPercentage!
+    .actual_burn_rate = do
+      '%.2gmB/s'\format reactor.getActualBurnRate! * TICKS_PER_SECOND
+    .target_burn_rate = do
+      '%.2gmB/s'\format reactor.getBurnRate! * TICKS_PER_SECOND
+    .damage_percent = do
+      '%.2f%%'\format 100 * reactor.getDamagePercent!
+    .heating_rate = do
+      '%.2gmB/s'\format reactor.getHeatingRate! * TICKS_PER_SECOND
+    .boil_efficiency = do
+      '%.2f%%'\format 100 * reactor.getBoilEfficiency!
+
+class Store
+  new: (@dir) =>
+    @closed_segment_paths = {}
+
+    @open_segment = nil
+    @open_segment_start_index = nil
+    @open_segment_file = nil
+
+    assert fs.makeDir @dir
+
+    max_entry_in_closed_segment = 0
+    num_entries_in_open_segment = 0
+    for file in *fs.list @dir
+      if file\match 'data%-latest%.json$'
+        for _ in io.lines file
+          num_entries_in_open_segment += 1
+      else if max = file\match 'data%-%d+%-(%d+)%.json'
+        @closed_segment_paths[] = file
+        max = tonumber max
+        if max_entry_in_closed_segment < max
+          max_entry_in_closed_segment = max
+      else
+        -- Ignore
+    @index = max_entry_in_closed_segment + num_entries_in_open_segment
+
+  @max_segment_size: 1000
+  @max_retained_closed_segments: 3
+
+  open_segment_path: => "#{@dir}/data-latest.json"
+
+  store: (reading) =>
+    print 'storing reading'
+    if @open_segment? and #@open_segment >= @@max_segment_size
+      print 'closing segment'
+      closed_segment_path = "#{@dir}/data-#{@open_segment_start_index}-#{@index}.json"
+      print @open_segment_path!, closed_segment_path
+      assert fs.move @open_segment_path!, closed_segment_path
+
+      @closed_segment_paths[] = closed_segment_path
+      if #@closed_segment_paths > @@max_retained_closed_segments
+        print 'freeing oldest segment'
+        fs.delete assert @closed_segment_paths[1]
+        @closed_segment_paths = [ segment for segment in *@closed_segment_paths[2,]]
+
+      @open_segment_file\close!
+      @open_segment_file = nil
+      @open_segment_start_index = nil
+      @open_segment = nil
+
+    @index += 1
+    reading.index = @index
+
+    @open_segment_start_index ??= @index
+    @open_segment ??= {}
+    @open_segment[] = reading
+
+    @open_segment_file ??= assert io.open @open_segment_path!, 'a'
+    assert @open_segment_file\write textutils.serialiseJSON reading
+    assert @open_segment_file\write '\n'
+    assert @open_segment_file\flush!
