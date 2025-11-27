@@ -29,7 +29,7 @@ export main = (args) ->
         print('downloading skala')
         shell.run('pastebin', 'get', '#{args.pastebin}', '.skala~')
 
-        print('applying update')
+        print('copying .skala~ -> skala')
         fs.delete('skala')
         fs.move('.skala~', 'skala')
       end
