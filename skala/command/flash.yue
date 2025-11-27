@@ -41,7 +41,11 @@ export main = F '(flash.Args) -> <>', (args) ->
     print "disk not mounted"
     return
 
-  fs.copy 'skala', "#{mount_path}/skala"
+  try
+    fs.copy 'skala', "#{mount_path}/skala"
+  catch err
+    print err
+    fs.delete "#{mount_path}/skala"
 
 startup_script = F '(string) -> string', (label) ->
   lines =
