@@ -1,0 +1,83 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
+
+declare_type 'waker.Waker', [[{
+  add_trigger: (waker.Trigger) => Self,
+  on_awaken: (() -> <>) => <>,
+  awaken: () => <>,
+  run: () => !,
+}]]
+declare_type 'waker.Trigger', [[{
+  run: (waker.Waker) => !,
+}]]
+declare_type 'waker.Listener', '() -> <>'
+export class Waker
+  new: $F '() => <>', =>
+    @_triggers = $T '[waker.Trigger]', {}
+    @_awake = false
+    @_awaken_listeners = $T '[waker.Listener]', {}
+
+  add_trigger: $F '(waker.Trigger) => Self', (trigger) =>
+    @_triggers[] = trigger
+
+  on_awaken: $F '(waker.Listener) => <>', (listener) =>
+    @_awaken_listeners[] = listener
+
+  awaken: $F '() => <>', =>
+    @_awake = true
+
+  run: $F '() => !', =>
+    parallel.waitForAny unpack with {}
+      for trigger in *@_triggers
+        [] = -> trigger\run @
+      [] = @\_awakener
+    error 'unreachable'
+
+  _awakener: $F '() => !', =>
+    while true
+      if not @_awake
+        coroutine.yield!
+        continue
+      @_awake = false
+
+      for listener in *@_awaken_listeners
+        listener!
+
+export class PeriodicTrigger
+  new: $F '(number) => <>', (@_interval) =>
+
+  run: $F '(waker.Waker) => !', (ctx) =>
+    while true
+      timer_id = os.startTimer @_interval
+      local id
+      repeat
+        _, id = os.pullEvent 'timer'
+      until id == timer_id
+      ctx\awaken!
+
+declare_type 'cc.Side', [[
+  "top"|"bottom"|"left"|"right"|"front"|"back"
+]]
+export class RedstoneTrigger
+  new: $F '(?cc.Side) => <>', (@_side) =>
+
+  run: $F '(waker.Waker) => !', (ctx) =>
+    local sides_to_check
+    if @_side?
+      sides_to_check = { @_side }
+    else
+      sides_to_check = redstone.getSides!
+
+    while true
+      os.pullEvent 'redstone'
+
+      high = false
+      for side in *sides_to_check
+        if redstone.getInput side
+          high = true
+          break
+      if not high
+        continue
+      ctx\awaken!

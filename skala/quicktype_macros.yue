@@ -1,11 +1,11 @@
 export macro T = (ty, expr) ->
-  if os.getenv 'DEBUG'
-    "T #{ty}, #{expr}"
-  else
+  if 'release' == os.getenv 'PROFILE'
     expr
+  else
+    "T #{ty}, #{expr}"
 
 export macro F = (ty, expr) ->
-  if os.getenv 'DEBUG'
-    "F #{ty}, #{expr}"
-  else
+  if 'release' == os.getenv 'PROFILE'
     expr
+  else
+    "F #{ty}, #{expr}"

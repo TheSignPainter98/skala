@@ -16,16 +16,16 @@ main = (raw_args) ->
   if not ok
     return
 
-  if args.autostart?
-    autostart.main args.autostart
-  if args.start?
-    start.main args.start
-  else if args.flash?
-    flash.main args.flash
-  else if args.install?
-    install.main args.install
-  else if args.uninstall?
-    uninstall.main args.uninstall
+  if a = args.autostart
+    autostart.main a
+  else if a = args.start
+    start.main a
+  else if a = args.flash
+    flash.main a
+  else if a = args.install
+    install.main a
+  else if a = args.uninstall
+    uninstall.main a
   else
     error 'unreachable'
 

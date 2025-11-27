@@ -2,6 +2,7 @@ local *
 
 import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.quicktype' as :is, :declare_type, :F
+import 'skala.quicktype_macros' as $
 import 'skala.util.toml'
 
 import 'skala.command.start.control'
@@ -20,14 +21,14 @@ export register_args = (parser) ->
   parser\add with Subcommand 'autostart'
     \description 'start this skala node from on-disk config'
 
-export main = (args) ->
+export main = (_) ->
   config, err = get_config!
   if err?
     print err
     return
   run config
 
-export run = F '({}) -> <>', (args) ->
+export run = $F '({}) -> <>', (args) ->
   if args.control?
     control.main args.control
   else if args.sherbina?
@@ -37,7 +38,7 @@ export run = F '({}) -> <>', (args) ->
   else
     error 'unreachable'
 
-get_config = F '() -> <?skala.Config, ?string>', ->
+get_config = $F '() -> <?skala.Config, ?string>', ->
   local raw_config
   with? io.open CONFIG_FILE, 'r'
     raw_config = assert \read '*a'

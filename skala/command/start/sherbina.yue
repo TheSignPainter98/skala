@@ -1,6 +1,7 @@
 local *
 
 import 'skala.quicktype' as :is, :declare_type, :F
+import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
 
 export register_args = (parser) ->
@@ -13,7 +14,7 @@ export DEFAULT_CONFIG = '
 [sherbina]
 '
 
-export main = F '(sherbina.Args) -> <>', (args) ->
+export main = $F '(sherbina.Args) -> <>', (args) ->
   store = Store 'reactor_logs'
 
   first = true

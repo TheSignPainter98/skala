@@ -1,14 +1,56 @@
+local *
+
 import 'skala.quicktype' as :declare_type, :F
-import 'skala.clap' as :Subcommand
+import 'skala.quicktype_macros' as $
+import 'skala.clap' as :Subcommand, :Flag
+import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
+
+import 'skala.command.start.killswitch.reactor_temp'
 
 export register_args = (parser) ->
-  parser\add with Subcommand 'killswitch'
+  command = with Subcommand 'killswitch'
     \description 'reactor auto-shutoff actors'
+    \add with Flag 'frequency'
+      \description 'how many times per second to check the reactor'
+      \takes_param!
+      \default 2
+      \transform (raw) ->
+        if n = tonumber raw
+          n, nil
+        else
+          nil, "#{raw} is not a number"
+  reactor_temp.register_args command
+  parser\add command
 
-declare_type 'killswitch.Args', [[{}]]
+declare_type 'killswitch.Args', [[{
+  frequency: number
+}]]
 
 export DEFAULT_CONFIG = '
 [killswitch]
+frequency = 2
 '
 
-export main = F '(killswitch.Args) -> <>', (args) ->
+export main = $F '(killswitch.Args) -> <>', (args) ->
+  { :frequency } = args
+
+  import 'skala.spec' as :repr
+  print repr args
+
+  local check_reactor
+  if a = args.reactor_temp
+    check_reactor = -> reactor_temp.check_reactor a
+  else
+    error 'no killswitch kind set'
+
+  with Waker!
+    \add_trigger PeriodicTrigger 1 / args.frequency
+    \add_trigger RedstoneTrigger!
+    \on_awaken ->
+      { :hour, :min, :sec } = os.date '!*t'
+      print "[#{hour}:#{min}:#{sec}]: checking reactor"
+
+      err = check_reactor!
+      if err?
+        print err
+    \run!

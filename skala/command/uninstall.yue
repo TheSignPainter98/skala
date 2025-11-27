@@ -7,6 +7,6 @@ export register_args = (parser) ->
   parser\add with Subcommand 'uninstall'
     \description 'remove installed files'
 
-export main = (args) ->
+export main = (_) ->
   fs.delete 'startup.lua'
   fs.delete CONFIG_FILE

@@ -1,4 +1,7 @@
+local *
+
 import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Param
 
 export register_args = (parser) ->
@@ -12,7 +15,7 @@ declare_type 'flash.Args', [[{
   drive: ?string,
 }]]
 
-export main = F '(flash.Args) -> <>', (args) ->
+export main = $F '(flash.Args) -> <>', (args) ->
   { drive: drive_direction } = args
 
   drive = if drive_direction?
@@ -52,7 +55,7 @@ export main = F '(flash.Args) -> <>', (args) ->
     assert \write startup_script_content
     assert \close!
 
-startup_script = F '(string) -> string', (label) ->
+startup_script = $F '(string) -> string', (label) ->
   lines =
     * "term.clear()"
     * "term.setCursorPos(1, 1)"

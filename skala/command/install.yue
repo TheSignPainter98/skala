@@ -1,6 +1,7 @@
 local *
 
 import 'skala.quicktype' as :F
+import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.command.autostart' as :CONFIG_FILE
 import 'skala.command.start' as :NODE_KINDS
@@ -55,7 +56,7 @@ export main = (args) ->
     assert \write config
     assert \close!
 
-config_for = F '(string) -> string', (kind) ->
+config_for = $F '(string) -> string', (kind) ->
   config = switch kind
     when 'control'
       control.DEFAULT_CONFIG
@@ -67,5 +68,7 @@ config_for = F '(string) -> string', (kind) ->
       error "unknown skala node kind `#{kind}'"
   assert '\n' == config\sub 1, 1
   assert '\n' == config\sub -1, -1
-  assert '\n' == config\sub -2, -2
-  config\sub 2, -1
+  if '\n' == config\sub -2, -2
+    config\sub 2, -1
+  else
+    config\sub 2

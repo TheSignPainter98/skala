@@ -2,6 +2,7 @@ local *
 
 -- import 'cc.strings' as :wrap
 import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
 
 export register_args = (parser) ->
@@ -14,7 +15,7 @@ export DEFAULT_CONFIG = '
 [control]
 '
 
-export main = F '(control.Args) -> <>', (args) ->
+export main = $F '(control.Args) -> <>', (args) ->
   ctx =
     active: true
   parallel.waitForAny unpack

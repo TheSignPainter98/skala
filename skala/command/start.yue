@@ -1,6 +1,7 @@
 local *
 
 import 'skala.quicktype' as :declare_type, :F, :T
+import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Flag, :Param, :Subcommand
 
 import 'skala.command.start.control'
@@ -11,10 +12,11 @@ declare_type 'start.NodeSpec', [[{
   register_args: ({}) -> <>,
   main: ({}) -> <>,
 }]]
-node_specs = T '{string->start.NodeSpec}',
-  :control
-  :killswitch
+node_specs = $T '{string->start.NodeSpec}', {
+  :control,
+  :killswitch,
   :sherbina
+}
 export NODE_KINDS = do
   node_kinds = [ kind for kind, _ in pairs node_specs ]
   table.sort node_kinds
@@ -30,7 +32,7 @@ export register_args = (parser) ->
 
   parser\add command
 
-export main = F '({}) -> <>', (args) ->
+export main = $F '({}) -> <>', (args) ->
   applicable_mains = with {}
     for kind in *NODE_KINDS
       kind_args = args[kind]

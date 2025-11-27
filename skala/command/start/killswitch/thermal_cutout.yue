@@ -1,0 +1,4 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.clap' as :Subcommand
