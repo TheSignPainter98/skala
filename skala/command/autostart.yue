@@ -4,9 +4,9 @@ import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.quicktype' as :is, :declare_type, :F
 import 'skala.util.toml'
 
-import 'skala.command.control'
-import 'skala.command.sherbina'
-import 'skala.command.killswitch'
+import 'skala.command.start.control'
+import 'skala.command.start.sherbina'
+import 'skala.command.start.killswitch'
 
 export CONFIG_FILE = 'skala.toml'
 
@@ -17,8 +17,8 @@ declare_type 'skala.Config', [[{
 }]]
 
 export register_args = (parser) ->
-  parser\add with Subcommand 'autorun'
-    \description 'start this skala node from written config'
+  parser\add with Subcommand 'autostart'
+    \description 'start this skala node from on-disk config'
 
 export main = (args) ->
   config, err = get_config!

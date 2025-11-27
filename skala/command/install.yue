@@ -2,15 +2,16 @@ local *
 
 import 'skala.quicktype' as :F
 import 'skala.clap' as :Flag, :Param, :Subcommand
-import 'skala.command.autorun' as :CONFIG_FILE
+import 'skala.command.autostart' as :CONFIG_FILE
+import 'skala.command.start' as :NODE_KINDS
 
-import 'skala.command.control'
-import 'skala.command.killswitch'
-import 'skala.command.sherbina'
+import 'skala.command.start.control'
+import 'skala.command.start.killswitch'
+import 'skala.command.start.sherbina'
 
 export register_args = (parser) ->
   parser\add with Subcommand 'install'
-    \description 'create autostart shim'
+    \description 'make this computer run autostart on startup'
     \add with Flag 'pastebin'
       \description 'hash of pastebin file to download'
       \takes_param!
@@ -18,10 +19,7 @@ export register_args = (parser) ->
       \description 'overwrite existing startup.lua'
     \add with Param 'kind'
       \description 'the kind of this node'
-      \options
-        * 'control'
-        * 'sherbina'
-        * 'killswitch'
+      \options NODE_KINDS
 
 export main = (args) ->
   autodownload_shim = ""
@@ -38,7 +36,7 @@ export main = (args) ->
     "
   code = "
     #{autodownload_shim}
-    shell.run('skala', 'autorun')
+    shell.run('skala', 'autostart')
   "
 
   if not args.force

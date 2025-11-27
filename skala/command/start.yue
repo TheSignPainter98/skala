@@ -1,0 +1,45 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F, :T
+import 'skala.clap' as :Flag, :Param, :Subcommand
+
+import 'skala.command.start.control'
+import 'skala.command.start.killswitch'
+import 'skala.command.start.sherbina'
+
+declare_type 'start.NodeSpec', [[{
+  register_args: ({}) -> <>,
+  main: ({}) -> <>,
+}]]
+node_specs = T '{string->start.NodeSpec}',
+  :control
+  :killswitch
+  :sherbina
+export NODE_KINDS = do
+  node_kinds = [ kind for kind, _ in pairs node_specs ]
+  table.sort node_kinds
+  node_kinds
+
+export register_args = (parser) ->
+  command = with Subcommand 'start'
+    \description 'start a node of the given kind'
+
+  control.register_args command
+  killswitch.register_args command
+  sherbina.register_args command
+
+  parser\add command
+
+export main = F '({}) -> <>', (args) ->
+  applicable_mains = with {}
+    for kind in *NODE_KINDS
+      kind_args = args[kind]
+      if not kind_args?
+        continue
+      [] =
+        main: node_specs[kind].main
+        :kind_args
+  if #applicable_mains != 1
+    error "internal error #{#applicable_mains} applicable main functions detected"
+  { :main, :kind_args } = applicable_mains[1]
+  main kind_args
