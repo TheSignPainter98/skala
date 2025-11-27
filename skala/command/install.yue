@@ -32,6 +32,7 @@ export main = (args) ->
         shell.run('pastebin', 'get', '#{args.pastebin}', '.skala~')
 
         print('applying update')
+        fs.delete('skala')
         fs.move('.skala~', 'skala')
       end
     "
@@ -57,7 +58,7 @@ export main = (args) ->
     assert \close!
 
 config_for = F '(string) -> string', (kind) ->
-  switch kind
+  config = switch kind
     when 'control'
       control.DEFAULT_CONFIG
     when 'killswitch'
@@ -66,3 +67,6 @@ config_for = F '(string) -> string', (kind) ->
       sherbina.DEFAULT_CONFIG
     else
       error "unknown skala node kind `#{kind}'"
+  assert '\n' == config\sub 1, 1
+  assert '\n' == config\sub -1, -1
+  config\sub 2, -2

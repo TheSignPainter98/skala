@@ -28,8 +28,6 @@ export main = (args) ->
   run config
 
 export run = F '({}) -> <>', (args) ->
-  import 'skala.spec' as :repr
-  print repr args
   if args.control?
     control.main args.control
   else if args.sherbina?

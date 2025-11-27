@@ -5,11 +5,13 @@ export register_args = (parser) ->
   parser\add with Subcommand 'control'
     \description 'default reactor control system'
 
-declare_type 'killswitch.Args', [[{}]]
+declare_type 'killswitch.Args', [[{
+
+}]]
 
 export DEFAULT_CONFIG = '
 [killswitch]
+
 '
 
 export main = F '(killswitch.Args) -> <>', (args) ->
-  error 'todo killswitch'
