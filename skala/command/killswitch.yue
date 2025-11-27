@@ -2,16 +2,13 @@ import 'skala.quicktype' as :declare_type, :F
 import 'skala.clap' as :Subcommand
 
 export register_args = (parser) ->
-  parser\add with Subcommand 'control'
-    \description 'default reactor control system'
+  parser\add with Subcommand 'killswitch'
+    \description 'reactor auto-shutoff actors'
 
-declare_type 'killswitch.Args', [[{
-
-}]]
+declare_type 'killswitch.Args', [[{}]]
 
 export DEFAULT_CONFIG = '
 [killswitch]
-
 '
 
 export main = F '(killswitch.Args) -> <>', (args) ->

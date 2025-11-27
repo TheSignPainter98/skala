@@ -1,0 +1,93 @@
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.clap' as :Subcommand, :Param
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'flash'
+    \description 'default reactor control system'
+    \add with Param 'drive'
+      \description 'location of disk to flash, if omitted, all sides are searched'
+      \default nil
+
+declare_type 'flash.Args', [[{
+  drive: ?string,
+}]]
+
+export main = F '(flash.Args) -> <>', (args) ->
+  { drive: drive_direction } = args
+
+  drive = if drive_direction?
+    if 'drive' != peripheral.getType drive_direction
+      print "no drive attached to #{direction}"
+      return
+    -- Race :(
+    drive = peripheral.wrap direction
+    if not drive?
+      print "no drive attached to #{direction}"
+      return
+    drive
+  else
+    drives = { peripheral.find 'drive' }
+    if #drives == 0
+      print 'no drives attached'
+      return
+    if #drives > 1
+      print 'too many drives attached'
+      return
+    drives[1]
+
+  drive.setDiskLabel 'skala installer'
+  mount_path = drive.getMountPath!
+  if not mount_path?
+    print "disk not mounted"
+    return
+
+  fs.copy 'skala', "#{mount_path}/skala"
+
+startup_script = F '(string) -> string', (label) ->
+  lines =
+    * "term.clear()"
+    * "term.setCursorPos(1, 1)"
+    * "local installer_header = '--- skala installer ---'"
+    * "print(('-'):rep(#installer_header))"
+    * "print(installer_header)"
+    * "print(('-'):rep(#installer_header))"
+    * "print('')"
+    * "print('Welcome to the skala installer!')"
+    * "while true do"
+    * "  print('')"
+    * "  print('Options:')"
+    * "  print(\"* To install skala, type `y' then hit <enter>\")"
+    * "  print(\"* To cancel, type `n' then hit <enter>\")"
+    * "  print('')"
+    * "  io.write('$ ')"
+    * "  local resp = io.read('*l'):sub(1, 1):lower()"
+    * "  print('')"
+    * ""
+    * "  if resp == 'y' then"
+    * "    break"
+    * "  elseif resp == 'n' then"
+    * "    print('aborting install')"
+    * "    return"
+    * "  end"
+    * "  print('! response \\'' .. resp .. '\\' unrecognised')"
+    * "end"
+    * ""
+    * "local disk_mount_path = nil"
+    * "do"
+    * "  disk_drive = peripheral.find('drive', function(_, drive)"
+    * "    disk_mount_path = drive.getMountPath()"
+    * "    return drive.getDiskLabel() == '#{label}'"
+    * "  end)"
+    * "end"
+    * "assert(disk_mount_path, 'unable to find disk where label=#{label}')"
+    * ""
+    * "-- Copy files"
+    * "print('Copying ' .. disk_mount_path .. '/skala -> /skala ...')"
+    * "local skala_dest = assert(io.open('skala', 'w+'))"
+    * "for line in io.lines(disk_mount_path .. '/skala') do"
+    * "  assert(skala_dest:write(line))"
+    * "  assert(skala_dest:write('\\n'))"
+    * "end"
+    * "assert(skala_dest:close())"
+    * "print('Done!')"
+  table.concat lines, '\n'

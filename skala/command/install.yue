@@ -69,4 +69,5 @@ config_for = F '(string) -> string', (kind) ->
       error "unknown skala node kind `#{kind}'"
   assert '\n' == config\sub 1, 1
   assert '\n' == config\sub -1, -1
-  config\sub 2, -2
+  assert '\n' == config\sub -2, -2
+  config\sub 2, -1

@@ -7,6 +7,7 @@ import 'skala.clap' as :ArgParser
 
 import 'skala.command.autorun'
 import 'skala.command.control'
+import 'skala.command.flash'
 import 'skala.command.install'
 import 'skala.command.killswitch'
 import 'skala.command.sherbina'
@@ -19,6 +20,8 @@ main = (raw_args) ->
 
   if args.autorun?
     autorun.main args.autorun
+  else if args.flash?
+    flash.main args.flash
   else if args.install?
     install.main args.install
   else if args.uninstall?
@@ -33,8 +36,10 @@ parse_args = (args) ->
 
   autorun.register_args parser
   control.register_args parser
-  sherbina.register_args parser
+  flash.register_args parser
   install.register_args parser
+  killswitch.register_args parser
+  sherbina.register_args parser
   uninstall.register_args parser
 
   parser\parse args
