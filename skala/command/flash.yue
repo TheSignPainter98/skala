@@ -47,6 +47,11 @@ export main = F '(flash.Args) -> <>', (args) ->
     print err
     fs.delete "#{mount_path}/skala"
 
+  startup_script_content = startup_script!
+  with assert io.open "#{mount_path}/startup.lua", 'w+'
+    assert \write startup_script_content
+    assert \close!
+
 startup_script = F '(string) -> string', (label) ->
   lines =
     * "term.clear()"
