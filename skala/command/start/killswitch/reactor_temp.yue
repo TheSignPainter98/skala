@@ -22,8 +22,9 @@ export check_reactor = $F '(reactor_temp.Args) -> ?string', (args) ->
     print 'reactor inactive'
     return -- Inactive.
 
-  { :max_temperature } = args
-  max_temperature = 1000
+  {
+    :max_temperature = 1000
+  } = args
 
   temperature = reactor.getTemperature!
   print "reactor temperature is #{temperature}, max is #{max_temperature}"
