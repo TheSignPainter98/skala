@@ -31,7 +31,7 @@ export main = (_) ->
 
 export run = $F '({}) -> <>', (args) ->
   for typ, spec in pairs NODE_SPECS
-    if a = args[typ]?
+    if a = args[typ]
       spec.main a
       return
   error 'unreachable'
