@@ -4,6 +4,7 @@ import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
+import 'skala.util.sole_peripheral' as :sole_peripheral
 
 import 'skala.command.start.killswitch.reactor_temp'
 
