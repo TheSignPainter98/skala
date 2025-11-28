@@ -54,12 +54,14 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
       if err?
         print err
         return
-      if not reactor.isFormed!
-        print 'reactor not formed'
-        return -- Not usable.
-      if not reactor.getStatus!
-        print 'reactor inactive'
-        return -- Inactive.
+
+      reactor_usable = false
+      try
+        reactor_usable or= reactor.getStatus!
+      catch err
+        print err
+      if not reactor_usable
+        return
 
       err = check_reactor reactor
       if err?

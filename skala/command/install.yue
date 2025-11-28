@@ -56,6 +56,8 @@ export main = (args) ->
     assert \write config
     assert \close!
 
+  -- TODO(kcza): editor loop!
+
 config_for = $F '(string) -> string', (kind) ->
   spec = NODE_SPECS[kind]
   if not spec?
