@@ -13,21 +13,12 @@ declare_type 'reactor_temp.Args', [[{
   max_temperature: ?number,
 }]]
 
-export check_reactor = $F '(reactor_temp.Args) -> ?string', (args) ->
-  reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
-  if err?
-    return err
-
-  if not reactor.getStatus!
-    print 'reactor inactive'
-    return -- Inactive.
-
-  {
-    :max_temperature = 1000
-  } = args
+export check_reactor = $F '(reactor_temp.Args, skala.Reactor) -> ?string', (args, reactor) ->
+  { :max_temperature = 1000 } = args
 
   temperature = reactor.getTemperature!
   print "reactor temperature is #{temperature}, max is #{max_temperature}"
   if temperature > max_temperature
     print '!!! scramming reactor !!!'
     reactor.scram!
+  nil

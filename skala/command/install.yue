@@ -4,7 +4,7 @@ import 'skala.quicktype' as :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.command.autostart' as :CONFIG_FILE
-import 'skala.command.start' as :NODE_KINDS
+import 'skala.command.start' as :NODE_KINDS, :NODE_SPECS
 
 import 'skala.command.start.control'
 import 'skala.command.start.killswitch'
@@ -57,15 +57,10 @@ export main = (args) ->
     assert \close!
 
 config_for = $F '(string) -> string', (kind) ->
-  config = switch kind
-    when 'control'
-      control.DEFAULT_CONFIG
-    when 'killswitch'
-      killswitch.DEFAULT_CONFIG
-    when 'sherbina'
-      sherbina.DEFAULT_CONFIG
-    else
-      error "unknown skala node kind `#{kind}'"
+  spec = NODE_SPECS[kind]
+  if not spec?
+    error "unknown skala node kind `#{kind}'"
+  config = spec.DEFAULT_CONFIG
   assert '\n' == config\sub 1, 1
   assert '\n' == config\sub -1, -1
   if '\n' == config\sub -2, -2

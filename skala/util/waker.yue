@@ -21,9 +21,11 @@ export class Waker
 
   add_trigger: $F '(waker.Trigger) => Self', (trigger) =>
     @_triggers[] = trigger
+    @
 
-  on_awaken: $F '(waker.Listener) => <>', (listener) =>
+  on_awaken: $F '(waker.Listener) => Self', (listener) =>
     @_awaken_listeners[] = listener
+    @
 
   awaken: $F '() => <>', =>
     @_awake = true

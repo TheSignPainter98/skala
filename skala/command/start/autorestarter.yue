@@ -1,0 +1,136 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F, :T
+import 'skala.quicktype_macros' as $
+import 'skala.clap' as :Subcommand, :Flag
+import 'skala.util.waker' as :Waker, :PeriodicTrigger
+import 'skala.util.sole_peripheral' as :sole_peripheral
+
+export register_args = (parser) ->
+  -- TODO(kcza): hyphenate!
+  parser\add with Subcommand 'autorestarter'
+    \description 'auto restart the reactor'
+
+declare_type 'autorestarter.Args', [[{
+  check_interval_seconds: ?number,
+  min_coolant_percent: ?number,
+  min_fuel_percent: ?number,
+  max_damage_percent: ?number,
+  max_heated_coolant_percent: ?number,
+  max_waste_percent: ?number,
+}]]
+
+export DEFAULT_CONFIG = '
+[autorestarter]
+check_interval_seconds = 10
+min_coolant_percent = 100
+min_fuel_percent = 25
+max_damage_percent = 0
+max_heated_coolant_percent = 25
+max_waste_percent = 25
+'
+export main = $F '(autorestarter.Args) -> !', (args) ->
+  { :check_interval_seconds = 10 } = args
+
+  with Waker!
+    \add_trigger PeriodicTrigger check_interval_seconds
+    \on_awaken ->
+      if err = check_reactor args
+        print err
+    \awaken!
+    \run!
+
+declare_type 'autorestarter.Condition', [[{
+  name: string,
+  held: ?{
+    name: string,
+    amount: number,
+  },
+  capacity: number,
+  min_percent: ?number,
+  max_percent: ?number,
+}]]
+check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
+  reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
+  if err?
+    return err
+
+  if not reactor.isFormed!
+    return -- Not usable.
+  if reactor.getStatus!
+    return -- Already active.
+
+  high = false
+  for side in *redstone.getSides!
+    if redstone.getInput side
+      high = true
+      continue
+  if not high
+    { :hour, :min, :sec } = os.date '!*t'
+    print "[#{hour}:#{min}:#{sec}]: provide redstone signal to begin auto-restart"
+    return -- Auto-restart not requested
+
+  {
+    :min_coolant_percent = 100
+    :min_fuel_percent = 25
+    :max_damage_percent = 0
+    :max_heated_coolant_percent = 25
+    :max_waste_percent = 25
+  } = args
+
+  { :hour, :min, :sec } = os.date '!*t'
+  print "[#{hour}:#{min}:#{sec}]: attempting reactor restart"
+
+  conditions = $T '[autorestarter.Condition]', {{
+    name: 'coolant'
+    held: reactor.getCoolant!
+    capacity: reactor.getCoolantCapacity!
+    min_percent: min_coolant_percent
+  }, {
+    name: 'fuel'
+    held: reactor.getFuel!
+    capacity: reactor.getFuelCapacity!
+    min_percent: min_fuel_percent
+  }, {
+    name: 'damage'
+    held:
+      name: 'damage'
+      amount: reactor.getDamagePercent!
+    capacity: 100
+    max_percent: 0
+  }, {
+    name: 'heated coolant'
+    held: reactor.getHeatedCoolant!
+    capacity: reactor.getHeatedCoolantCapacity!
+    max_percent: max_heated_coolant_percent
+  }, {
+    name: 'waste'
+    held: reactor.getWaste!
+    capacity: reactor.getWasteCapacity!
+    max_percent: max_waste_percent
+  }}
+  -- TODO(kcza): check the turbine has sufficient space
+
+  reactor_safe = true
+  for condition in *conditions
+    { :name, :held, :capacity, :min_percent, :max_percent } = condition
+    if not held?
+      print "#{name} not found"
+      reactor_safe = false
+      continue
+
+    { :amount, :name } = held
+    proportion = amount / capacity
+    if min_percent?
+      if proportion >= min_percent / 100
+        continue
+      print "too little #{name}: need #{min_percent}% have #{proportion * 100}%"
+    if max_percent
+      if proportion <= max_percent / 100
+        continue
+      print "too much #{name}: need at most #{max_percent}% have #{proportion * 100}%"
+    reactor_safe = false
+
+  if reactor_safe
+    print "activating reactor"
+    reactor.activate!

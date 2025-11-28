@@ -4,6 +4,7 @@ import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.quicktype' as :is, :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.util.toml'
+import 'skala.command.start' as :NODE_SPECS
 
 import 'skala.command.start.control'
 import 'skala.command.start.sherbina'
@@ -29,14 +30,11 @@ export main = (_) ->
   run config
 
 export run = $F '({}) -> <>', (args) ->
-  if args.control?
-    control.main args.control
-  else if args.sherbina?
-    sherbina.main args.sherbina
-  else if args.killswitch?
-    killswitch.main args.killswitch
-  else
-    error 'unreachable'
+  for typ, spec in pairs NODE_SPECS
+    if a = args[typ]?
+      spec.main a
+      return
+  error 'unreachable'
 
 get_config = $F '() -> <?skala.Config, ?string>', ->
   local raw_config

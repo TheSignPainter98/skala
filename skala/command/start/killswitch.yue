@@ -39,7 +39,7 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
 
   local check_reactor
   if a = args.reactor_temp
-    check_reactor = -> reactor_temp.check_reactor a
+    check_reactor = (reactor) -> reactor_temp.check_reactor a, reactor
   else
     error 'no killswitch kind set'
 
@@ -50,7 +50,19 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
       { :hour, :min, :sec } = os.date '!*t'
       print "[#{hour}:#{min}:#{sec}]: checking reactor"
 
-      err = check_reactor!
+      reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
       if err?
         print err
+        return
+      if not reactor.isFormed!
+        print 'reactor not formed'
+        return -- Not usable.
+      if not reactor.getStatus!
+        print 'reactor inactive'
+        return -- Inactive.
+
+      err = check_reactor reactor
+      if err?
+        print err
+    \awaken!
     \run!
