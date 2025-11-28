@@ -67,7 +67,7 @@ check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
       continue
   if not high
     { :hour, :min, :sec } = os.date '!*t'
-    print "[#{hour}:#{min}:#{sec}]: provide redstone signal to begin auto-restart"
+    print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
     return -- Auto-restart not requested
 
   {
@@ -79,7 +79,7 @@ check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
   } = args
 
   { :hour, :min, :sec } = os.date '!*t'
-  print "[#{hour}:#{min}:#{sec}]: attempting reactor restart"
+  print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
 
   conditions = $T '[autorestarter.Condition]', {{
     name: 'coolant'

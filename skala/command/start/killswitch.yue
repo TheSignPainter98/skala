@@ -48,7 +48,7 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
     \add_trigger RedstoneTrigger!
     \on_awaken ->
       { :hour, :min, :sec } = os.date '!*t'
-      print "[#{hour}:#{min}:#{sec}]: checking reactor"
+      print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
 
       reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
       if err?
