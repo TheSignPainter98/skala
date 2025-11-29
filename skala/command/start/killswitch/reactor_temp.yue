@@ -13,8 +13,11 @@ declare_type 'reactor_temp.Args', [[{
   max_temperature: ?number,
 }]]
 
+export DEFAULT_CONFIG_LINES =
+  * 'max_temperature = 1000'
+
 export check_reactor = $F '(reactor_temp.Args, skala.Reactor) -> ?string', (args, reactor) ->
-  { :max_temperature = 1000 } = args
+  { :max_temperature = 1200 } = args
 
   temperature = reactor.getTemperature!
   print "reactor temperature is #{temperature}, max is #{max_temperature}"

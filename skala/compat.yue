@@ -24,3 +24,10 @@ fs.list ??= (dir) ->
     proc\close!
 os.sleep ??= (seconds) ->
   os.execute "sleep #{seconds}"
+os.tmpname ??= ->
+  while true
+    f = "lua_#{'%x'\format math.random 1, 100000}"
+    with? io.open f, 'r'
+      \close!
+      continue
+    return f

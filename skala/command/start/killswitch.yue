@@ -1,6 +1,6 @@
 local *
 
-import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype' as :declare_type, :F, :T
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
@@ -23,25 +23,52 @@ export register_args = (parser) ->
   reactor_temp.register_args command
   parser\add command
 
+declare_type 'killswitch.KillSwitch', [[{
+
+}]]
+killswitches = $T '{string->killswitch.KillSwitch}', {
+  :reactor_temp
+}
+sorted_killswitches = $T '[killswitch.KillSwitch]', do
+  sorted_killswitches = [ { :name, :module } for name, module in pairs killswitches ]
+  table.sort sorted_killswitches, (a, b) -> a.name < b.name
+  sorted_killswitches
+
+export DEFAULT_CONFIG = do
+  lines = with {}
+    [] = '[killswitch]'
+    [] = 'frequency = 2'
+    [] = ''
+    [] = '# Killswitch config below. Uncomment one table.'
+    for killswitch in *sorted_killswitches
+      { :name, :module } = killswitch
+      [] = ''
+      [] = "# [killswitch.#{name}]"
+      for line in *module.DEFAULT_CONFIG_LINES
+        [] = "# #{line}"
+    [] = ''
+  table.concat lines, '\n'
+
 declare_type 'killswitch.Args', [[{
   frequency: number
 }]]
-
-export DEFAULT_CONFIG = '
-[killswitch]
-frequency = 2
-'
-
 export main = $F '(killswitch.Args) -> <>', (args) ->
   { :frequency } = args
 
   import 'skala.spec' as :repr
   print repr args
 
-  local check_reactor
-  if a = args.reactor_temp
-    check_reactor = (reactor) -> reactor_temp.check_reactor a, reactor
-  else
+  check_reactor = nil
+  for { :name, :module } in *sorted_killswitches
+    a = args[name]
+    if not a?
+      continue
+
+    if check_reactor?
+      error 'multiple killswitches set'
+    check_reactor = (reactor) ->
+      module.check_reactor a, reactor
+  if not check_reactor?
     error 'no killswitch kind set'
 
   with Waker!

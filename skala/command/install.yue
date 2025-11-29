@@ -1,14 +1,16 @@
 local *
 
-import 'skala.quicktype' as :F
+import 'skala.quicktype' as :is, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.command.autostart' as :CONFIG_FILE
 import 'skala.command.start' as :NODE_KINDS, :NODE_SPECS
+import 'skala.editor' as :ABORT, :Editor
 
 import 'skala.command.start.control'
 import 'skala.command.start.killswitch'
 import 'skala.command.start.sherbina'
+import 'skala.util.toml'
 
 export register_args = (parser) ->
   parser\add with Subcommand 'install'
@@ -47,25 +49,45 @@ export main = (args) ->
       print "file `startup.lua' already exists."
       print "pass --force to overwrite it"
       return
+
+  local config
+  with Editor!
+    expected_type = 'any' -- TODO(kcza): complete me!
+    checker = (raw) ->
+      config, err = toml.decode raw
+      if err?
+        print err
+        return false
+      _, err = is expected_type, config
+      if err?
+        print err
+        return false
+      true
+
+    on_attempt = (file_name, attempt) ->
+      print "press [ENTER] edit #{file_name}, [q] to abort"
+      switch io.read '*l'
+        when 'q'
+          ABORT
+        when ''
+          nil
+
+    config = config_for args.kind
+    config, err = \edit_text config, CONFIG_FILE, checker, on_attempt
+    if err?
+      print err
+      return
+
   with assert io.open 'startup.lua', 'w+'
     assert \write code
     assert \close!
 
-  config = config_for args.kind
   with assert io.open CONFIG_FILE, 'w+'
     assert \write config
     assert \close!
-
-  -- TODO(kcza): editor loop!
 
 config_for = $F '(string) -> string', (kind) ->
   spec = NODE_SPECS[kind]
   if not spec?
     error "unknown skala node kind `#{kind}'"
-  config = spec.DEFAULT_CONFIG
-  assert '\n' == config\sub 1, 1
-  assert '\n' == config\sub -1, -1
-  if '\n' == config\sub -2, -2
-    config\sub 2, -1
-  else
-    config\sub 2
+  spec.DEFAULT_CONFIG

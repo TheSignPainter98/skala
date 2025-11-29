@@ -10,9 +10,11 @@ export register_args = (parser) ->
 
 declare_type 'sherbina.Args', [[{}]]
 
-export DEFAULT_CONFIG = '
-[sherbina]
-'
+export DEFAULT_CONFIG = do
+  lines =
+    * '[sherbina]'
+    * ''
+  table.concat lines, '\n'
 
 export main = $F '(sherbina.Args) -> <>', (args) ->
   store = Store 'reactor_logs'

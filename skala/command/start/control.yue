@@ -11,9 +11,11 @@ export register_args = (parser) ->
 
 declare_type 'control.Args', [[{}]]
 
-export DEFAULT_CONFIG = '
-[control]
-'
+export DEFAULT_CONFIG = do
+  lines =
+    * '[control]'
+    * ''
+  table.concat lines, '\n'
 
 export main = $F '(control.Args) -> <>', (args) ->
   ctx =

@@ -18,17 +18,21 @@ declare_type 'autorestarter.Args', [[{
   max_damage_percent: ?number,
   max_heated_coolant_percent: ?number,
   max_waste_percent: ?number,
+  max_temperature: ?number,
 }]]
 
-export DEFAULT_CONFIG = '
-[autorestarter]
-check_interval_seconds = 10
-min_coolant_percent = 100
-min_fuel_percent = 25
-max_damage_percent = 0
-max_heated_coolant_percent = 25
-max_waste_percent = 25
-'
+export DEFAULT_CONFIG = do
+  lines =
+    * '[autorestarter]'
+    * 'check_interval_seconds = 10'
+    * 'min_coolant_percent = 100'
+    * 'min_fuel_percent = 25'
+    * 'max_damage_percent = 0'
+    * 'max_heated_coolant_percent = 25'
+    * 'max_waste_percent = 25'
+    * 'max_temperature = 400'
+  table.concat lines, '\n'
+
 export main = $F '(autorestarter.Args) -> !', (args) ->
   { :check_interval_seconds = 10 } = args
 
@@ -76,6 +80,7 @@ check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
     :max_damage_percent = 0
     :max_heated_coolant_percent = 25
     :max_waste_percent = 25
+    :max_temperature = 400
   } = args
 
   { :hour, :min, :sec } = os.date '!*t'
@@ -108,12 +113,25 @@ check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
     held: reactor.getWaste!
     capacity: reactor.getWasteCapacity!
     max_percent: max_waste_percent
+  }, {
+    name: 'temperature'
+    held: reactor.getTemperature!
+    capacity: 1
+    max_percent: max_temperature
+    unit: 'K'
   }}
   -- TODO(kcza): check the turbine has sufficient space
 
   reactor_safe = true
   for condition in *conditions
-    { :name, :held, :capacity, :min_percent, :max_percent } = condition
+    {
+      :name
+      :held
+      :capacity
+      :min_percent
+      :max_percent
+      :unit = '%'
+    } = condition
     if not held?
       print "#{name} not found"
       reactor_safe = false
@@ -124,11 +142,11 @@ check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
     if min_percent?
       if proportion >= min_percent / 100
         continue
-      print "too little #{name}: need #{min_percent}% have #{proportion * 100}%"
+      print "too little #{name}: need #{min_percent}#{unit} have #{proportion * 100}#{unit}"
     if max_percent
       if proportion <= max_percent / 100
         continue
-      print "too much #{name}: need at most #{max_percent}% have #{proportion * 100}%"
+      print "too much #{name}: need at most #{max_percent}#{unit} have #{proportion * 100}#{unit}"
     reactor_safe = false
 
   if reactor_safe

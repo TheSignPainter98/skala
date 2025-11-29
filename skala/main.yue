@@ -4,12 +4,35 @@ local *
 require 'skala.compat'
 
 import 'skala.clap' as :ArgParser
+import 'skala.quicktype' as :declare_type
 
 import 'skala.command.autostart'
 import 'skala.command.flash'
 import 'skala.command.install'
 import 'skala.command.start'
 import 'skala.command.uninstall'
+
+declare_type 'skala.Reactor', [[{
+  activate: () -> <>,
+  scram: () -> <>,
+  getStatus: () -> boolean,
+  -- getTemperature: () -> number,
+  -- getDamagePercent: () -> number,
+  -- getCoolant: () -> skala.Chemical,
+  -- getCoolangFilledPercentage: () -> number,
+  -- getHeatedCoolant: () -> skala.Chemical,
+  -- getHeatedCoolantFilledPercentage: () -> number,
+  -- getFuel: () -> skala.Chemical,
+  -- getFuelFilledPercentage: () -> skala.Chemical,
+  -- getFuelNeeded: () -> number,
+  -- getFuelCapacity: () -> number,
+  -- getWaste: () -> number,
+  -- getWaste: () -> number,
+}]]
+declare_type 'skala.Chemical', [[{
+  name: string,
+  amount: string,
+}]]
 
 main = (raw_args) ->
   args, ok = parse_args raw_args

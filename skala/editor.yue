@@ -1,0 +1,72 @@
+local *
+
+import 'skala.quicktype' as :declare_singleton_type, :declare_type, :F, :T
+import 'skala.spec' as :spec
+
+declare_type 'Editor', [[{
+  edit_file: (string) => ?string,
+  edit_text: (
+      string,
+      string,
+      ?(string) -> boolean,
+      ?(string, number) -> ?ABORT
+    ) => <?string, ?string>,
+}]]
+declare_type 'EditorBackend', [[{
+  edit_file: (string) => ?string,
+}]]
+export ABORT = <tostring>: => 'ABORT'
+declare_singleton_type ABORT
+export class Editor
+  new: F '(?EditorBackend) => <>', (@backend=MinecraftBackend!) =>
+    @max_retries = T '?number', nil
+
+  edit_file: F '(string) => ?string', (path) =>
+    @backend\edit_file path
+
+  edit_text: F '(string, string, ?(string) -> boolean, ?(string, number) -> ?ABORT) => <?string, ?string>', (text, value_name, check, on_attempt) =>
+    tmp_path = os.tmpname!
+
+    with assert io.open tmp_path, 'w+'
+      assert \write text
+      assert \close!
+
+    local err
+    attempt_num = 0
+    repeat
+      attempt_num += 1
+      if on_attempt?
+        err = on_attempt value_name, attempt_num
+        if err?
+          break
+
+      err = @backend\edit_file tmp_path
+      if err?
+        break
+
+      with assert io.open tmp_path, 'r'
+        text = \read '*a'
+        \close!
+      if @max_retries? and attempt_num > @max_retries
+        err = 'max edit retries reached'
+        break
+    until not check? or (check text)
+
+    fs.delete tmp_path
+
+    if err == ABORT
+      err = 'aborted'
+    if err?
+      nil, err
+    else
+      text, nil
+
+class MinecraftBackend
+  new: =>
+    @editor = 'edit'
+
+  edit_file: F '(string) => ?string', (path) =>
+    ok = shell.execute @editor, path
+    if not ok
+      return "#{@editor} exited unsuccessfully"
+    nil
