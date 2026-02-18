@@ -19,6 +19,8 @@ export DEFAULT_CONFIG = do
 export main = $F '(sherbina.Args) -> <>', (args) ->
   store = Store 'reactor_logs'
 
+  -- TODO(kcza): re-purpose this to be awoken by `skala:heartbeat` packets
+
   first = true
   while true
     if first

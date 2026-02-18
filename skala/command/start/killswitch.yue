@@ -8,6 +8,16 @@ import 'skala.util.sole_peripheral' as :sole_peripheral
 
 import 'skala.command.start.killswitch.reactor_temp'
 
+declare_type 'killswitch.KillSwitch', [[{
+}]]
+killswitches = $T '{string->killswitch.KillSwitch}', {
+  :reactor_temp
+}
+sorted_killswitches = $T '[killswitch.KillSwitch]', do
+  sorted_killswitches = [ { :name, :module } for name, module in pairs killswitches ]
+  table.sort sorted_killswitches, (a, b) -> a.name < b.name
+  sorted_killswitches
+
 export register_args = (parser) ->
   command = with Subcommand 'killswitch'
     \description 'reactor auto-shutoff actors'
@@ -20,19 +30,10 @@ export register_args = (parser) ->
           n, nil
         else
           nil, "#{raw} is not a number"
-  reactor_temp.register_args command
+  for killswitch[]
+    for killswitch in *killswitches
+     aa
   parser\add command
-
-declare_type 'killswitch.KillSwitch', [[{
-
-}]]
-killswitches = $T '{string->killswitch.KillSwitch}', {
-  :reactor_temp
-}
-sorted_killswitches = $T '[killswitch.KillSwitch]', do
-  sorted_killswitches = [ { :name, :module } for name, module in pairs killswitches ]
-  table.sort sorted_killswitches, (a, b) -> a.name < b.name
-  sorted_killswitches
 
 export DEFAULT_CONFIG = do
   lines = with {}
@@ -59,6 +60,7 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
   print repr args
 
   check_reactor = nil
+  killswitch_name = nil
   for { :name, :module } in *sorted_killswitches
     a = args[name]
     if not a?
@@ -68,7 +70,8 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
       error 'multiple killswitches set'
     check_reactor = (reactor) ->
       module.check_reactor a, reactor
-  if not check_reactor?
+    killswitch_name = name
+  if not check_reactor? or not killswitch_name?
     error 'no killswitch kind set'
 
   with Waker!
@@ -94,5 +97,10 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
       err = check_reactor reactor
       if err?
         print err
+
+      heartbeat = T 'control.Heartbeat'
+        type: 'killswitch'
+        subtype: killswitch_name
+      rednet.broadcast heartbeat, 'skala:heartbeat'
     \awaken!
     \run!
