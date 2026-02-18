@@ -6,9 +6,14 @@ import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
 
 declare_type 'control.Heartbeat', [[{
+  id: number,
   type: string,
-	subtype: ?string,
-	time: number,
+  subtype: ?string,
+  datetime: {
+    hour: number,
+    minute: number,
+    sec: number,
+  }
 }]]
 
 export register_args = (parser) ->

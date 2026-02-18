@@ -18,6 +18,10 @@ sorted_killswitches = $T '[killswitch.KillSwitch]', do
   table.sort sorted_killswitches, (a, b) -> a.name < b.name
   sorted_killswitches
 
+declare_type 'killswitch.Action', [[
+  "SCRAM"
+]]
+
 export register_args = (parser) ->
   command = with Subcommand 'killswitch'
     \description 'reactor auto-shutoff actors'
@@ -30,9 +34,8 @@ export register_args = (parser) ->
           n, nil
         else
           nil, "#{raw} is not a number"
-  for killswitch[]
-    for killswitch in *killswitches
-     aa
+  for killswitch in *killswitches
+    killswitch.register_args command
   parser\add command
 
 export DEFAULT_CONFIG = do
@@ -94,13 +97,26 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
       if not reactor_usable
         return
 
-      err = check_reactor reactor
+      action, err = check_reactor reactor
       if err?
         print err
 
-      heartbeat = T 'control.Heartbeat'
+      switch action
+        when 'SCRAM'
+          print '!!! scramming reactor !!!'
+          reactor.scram!
+        when nil
+          -- Do nothing.
+        else
+          err ??= "unrecognised action #{action}"
+
+      heartbeat = T 'control.Heartbeat',
+        id: os.getComputerId!
         type: 'killswitch'
         subtype: killswitch_name
+        datetime: os.date '!*t'
+        :action
+        :err
       rednet.broadcast heartbeat, 'skala:heartbeat'
     \awaken!
     \run!

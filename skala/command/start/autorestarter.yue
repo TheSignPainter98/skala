@@ -20,6 +20,9 @@ declare_type 'autorestarter.Args', [[{
   max_waste_percent: ?number,
   max_temperature: ?number,
 }]]
+declare_type 'autorestarter.Action', [[
+  "RESTART"
+]]
 
 export DEFAULT_CONFIG = do
   lines =
@@ -39,8 +42,16 @@ export main = $F '(autorestarter.Args) -> !', (args) ->
   with Waker!
     \add_trigger PeriodicTrigger check_interval_seconds
     \on_awaken ->
-      if err = check_reactor args
+      action, err = check_reactor args
+      if err?
         print err
+      switch action
+        when 'RESTART'
+         reactor.activate!
+        when nil
+          -- Do nothing
+        else
+          print "unrecognised action #{action}"
     \awaken!
     \run!
 
@@ -54,15 +65,13 @@ declare_type 'autorestarter.Condition', [[{
   min_percent: ?number,
   max_percent: ?number,
 }]]
-check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
+check_reactor = $F '(autorestarter.Args) -> <?autorestarter.Action, ?string>', (args) ->
   reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
   if err?
-    return err
+    return nil, err
 
-  if not reactor.isFormed!
-    return -- Not usable.
   if reactor.getStatus!
-    return -- Already active.
+    return nil, nil -- Already active.
 
   high = false
   for side in *redstone.getSides!
@@ -72,7 +81,10 @@ check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
   if not high
     { :hour, :min, :sec } = os.date '!*t'
     print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
-    return -- Auto-restart not requested
+    return nil, nil -- Auto-restart not requested
+
+  if not reactor.isFormed!
+    return nil, 'reactor not formed' -- Not usable.
 
   {
     :min_coolant_percent = 100
@@ -150,5 +162,4 @@ check_reactor = $F '(autorestarter.Args) -> ?string', (args) ->
     reactor_safe = false
 
   if reactor_safe
-    print "activating reactor"
-    reactor.activate!
+    return 'RESTART', nil
