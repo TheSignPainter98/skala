@@ -1,0 +1,29 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
+import 'skala.clap' as :Subcommand
+import 'skala.util.sole_peripheral' as :sole_peripheral
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'reactor-coolant'
+    \description 'scram reactor on insufficient coolant'
+
+declare_type 'reactor_temp.Args', [[{
+  min_coolant_percent: ?number,
+}]]
+
+export DEFAULT_CONFIG_LINES =
+  * 'min_coolant_percent = 50'
+
+export check_reactor = $F '(reactor_temp.Args, skala.Reactor) -> <?killswitch.Action, ?string>', (args, reactor) ->
+  { :min_coolant_percent = 50 } = args
+
+  coolant = reactor.getCoolant!
+  coolant_capacity = reactor.getCoolantCapacity!
+  coolant_percent = 100 * coolant / coolant_capacity
+
+  print "reactor coolant level is #{coolant_percent}%, min is #{min_coolant_percent}%"
+  if coolant_percent < min_coolant_percent
+    return 'SCRAM', nil
+  nil, nil
