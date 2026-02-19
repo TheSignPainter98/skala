@@ -114,7 +114,7 @@ check_reactor = $F '(autorestarter.Args) -> <?autorestarter.Action, ?string>', (
       name: 'damage'
       amount: reactor.getDamagePercent!
     capacity: 100
-    max_percent: 0
+    max_percent: max_damage_percent
   }, {
     name: 'heated coolant'
     held: reactor.getHeatedCoolant!

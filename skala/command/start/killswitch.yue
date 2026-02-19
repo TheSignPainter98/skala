@@ -7,11 +7,13 @@ import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
 import 'skala.util.sole_peripheral' as :sole_peripheral
 
 import 'skala.command.start.killswitch.reactor_temp'
+import 'skala.command.start.killswitch.reactor_damage'
 
 declare_type 'killswitch.KillSwitch', [[{
 }]]
 killswitches = $T '{string->killswitch.KillSwitch}', {
   :reactor_temp
+  :reactor_damage
 }
 sorted_killswitches = $T '[killswitch.KillSwitch]', do
   sorted_killswitches = [ { :name, :module } for name, module in pairs killswitches ]

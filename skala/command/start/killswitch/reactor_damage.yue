@@ -1,0 +1,21 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
+import 'skala.clap' as :Subcommand
+import 'skala.util.sole_peripheral' as :sole_peripheral
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'reactor-damage'
+    \description 'scram reactor when damaged'
+
+declare_type 'reactor_temp.Args', [[{}]]
+
+export DEFAULT_CONFIG_LINES = {}
+
+export check_reactor = $F '(reactor_temp.Args, skala.Reactor) -> <?killswitch.Action, ?string>', (args, reactor) ->
+  damage_percent = reactor.getDamagePercent!
+  print "reactor damage is #{damage_percent}"
+  if damage_percent > 0
+    return 'SCRAM', nil
+  nil, nil
