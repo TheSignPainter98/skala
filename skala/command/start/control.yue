@@ -20,7 +20,14 @@ export register_args = (parser) ->
   parser\add with Subcommand 'control'
     \description 'default reactor control system'
 
-declare_type 'control.Args', [[{}]]
+declare_type 'control.Args', [[{
+  attitude: control.Attitude,
+}]]
+declare_type 'control.Attitude', [[
+  "serious"
+  | "skittish"
+  | "saucy"
+]]
 
 export DEFAULT_CONFIG = do
   lines =
