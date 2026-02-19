@@ -1,0 +1,32 @@
+local *
+
+import 'skala.clap' as :Subcommand
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
+import 'skala.util.waker' as :Waker, :RedstoneTrigger
+import 'skala.util.sole_peripheral' as :sole_peripheral
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'scrammer'
+  	\description 'scram button'
+
+declare_type 'scrammer.Args', [[{}]]
+
+export DEFAULT_CONFIG = '[scrammer]\n'
+
+export main = $F '(scrammer.Args) -> <>', (args) ->
+  with Waker!
+	\add_trigger RedstoneTrigger!
+	\on_awaken ->
+      { :hour, :min, :sec } = os.date '!*t'
+      print "[%02d:%02d:%02d]: scram pressed"\format hour, min, sec
+
+      reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
+      if err?
+        print err
+        return
+
+      try
+		reactor.scram!
+      catch err
+        print err
