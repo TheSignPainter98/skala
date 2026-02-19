@@ -9,14 +9,14 @@ export register_args = (parser) ->
   parser\add with Subcommand 'reactor-fresh-coolant'
     \description 'scram reactor on insufficient new coolant'
 
-declare_type 'reactor_temp.Args', [[{
+declare_type 'reactor_fresh_coolant.Args', [[{
   min_coolant_percent: ?number,
 }]]
 
 export DEFAULT_CONFIG_LINES =
   * 'min_coolant_percent = 50'
 
-export check_reactor = $F '(reactor_temp.Args, skala.Reactor) -> <?killswitch.Action, ?string>', (args, reactor) ->
+export check_reactor = $F '(reactor_fresh_coolant.Args, skala.Reactor) -> <?killswitch.Action, ?string>', (args, reactor) ->
   { :min_coolant_percent = 50 } = args
 
   coolant = reactor.getCoolant!

@@ -40,8 +40,8 @@ export register_args = (parser) ->
           n, nil
         else
           nil, "#{raw} is not a number"
-  for killswitch in *killswitches
-    killswitch.register_args command
+  for { :module } in *sorted_killswitches
+    module.register_args command
   parser\add command
 
 export DEFAULT_CONFIG = do

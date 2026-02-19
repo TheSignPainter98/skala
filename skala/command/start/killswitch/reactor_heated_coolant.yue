@@ -9,14 +9,14 @@ export register_args = (parser) ->
   parser\add with Subcommand 'reactor-heated-coolant'
     \description 'scram reactor on insufficient used-coolant space'
 
-declare_type 'reactor_temp.Args', [[{
+declare_type 'reactor_heated_coolant.Args', [[{
   max_coolant_percent: ?number,
 }]]
 
 export DEFAULT_CONFIG_LINES =
   * 'max_coolant_percent = 50'
 
-export check_reactor = $F '(reactor_temp.Args, skala.Reactor) -> <?killswitch.Action, ?string>', (args, reactor) ->
+export check_reactor = $F '(reactor_heated_coolant.Args, skala.Reactor) -> <?killswitch.Action, ?string>', (args, reactor) ->
   { :max_coolant_percent = 80 } = args
 
   coolant = reactor.getHeatedCoolant!

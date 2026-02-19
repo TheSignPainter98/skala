@@ -1,6 +1,6 @@
 local *
 
-import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype' as :declare_type, :F, :T
 import 'skala.quicktype_macros' as $
 
 declare_type 'waker.Waker', [[{
