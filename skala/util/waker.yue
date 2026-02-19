@@ -34,7 +34,7 @@ export class Waker
     parallel.waitForAny unpack with {}
       for trigger in *@_triggers
         [] = -> trigger\run @
-        if @_awake
+        if @_awake -- Flag may be set by `trigger\run` call
           break
       [] = @\_awakener
     error 'unreachable'
