@@ -6,24 +6,24 @@ import 'skala.clap' as :Subcommand
 import 'skala.util.sole_peripheral' as :sole_peripheral
 
 export register_args = (parser) ->
-  parser\add with Subcommand 'reactor-coolant'
-    \description 'scram reactor on insufficient coolant'
+  parser\add with Subcommand 'reactor-heated-coolant'
+    \description 'scram reactor on insufficient used-coolant space'
 
 declare_type 'reactor_temp.Args', [[{
-  min_coolant_percent: ?number,
+  max_coolant_percent: ?number,
 }]]
 
 export DEFAULT_CONFIG_LINES =
-  * 'min_coolant_percent = 50'
+  * 'max_coolant_percent = 50'
 
 export check_reactor = $F '(reactor_temp.Args, skala.Reactor) -> <?killswitch.Action, ?string>', (args, reactor) ->
-  { :min_coolant_percent = 50 } = args
+  { :max_coolant_percent = 80 } = args
 
-  coolant = reactor.getCoolant!
-  coolant_capacity = reactor.getCoolantCapacity!
+  coolant = reactor.getHeatedCoolant!
+  coolant_capacity = reactor.getHeatedCoolantCapacity!
   coolant_percent = 100 * coolant / coolant_capacity
 
-  print "reactor coolant level is #{coolant_percent}%, min is #{min_coolant_percent}%"
-  if coolant_percent < min_coolant_percent
+  print "reactor heated coolant level is #{coolant_percent}%, min is #{min_coolant_percent}%"
+  if coolant_percent > max_coolant_percent
     return 'SCRAM', nil
   nil, nil

@@ -8,14 +8,16 @@ import 'skala.util.sole_peripheral' as :sole_peripheral
 
 import 'skala.command.start.killswitch.reactor_temp'
 import 'skala.command.start.killswitch.reactor_damage'
-import 'skala.command.start.killswitch.reactor_coolant'
+import 'skala.command.start.killswitch.reactor_fresh_coolant'
+import 'skala.command.start.killswitch.reactor_heated_coolant'
 
 declare_type 'killswitch.KillSwitch', [[{
 }]]
 killswitches = $T '{string->killswitch.KillSwitch}', {
   :reactor_temp
   :reactor_damage
-  :reactor_coolant
+  :reactor_fresh_coolant
+  :reactor_heated_coolant
 }
 sorted_killswitches = $T '[killswitch.KillSwitch]', do
   sorted_killswitches = [ { :name, :module } for name, module in pairs killswitches ]
