@@ -60,7 +60,6 @@ react = ->
       continue
     ctx.active = false
 
-
     print 'analysing reactor state'
     { :action_required, :recommended_action } = ai\request_advice state
     if not action_required
