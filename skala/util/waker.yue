@@ -33,27 +33,36 @@ export class Waker
     @_awaken_listeners[] = listener
     @
 
-  awaken: $F '(?label) => <>', (@_awakened_by=true) =>
+  awaken: $F '(?some) => <>', (label) =>
+    @_awakened_label ??= label
+    @_awakened = true
+
+  @run_many: F '([waker.Waker]) => !', (wakers) =>
+    parallel.waitForAny unpack with {}
+      for waker in *wakers
+        for task in *waker\_tasks!
+          [] = task
+    error 'unreachable'
 
   run: $F '() => !', =>
-    parallel.waitForAny unpack with {}
+    parallel.waitForAny unpack @_tasks!
+
+  tasks: $F '() => [() -> <>]', =>
+    with {}
       for trigger in *@_triggers
         [] = -> trigger\run @
       [] = @\_awakener
-    error 'unreachable'
-
-  -- tasks: $F '() => []', =>
-    -- TODO(kcza): expose task list,
 
   _awakener: $F '() => !', =>
     while true
-      if not @_awakened_by
+      if not @_awakened
         coroutine.yield!
         continue
+      @_awakened = false
 
       for listener in *@_awaken_listeners
-        listener @_awakened_by
-      @_awakened_by = false
+        listener @_awakened_label
+      @_awakened_label = nil
 
 export class PeriodicTrigger
   new: $F '(?{name: ?string, interval: number}) => <>', (opts={}) =>
