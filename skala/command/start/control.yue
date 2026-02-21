@@ -78,17 +78,22 @@ react = ->
 
 fe_to_j = (fe) -> fe * 2.5
 
+declare_type 'control.ReactorAdvice', [[{
+  action_required: boolean,
+  recommended_action: control.RecommendedAction,
+}]]
+declare_type 'control.RecommendedAction', 'string' -- TODO(kcza): replace this placeholder with disjoined tables.
 class Ai
   new: (@address) =>
     assert @address, 'no address'
 
-  request_advice: (state) =>
+  request_advice: $F '(peripheral.ReactorState) => <?control.ReactorAdvice, ?string>', (state) =>
     prompt_parts = with {}
       [] = 'Be concise.'
       [] = 'Do not patronise.'
       [] = 'You are an RBMK nuclear reactor control computer.'
-      for _, v in pairs state
-        [] = "The #{v.name} is #{v.value}."
+      for k, v in pairs state
+        [] = "The reactor's #{k} is #{v}."
       [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
       [] = '\n'
     prompt = table.concat prompt_parts, ' '
@@ -108,7 +113,8 @@ class Ai
     action_required = not (raw_advice\sub 1, 3)\lower!\match '^No.'
     if action_required
       recommended_action = raw_advice
-    {
+    ret = {
       :action_required
       :recommended_action
     }
+    ret, nil
