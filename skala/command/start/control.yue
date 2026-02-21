@@ -84,8 +84,7 @@ declare_type 'control.ReactorAdvice', [[{
 }]]
 declare_type 'control.RecommendedAction', 'string' -- TODO(kcza): replace this placeholder with disjoined tables.
 class Ai
-  new: (@address) =>
-    assert @address, 'no address'
+  new: $F '(string) => <>', (@address) =>
 
   request_advice: $F '(peripheral.ReactorState) => <?control.ReactorAdvice, ?string>', (state) =>
     prompt_parts = with {}
