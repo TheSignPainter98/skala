@@ -79,6 +79,7 @@ export class PeriodicTrigger
         _, id = os.pullEvent 'timer'
       until id == timer_id
       ctx\awaken @_name
+    error 'unreachable'
 
 declare_type 'cc.Side', [[
   "top"|"bottom"|"left"|"right"|"front"|"back"
@@ -108,3 +109,20 @@ export class RedstoneTrigger
       if not high
         continue
       ctx\awaken @_name
+    error 'unreachable'
+
+export class NetworkObserver
+  new: $F '({name: ?string, protocol: ?string})', (opts={}) =>
+    {
+      name: @_name
+      protocol: @_protocol
+    } = opts
+
+  run: $F '(waker.Waker) => !', (ctx) =>
+    while true
+      id, message = rednet.receive @_protocol
+      ctx\awaken $T '{name: ?string, id: number, message: some}',
+        name: @_name
+        :id
+        :message
+    error 'unreachable'
