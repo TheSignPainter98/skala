@@ -3,7 +3,6 @@ local *
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
-import 'skala.util.sole_peripheral' as :sole_peripheral
 
 export register_args = (parser) ->
   parser\add with Subcommand 'reactor-heated-coolant'

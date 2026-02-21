@@ -1,10 +1,10 @@
 local *
 
+import 'skala.clap' as :Subcommand, :Flag
+import 'skala.peripheral.reactor' as :Reactor
 import 'skala.quicktype' as :declare_type, :F, :T
 import 'skala.quicktype_macros' as $
-import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger
-import 'skala.util.sole_peripheral' as :sole_peripheral
 
 export register_args = (parser) ->
   -- TODO(kcza): hyphenate!
@@ -40,7 +40,8 @@ export main = $F '(autorestarter.Args) -> !', (args) ->
   { :check_interval_seconds = 10 } = args
 
   with Waker!
-    \add_trigger PeriodicTrigger check_interval_seconds
+    \add_trigger PeriodicTrigger
+      interval: check_interval_seconds
     \on_awaken ->
       action, err = check_reactor args
       if err?
@@ -66,7 +67,7 @@ declare_type 'autorestarter.Condition', [[{
   max_percent: ?number,
 }]]
 check_reactor = $F '(autorestarter.Args) -> <?autorestarter.Action, ?string>', (args) ->
-  reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
+  reactor, err = Reactor::find!
   if err?
     return nil, err
 

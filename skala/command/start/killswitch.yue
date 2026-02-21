@@ -4,7 +4,6 @@ import 'skala.quicktype' as :declare_type, :F, :T
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
-import 'skala.util.sole_peripheral' as :sole_peripheral
 
 import 'skala.command.start.killswitch.reactor_temp'
 import 'skala.command.start.killswitch.reactor_damage'
@@ -83,46 +82,61 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
   if not check_reactor? or not killswitch_name?
     error 'no killswitch kind set'
 
-  with Waker!
-    \add_trigger PeriodicTrigger 1 / args.frequency
+  killswitch_waker = with Waker!
+    \add_trigger PeriodicTrigger
+      interval: 1 / args.frequency
     \add_trigger RedstoneTrigger!
     \on_awaken ->
       { :hour, :min, :sec } = os.date '!*t'
       print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
 
-      reactor, err = sole_peripheral 'fissionReactorLogicAdapter'
+      reactor, err = Reactor::find!
       if err?
         print err
         return
 
-      reactor_usable = false
-      try
-        reactor_usable or= reactor.getStatus!
-      catch err
-        print err
-      if not reactor_usable
+      state, err = reactor\state!
+      if err?
+        print "cannot get reactor state: #{err}"
+        return
+      if state.active != 'active'
+        print "skipping killswitch, reactor status is #{state.active}"
         return
 
-      action, err = check_reactor reactor
+      action, err = check_reactor state
       if err?
         print err
 
       switch action
         when 'SCRAM'
           print '!!! scramming reactor !!!'
-          reactor.scram!
+          reactor\scram!
         when nil
           -- Do nothing.
         else
           err ??= "unrecognised action #{action}"
 
-      heartbeat = T 'control.Heartbeat',
-        id: os.getComputerId!
-        type: 'killswitch'
-        subtype: killswitch_name
-        datetime: os.date '!*t'
+      send_heartbeat {
+        :killswitch_waker
         :action
         :err
-      rednet.broadcast heartbeat, 'skala:heartbeat'
-    \awaken!
-    \run!
+      }
+    \awaken! -- Kick-start
+  heartbeat_waker = with Waker!
+    \add_trigger PeriodicTrigger
+      interval: 1
+    \on_awaken -> send_heartbeat :killswitch_name
+    \awaken! -- Kick-start
+  Waker::run_many
+    * killswitch_waker
+    * heartbeat_waker
+
+send_heartbeat = $F '({killswitch_name: string}) -> <>', (fields) =>
+  heartbeat = T 'control.Heartbeat', {
+    id: os.getComputerId!
+    type: 'killswitch'
+    subtype: killswitch_name
+    datetime: os.date '!*t'
+    ...fields
+  }
+  rednet.broadcast heartbeat, 'skala:heartbeat'

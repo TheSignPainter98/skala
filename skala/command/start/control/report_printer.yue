@@ -1,0 +1,145 @@
+local *
+
+import 'skala.quicktype' as :F, :declare_type
+import 'skala.quicktype_macros' as $
+import 'skala.peripheral.sole' as :sole
+
+export class ReportPrinter
+  new: $F '() => <>', =>
+
+  print: $F '(peripheral.ReactorState, control.RecommendedAction) => ?string', (state, action) ->
+    TICKS_PER_SECOND = 20
+    KELVIN_OFFSET = 273.15
+
+    printer, err = sole 'printer'
+    if err?
+      return err
+
+    if not printer.newPage!
+      return 'error: cannot print due to missing paper, ink or output space'
+
+    print_state = $T '[{name: string, value: string}]', with {}
+      {
+        :status
+        :temperature
+        :coolant_filled
+        :heated_coolant_filled
+        :fuel_filled
+        :waste_filled
+        :actual_burn_rate
+        :target_burn_rate
+        :damage_percent
+        :heating_rate
+        :boil_efficiency
+      } = state
+      if status == 'active'
+        [] =
+          name: 'core temp'
+          value: '%.2f°C'\format temperature - KELVIN_OFFSET
+        [] =
+          name: "c'lnt lvl"
+          value: '%.2f%%'\format 100 * coolant_filled
+        [] =
+          name: "hot c'lnt level"
+          value: '%.2f%%'\format 100 * heated_coolant_filled
+        [] =
+          name: 'fuel lvl'
+          value: '%.2f%%'\format 100 * fuel_filled
+        [] =
+          name: 'waste lvl'
+          value: '%.2f%%'\format 100 * waste_filled
+        [] =
+          name: 'burn rate'
+          value: '%.2gmB/s'\format actual_burn_rate * TICKS_PER_SECOND
+        [] =
+          name: 'goal burn rate'
+          value: '%.2gmB/s'\format target_burn_rate * TICKS_PER_SECOND
+        [] =
+          name: 'damage'
+          value: '%.2f%%'\format 100 * damage_percent
+        [] =
+          name: 'heating rate'
+          value: '%.2gmB/s'\format heating_rate * TICKS_PER_SECOND
+        [] =
+          name: 'boil effncy'
+          value: '%.2f%%'\format 100 * boil_efficiency
+    table.sort print_state, (a, b) -> a.name, b.name
+
+    time = os.time 'ingame'
+    hour, hour_frac = math.modf time
+    minute, minute_frac = math.modf 60 * hour_frac
+    second, _ = math.modf 60 * minute_frac
+    time_str = '%02d:%02d:%02d'\format hour, minute, second
+
+    width, height = printer.getPageSize!
+
+    lines = with {}
+      [] = '>> S.K.A.L.A. report'
+      [] = ">> (#{time_str})"
+
+      [] = ''
+      [] = '> Recommendation:'
+      [] = ''
+      [] = recommended_action
+
+      [] = ''
+      [] = '> Reactor state:'
+      [] = ''
+      longest_name = 0
+      longest_value = 0
+      entries = with {}
+        for state_entry in *state_entries
+          name = state_entry.print_name ?? state_entry.name
+          if #name > longest_name
+            longest_name = #name
+
+          value = state_entry.print_value ?? state_entry.value
+          if #value > longest_value
+            longest_value = #value
+
+          [] =
+            :name
+            :value
+      if #entries == 0
+        [] = '-- no data --'
+      if longest_name + longest_value + 2 <= width
+        for { :name, :value } in *entries
+          padding = ' '\rep longest_name - #name
+          [] = "#{name}  #{padding}#{value}"
+      else
+        for { :name, :value } in *entries
+          [] = "#{name}: #{value}"
+
+    pages = with {}
+      current_page = {}
+      for line in *lines
+        for l in *wrap line, width
+          current_page[] = l
+          if #current_page == height
+            [] = current_page
+          current_page = {}
+        if #current_page > 0
+          [] = current_page
+
+    if #pages > printer.getInkLevel!
+      return "insufficient ink for #{#pages} pages"
+    if #pages > printer.getPaperLevel!
+      return "insufficient paper for #{#pages} pages"
+
+    for i = 1, #pages
+      page = pages[i]
+
+      if i > 1
+        printer.newPage!
+
+      if #pages > 1
+        printer.setPageTitle "Skala Reactor Report (#{i}/#{#pages})"
+      else
+        printer.setPageTitle "Skala Reactor Report"
+      for line_num = 1, #page
+        printer.setCursorPos 1, line_num
+        printer.write page[line_num]
+
+      printer.endPage!
+
+    nil

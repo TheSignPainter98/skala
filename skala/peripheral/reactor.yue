@@ -1,0 +1,88 @@
+local *
+
+import 'skala.quicktype' as :F, :declare_type
+import 'skala.quicktype_macros' as $
+import 'skala.peripheral.sole' as :sole
+
+declare_type 'peripheral.Reactor', [[{
+  activate: () -> <>,
+  scram: () -> <>,
+  getStatus: () -> boolean,
+  getTemperature: () -> number,
+  getCoolantFilledPercentage: () -> number,
+  getHeatedCoolantFilledPercentage: () -> number,
+  getFuelFilledPercentage: () -> number,
+  getWasteFilledPercentage: () -> number,
+  getActualBurnRate: () -> number,
+  getBurnRate: () -> number,
+  getDamagePercent: () -> number,
+  getHeatedCoolantFilledPercentage: () -> number,
+  getBoilEfficiency: () -> number,
+}]]
+declare_type 'peripheral.ReactorState', [[
+  {
+    status: "inactive"
+  } | {
+    status: "active",
+    temperature: number,
+    coolant_filled: number,
+    heated_coolant_filled: number,
+    fuel_filled: number,
+    waste_filled: number,
+    actual_burn_rate: number,
+    target_burn_rate: number,
+    damage_percent: number,
+    heating_rate: number,
+    boil_efficiency: number,
+  }
+]]
+export class Reactor
+  new: (@reactor) =>
+
+  @find: $F '() => <?Self, ?string>', =>
+    reactor, err = sole 'fissionReactorLogicAdapter'
+    if err?
+      return nil, err
+    ret = @@ reactor
+    ret, nil
+
+  scram: $F '() => ?string', =>
+    err = nil
+    try
+      @reactor.scram!
+    catch err2
+      err = err2
+    err
+
+  state: $F '() => <?peripheral.ReactorState, ?string>', =>
+    err = nil
+    state = nil
+    try
+      status = do
+        switch @reactor.getStatus!
+          when true
+            'active'
+          when false
+            'inactive'
+          else
+            error 'unreachable'
+      if status == 'inactive'
+        return status: 'inactive'
+
+      state = with {}
+        .status = status
+        .temperature = @reactor.getTemperature!
+        .coolant_filled = @reactor.getCoolantFilledPercentage!
+        .heated_coolant_filled = @reactor.getHeatedCoolantFilledPercentage!
+        .fuel_filled = @reactor.getFuelFilledPercentage!
+        .waste_filled = @reactor.getWasteFilledPercentage!
+        .actual_burn_rate = @reactor.getActualBurnRate!
+        .target_burn_rate = @reactor.getBurnRate!
+        .damage_percent = @reactor.getDamagePercent!
+        .heating_rate = @reactor.getHeatedCoolantFilledPercentage!
+        .boil_efficiency = @reactor.getBoilEfficiency!
+    catch err2
+      err = err2
+    if err?
+      return nil, err
+    state, nil

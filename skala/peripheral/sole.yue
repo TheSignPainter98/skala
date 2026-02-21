@@ -3,7 +3,7 @@ local *
 import 'skala.quicktype' as :F
 import 'skala.quicktype_macros' as $
 
-export sole_peripheral = $F '(string) -> <?some, ?string>', (kind) ->
+export sole = $F '(string) -> <?some, ?string>', (kind) ->
   peripherals = { peripheral.find kind }
   if #peripherals != 1
     return nil, "expected exactly one #{kind}: found #{#peripherals}"
