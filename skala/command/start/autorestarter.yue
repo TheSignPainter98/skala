@@ -7,7 +7,6 @@ import 'skala.quicktype_macros' as $
 import 'skala.util.waker' as :Waker, :PeriodicTrigger
 
 export register_args = (parser) ->
-  -- TODO(kcza): hyphenate!
   parser\add with Subcommand 'autorestarter'
     \description 'auto restart the reactor'
 
