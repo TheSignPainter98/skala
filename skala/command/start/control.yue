@@ -4,6 +4,8 @@ local *
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
+import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
+import 'skala.util.sole_peripheral' as :sole_peripheral
 
 declare_type 'control.Heartbeat', [[{
   id: number,
@@ -36,52 +38,27 @@ export DEFAULT_CONFIG = do
   table.concat lines, '\n'
 
 export main = $F '(control.Args) -> <>', (args) ->
-  ctx =
-    active: true
-  parallel.waitForAny unpack
-    * -> trigger_by_time ctx
-    * -> trigger_by_redstone ctx
-    * -> react ctx
-  error 'unreachable'
-
-trigger_by_time = (ctx) ->
-  while true
-    timer_id = os.startTimer 60 * 5
-    local id
-    repeat
-      _, id = os.pullEvent 'timer'
-    until id == timer_id
-    print 'activating due to timer'
-    ctx.active = true
-
-trigger_by_redstone = (ctx) ->
-  sides = redstone.getSides!
-  while true
-    os.pullEvent 'redstone'
-
-    high = false
-    for side in *sides
-      if redstone.getInput side
-        high = true
-        break
-    if high
-      print 'activating due to redstone'
-      ctx.active = true
-
-react = (ctx) ->
   ai = Ai 'http://localhost:8326'
 
+  with Waker!
+    \add_trigger PeriodicTrigger
+      interval: 60 * 5
+    \add_trigger RedstoneTrigger!
+    \on_awaken ->
+      reactor, err = Reactor::find!
+      if err?
+        print "cannot find reactor: #{err}"
+        continue
+    state = reactor\state!
+    \run!
+
+react = (ctx) ->
   while true
     if not ctx.active
       coroutine.yield!
       continue
     ctx.active = false
 
-    reactor, err = Reactor::find!
-    if err?
-      print "cannot find reactor: #{err}"
-      continue
-    state = reactor\state!
 
     print 'analysing reactor state'
     { :action_required, :recommended_action } = ai\request_advice state

@@ -12,45 +12,55 @@ declare_type 'waker.Waker', [[{
 declare_type 'waker.Trigger', [[{
   run: (waker.Waker) => !,
 }]]
-declare_type 'waker.Listener', '() -> <>'
+declare_type 'waker.Listener', '(?string) -> <>'
 export class Waker
   new: $F '() => <>', =>
-    @_triggers = $T '[waker.Trigger]', {}
-    @_awake = false
+    @_triggers = $T '[{name: ?string, trigger: waker.Trigger}]', {}
+    @_awake = $T '?string | boolean', false
     @_awaken_listeners = $T '[waker.Listener]', {}
 
   add_trigger: $F '(waker.Trigger) => Self', (trigger) =>
-    @_triggers[] = trigger
+    @_triggers[] = :trigger
+    @
+
+  add_named_trigger: $F '(string, waker.Trigger) => Self', (name, trigger) =>
+    @_triggers[] =
+      :name
+      :trigger
     @
 
   on_awaken: $F '(waker.Listener) => Self', (listener) =>
     @_awaken_listeners[] = listener
     @
 
-  awaken: $F '() => <>', =>
-    @_awake = true
+  awaken: $F '(?label) => <>', (@_awakened_by=true) =>
 
   run: $F '() => !', =>
     parallel.waitForAny unpack with {}
       for trigger in *@_triggers
         [] = -> trigger\run @
-        if @_awake -- Flag may be set by `trigger\run` call
-          break
       [] = @\_awakener
     error 'unreachable'
 
+  -- tasks: $F '() => []', =>
+    -- TODO(kcza): expose task list,
+
   _awakener: $F '() => !', =>
     while true
-      if not @_awake
+      if not @_awakened_by
         coroutine.yield!
         continue
-      @_awake = false
 
       for listener in *@_awaken_listeners
-        listener!
+        listener @_awakened_by
+      @_awakened_by = false
 
 export class PeriodicTrigger
-  new: $F '(number) => <>', (@_interval) =>
+  new: $F '(?{name: ?string, interval: number}) => <>', (opts={}) =>
+    {
+      name: @_name
+      interval: @_interval
+    } = opts
 
   run: $F '(waker.Waker) => !', (ctx) =>
     while true
@@ -59,13 +69,17 @@ export class PeriodicTrigger
       repeat
         _, id = os.pullEvent 'timer'
       until id == timer_id
-      ctx\awaken!
+      ctx\awaken @_name
 
 declare_type 'cc.Side', [[
   "top"|"bottom"|"left"|"right"|"front"|"back"
 ]]
 export class RedstoneTrigger
-  new: $F '(?cc.Side) => <>', (@_side) =>
+  new: $F '(?{name: ?string, side: ?cc.Side}) => <>', (opts={}) =>
+    {
+      name: @_name
+      side: @_side
+    } = opts
 
   run: $F '(waker.Waker) => !', (ctx) =>
     local sides_to_check
@@ -84,4 +98,4 @@ export class RedstoneTrigger
           break
       if not high
         continue
-      ctx\awaken!
+      ctx\awaken @_name
