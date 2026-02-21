@@ -5,18 +5,18 @@ import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
 
 export register_args = (parser) ->
-  parser\add with Subcommand 'sherbina'
+  parser\add with Subcommand 'observer'
     \description 'reactor logger (always watching)'
 
-declare_type 'sherbina.Args', [[{}]]
+declare_type 'observer.Args', [[{}]]
 
 export DEFAULT_CONFIG = do
   lines =
-    * '[sherbina]'
+    * '[observer]'
     * ''
   table.concat lines, '\n'
 
-export main = $F '(sherbina.Args) -> <>', (args) ->
+export main = $F '(observer.Args) -> <>', (args) ->
   store = Store 'reactor_logs'
 
   -- TODO(kcza): re-purpose this to be awoken by `skala:heartbeat` packets

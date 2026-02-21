@@ -7,15 +7,15 @@ import 'skala.util.toml'
 import 'skala.command.start' as :NODE_SPECS
 
 import 'skala.command.start.control'
-import 'skala.command.start.sherbina'
 import 'skala.command.start.killswitch'
+import 'skala.command.start.observer'
 
 export CONFIG_FILE = 'skala.toml'
 
 declare_type 'skala.Config', [[{
   control: ?control.Args,
   killswitch: ?killswitch.Args,
-  sherbina: ?sherbina.Args,
+  observer: ?observer.Args,
 }]]
 
 export register_args = (parser) ->
