@@ -37,7 +37,7 @@ export DEFAULT_CONFIG = do
   table.concat lines, '\n'
 
 export main = $F '(control.Args) -> <>', (args) ->
-  ai = Ai 'http://localhost:8326'
+  ai = Ai 'http://localhost:8326/v1'
 
   with Waker!
     \add_trigger PeriodicTrigger
