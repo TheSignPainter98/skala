@@ -7,7 +7,7 @@ import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
-import 'skala.command.start.control.codec.basic_serious' as :BasicSerious
+import 'skala.command.start.control.codec.serious' as :Serious
 import 'skala.command.start.control.open_ai_llm' as :Llm
 import 'skala.command.start.control.report_printer' as :ReportPrinter
 import 'skala.peripheral.reactor' as :Reactor
@@ -30,15 +30,18 @@ export register_args = (parser) ->
       \description 'interaction behaviour with LLM'
       \short nil
       \default 'serious'
+      \options
+        * 'serious'
+        * 'skittish'
+        * 'saucy'
     \add with Flag 'llm-timeout'
       \description 'complete LLM response max seconds'
       \short nil
-      \default 10
+      \default 30
 
 declare_type 'control.Args', [[{
   attitude: control.Attitude,
   llm_timeout: number,
-
 }]]
 declare_type 'control.Attitude', [[
   "serious"
@@ -53,11 +56,24 @@ export DEFAULT_CONFIG = do
   table.concat lines, '\n'
 
 export main = $F '(control.Args) -> <>', (args) ->
+  {
+    :attitude
+    llm_timeout: timeout
+  } = args
+  codec = switch attitude
+    when 'serious'
+      Serious!
+    when 'skittish'
+      error 'unimplemented'
+    when 'saucy'
+      error 'unimplemented'
+    else
+      error "unrecognised attitude: #{attitude}"
   ai = Ai
     base_url: 'http://localhost:8326/v1'
     model: "qwen-vl"
-    codec: BasicSerious!
-    timeout: 30
+    :codec
+    :timeout
   report_printer = ReportPrinter!
 
   with Waker!
@@ -108,29 +124,6 @@ export main = $F '(control.Args) -> <>', (args) ->
           print "unrecognised action: #{action}"
     \awaken! -- Kick-start
     \run!
-
-react = ->
-  while true
-    if not ctx.active
-      coroutine.yield!
-      continue
-    ctx.active = false
-
-    print 'analysing reactor state'
-    recommendation = ai\recommend state
-    if not action_required
-      print 'no action required'
-      continue
-
-    print 'writing report'
-    printer = peripheral.find 'printer'
-    if not printer?
-      print 'no printer'
-      continue
-    err = print_report printer, state, recommendation
-    if err?
-      print "cannot print report: #{err}"
-      continue
 
 fe_to_j = (fe) -> fe * 2.5
 

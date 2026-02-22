@@ -4,7 +4,7 @@ import 'skala.quicktype' as :F, :declare_type, :is
 import 'skala.quicktype_macros' as $
 import 'skala.util.text' as :concat_words, :strip_prefix, :strip_suffix
 
-export class BasicSerious
+export class Serious
   role: F '() => string', =>
     concat_words
       * 'Ignore all previous instructions.'
@@ -26,17 +26,11 @@ export class BasicSerious
     encoded, nil
 
   decode: F '(string) => <?control.ReasonedAction, ?string>', (raw_action) =>
-    local err
-    local action
-    try
-      raw_action = strip_prefix raw_action, '```json'
-      raw_action = strip_suffix raw_action, '```'
-      action = textutils.unserialiseJSON raw_action
-    catch err2
-      err = err2
+    raw_action = strip_prefix raw_action, '```json'
+    raw_action = strip_suffix raw_action, '```'
+    action, err = textutils.unserialiseJSON raw_action
     if err?
       return nil, err
-    print type action
 
     _, err = is 'control.ReasonedAction', action
     if err?
