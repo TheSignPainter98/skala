@@ -490,11 +490,17 @@ export class Subcommand
             continue
 
           repr = flag\_long_repr!
-          if description = flag._description
-            padding = ' '\rep longest_flag_repr_len - #repr
-            [] = " #{repr}#{padding}  #{description}"
+          default_repr = if default = flag._default
+            " (default: #{default})"
           else
-            [] = " #{repr}"
+            ""
+          options_repr = if options = flag._options
+            " (one of: #{table.concat options, ', '})"
+          else
+            ""
+          description = flag._description ?? ""
+          padding = ' '\rep longest_flag_repr_len - #repr
+          [] = " #{repr}#{padding}  #{description}#{default_repr}#{options_repr}"
 
     table.concat lines, '\n'
 
