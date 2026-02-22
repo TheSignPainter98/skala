@@ -14,6 +14,9 @@ export main = (_) ->
     url: 'http://localhost:8326/v1'
     role: "You are a computercraft computer in someone's base in Minecraft. Be nice... but not too nice."
     model: "qwen-vl"
+  print 'This is the debug chat.'
+  print 'LLM responses are only shown once all'
+  print 'tokens are generated.'
   while true
     io.write '>> '
     line = io.read '*l'
