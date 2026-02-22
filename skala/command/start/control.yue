@@ -183,6 +183,9 @@ export class Llm
     if err?
       return nil, "type error in response: #{err}"
 
-    message = llm_response.choices[1].message
+    choices = llm_response.choices
+    if #choices != 1
+      return nil, "llm returned unexpected number of choices: #{#choices}"
+    message = choices[1].message
     @_history[] = message
     message.content, nil
