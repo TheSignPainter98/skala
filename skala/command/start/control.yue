@@ -1,7 +1,7 @@
 local *
 
 -- import 'cc.strings' as :wrap
-import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype' as :declare_type, :F, :T
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
 import 'skala.util.text' as :concat_words

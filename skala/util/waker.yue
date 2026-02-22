@@ -112,7 +112,7 @@ export class RedstoneTrigger
     error 'unreachable'
 
 export class NetworkObserver
-  new: $F '({name: ?string, protocol: ?string})', (opts={}) =>
+  new: $F '({name: ?string, protocol: ?string}) => <>', (opts={}) =>
     {
       name: @_name
       protocol: @_protocol

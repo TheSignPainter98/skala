@@ -1,0 +1,23 @@
+local *
+
+import 'skala.clap' as :Flag, :Param, :Subcommand
+import 'skala.quicktype' as :is, :declare_type, :F
+import 'skala.quicktype_macros' as $
+import 'skala.command.start.control' as :Llm
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'chat'
+    \description 'chat with an LLM'
+
+export main = (_) ->
+  ADDR = 'http://localhost:8326/v1'
+  ROLE = "You are a computercraft computer in someone's base in Minecraft. Be nice... but not too nice."
+  with Llm ADDR, ROLE
+    while true
+      io.write '> '
+      line = io.read '*l'
+      response, err = \ask line
+      if err?
+        print "error: #{err}"
+        continue
+      print response

@@ -7,6 +7,7 @@ import 'skala.clap' as :ArgParser
 import 'skala.quicktype' as :declare_type
 
 import 'skala.command.autostart'
+import 'skala.command.chat'
 import 'skala.command.flash'
 import 'skala.command.install'
 import 'skala.command.start'
@@ -43,6 +44,8 @@ main = (raw_args) ->
     autostart.main a
   else if a = args.start
     start.main a
+  else if a = args.chat
+    chat.main a
   else if a = args.flash
     flash.main a
   else if a = args.install
@@ -58,6 +61,7 @@ parse_args = (args) ->
     \description 'reactor control system'
 
   autostart.register_args parser
+  chat.register_args parser
   flash.register_args parser
   install.register_args parser
   start.register_args parser

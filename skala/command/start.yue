@@ -8,7 +8,7 @@ import 'skala.command.start.autorestarter'
 import 'skala.command.start.control'
 import 'skala.command.start.killswitch'
 import 'skala.command.start.scrammer'
-import 'skala.command.start.sherbina'
+import 'skala.command.start.observer'
 
 declare_type 'start.NodeSpec', [[{
   DEFAULT_CONFIG: string,
@@ -20,7 +20,7 @@ export NODE_SPECS = $T '{string->start.NodeSpec}', {
   :control,
   :killswitch,
   :scrammer,
-  :sherbina,
+  :observer,
 }
 export NODE_KINDS = do
   node_kinds = [ kind for kind, _ in pairs NODE_SPECS ]
@@ -35,7 +35,7 @@ export register_args = (parser) ->
   control.register_args command
   killswitch.register_args command
   scrammer.register_args command
-  sherbina.register_args command
+  observer.register_args command
 
   parser\add command
 

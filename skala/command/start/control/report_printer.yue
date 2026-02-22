@@ -1,6 +1,6 @@
 local *
 
-import 'skala.quicktype' as :F, :declare_type
+import 'skala.quicktype' as :F, :T, :declare_type
 import 'skala.quicktype_macros' as $
 import 'skala.peripheral.sole' as :sole
 

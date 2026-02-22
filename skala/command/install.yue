@@ -9,7 +9,7 @@ import 'skala.editor' as :ABORT, :Editor
 
 import 'skala.command.start.control'
 import 'skala.command.start.killswitch'
-import 'skala.command.start.sherbina'
+import 'skala.command.start.observer'
 import 'skala.util.toml'
 
 export register_args = (parser) ->
