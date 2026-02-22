@@ -20,6 +20,8 @@ export main = (_) ->
   while true
     io.write '>> '
     line = io.read '*l'
+    if #line == 0
+      break
     response, err = llm\ask line
     if err?
       print "error: #{err}"
