@@ -10,4 +10,4 @@ else
   set binary 'bin/skala'
 end
 set err_line $argv[1]
-head -n $err_line < $binary | tail -n 1 | grep -oE '[^ -]+\.yue:[0-9]+$'
+head -n $err_line < $binary | tail -n 1 # | grep -oE '[^ -]+\.yue:[0-9]+$'

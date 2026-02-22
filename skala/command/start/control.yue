@@ -1,11 +1,16 @@
 local *
 
+-- Ensure type definitions are included.
+require 'skala.command.start.control.codec'
+
 -- import 'cc.strings' as :wrap
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
-import 'skala.clap' as :Subcommand
+import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
 import 'skala.command.start.control.codec.basic_serious' as :BasicSerious
+import 'skala.command.start.control.open_ai_llm' as :Llm
+import 'skala.peripheral.reactor' as :Reactor
 
 declare_type 'control.Heartbeat', [[{
   id: number,
@@ -21,9 +26,19 @@ declare_type 'control.Heartbeat', [[{
 export register_args = (parser) ->
   parser\add with Subcommand 'control'
     \description 'default reactor control system'
+    \add with Flag 'attitude'
+      \description 'interaction behaviour with LLM'
+      \short nil
+      \default 'serious'
+    \add with Flag 'llm-timeout'
+      \description 'complete LLM response max seconds'
+      \short nil
+      \default 10
 
 declare_type 'control.Args', [[{
   attitude: control.Attitude,
+  llm_timeout: number,
+
 }]]
 declare_type 'control.Attitude', [[
   "serious"
@@ -53,8 +68,15 @@ export main = $F '(control.Args) -> <>', (args) ->
         print "cannot find reactor: #{err}"
         return
       reactor_state, err = reactor\state!
+      if err?
+        print "cannot get reactor state: #{err}"
+        return
+
+      print 'reactor_state is...'
+      (require 'cc.pretty').pretty_print reactor_state
       -- TODO(kcza): control with the AI
-    state = reactor\state!
+      -- TODO(kcza): log its advice
+    \awaken! -- Kick-start
     \run!
 
 react = ->

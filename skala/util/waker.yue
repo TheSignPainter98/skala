@@ -15,18 +15,12 @@ declare_type 'waker.Trigger', [[{
 declare_type 'waker.Listener', '(?string) -> <>'
 export class Waker
   new: $F '() => <>', =>
-    @_triggers = $T '[{name: ?string, trigger: waker.Trigger}]', {}
+    @_triggers = $T '[waker.Trigger]', {}
     @_awake = $T '?string | boolean', false
     @_awaken_listeners = $T '[waker.Listener]', {}
 
   add_trigger: $F '(waker.Trigger) => Self', (trigger) =>
-    @_triggers[] = :trigger
-    @
-
-  add_named_trigger: $F '(string, waker.Trigger) => Self', (name, trigger) =>
-    @_triggers[] =
-      :name
-      :trigger
+    @_triggers[] = trigger
     @
 
   on_awaken: $F '(waker.Listener) => Self', (listener) =>
@@ -47,7 +41,7 @@ export class Waker
   run: $F '() => !', =>
     parallel.waitForAny unpack @_tasks!
 
-  tasks: $F '() => [() -> <>]', =>
+  _tasks: $F '() => [() -> <>]', =>
     with {}
       for trigger in *@_triggers
         [] = -> trigger\run @
