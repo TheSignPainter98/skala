@@ -83,31 +83,22 @@ declare_type 'control.ReactorAdvice', [[{
   action_required: boolean,
   recommended_action: control.RecommendedAction,
 }]]
-declare_type 'control.RecommendedAction', 'string' -- TODO(kcza): replace this placeholder with disjoined tables.
+declare_type 'control.RecommendedAction', [[{}]] -- TODO(kcza): complete me!
 class Ai
   new: $F '(string) => <>', (@_url) =>
-    @_history = $T '[string]', {}
     @_role = concat_words with {}
       [] = 'Be concise.'
       [] = 'Do not patronise.'
       [] = 'You are an RBMK nuclear reactor control computer.'
+    @_llm = Llm @_url, @_role
 
   request_advice: $F '(peripheral.ReactorState) => <?control.ReactorAdvice, ?string>', (state) =>
-    -- local raw_advice
-    -- with assert io.popen 'qwen-vl chat'
-    --   print 'writing prompt'
-    --   \write prompt
-    --   print 'flushing'
-    --   \flush!
-    --   print 'reading advice'
-    --   raw_advice = \read '*a'
-    --   \close!
-    message = concat_words with {}
+    request = concat_words with {}
       for k, v in pairs state
         [] = "The reactor's #{k} is #{v}."
       [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
       [] = '\n'
-    raw_advice, err = @_get_response message
+    raw_advice, err = @_llm\ask request
     raw_advice = "core temperature critical. Increase temperature immediately."
 
     recommended_action = nil
@@ -120,8 +111,13 @@ class Ai
     }
     ret, nil
 
-  _get_response: $F '(string) => <?string, ?string>', (message) =>
+export class Llm
+  new: $F '(string, string) => <>', (@_url, @_role) =>
+    @_history = $T '[string]', {}
+
+  ask: $F '(string) => <?string, ?string>', (request) =>
     @_history[] = "user: #{message}"
+
     params =
       ['x-message']: textutils.serialiseJSON @_history
       ['x-role']: @_role
@@ -135,4 +131,6 @@ class Ai
         if not line?
           break
         [] = line
+    @_history[] = "bot: #{response_text}"
+
     response_text, nil
