@@ -146,11 +146,12 @@ declare_type 'control.LlmResponse', [[{
   },
 }]]
 export class Llm
-  new: $F '({url: string, role: string, model: string}) => <>', (opts) =>
+  new: $F '({url: string, role: string, model: string, temperature: ?number}) => <>', (opts) =>
     {
       url: @_base_url
       role: @_role
       model: @_model
+      temperature: @_temperature = 0.7
     } = opts
     @_history = $T '[control.HistoryEntry]', {}
 
@@ -163,7 +164,7 @@ export class Llm
     data = textutils.serialiseJSON
       model: @_model
       messages: @_history
-      temperature: 0.7
+      temperature: @_temperature
     params =
       ['Content-Type']: 'application/json'
     response, err, err_response = http.post url, data, params
