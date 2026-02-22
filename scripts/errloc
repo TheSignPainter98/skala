@@ -1,0 +1,13 @@
+#!/usr/bin/fish
+
+argparse -N1 -X1 'binary=' -- $argv
+  or return
+
+set binary
+if not test -z $_flag_binary
+  set binary $_flag_binary
+else
+  set binary 'bin/skala'
+end
+set err_line $argv[1]
+head -n $err_line < $binary | tail -n 1 | grep -oE '[^ -]+\.yue:[0-9]+$'
