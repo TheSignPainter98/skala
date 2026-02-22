@@ -3,13 +3,13 @@ local *
 -- Ensure type definitions are included.
 require 'skala.command.start.control.codec'
 
--- import 'cc.strings' as :wrap
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
 import 'skala.command.start.control.codec.basic_serious' as :BasicSerious
 import 'skala.command.start.control.open_ai_llm' as :Llm
+import 'skala.command.start.control.report_printer' as :ReportPrinter
 import 'skala.peripheral.reactor' as :Reactor
 
 declare_type 'control.Heartbeat', [[{
@@ -57,12 +57,17 @@ export main = $F '(control.Args) -> <>', (args) ->
     base_url: 'http://localhost:8326/v1'
     model: "qwen-vl"
     codec: BasicSerious!
+    timeout: 30
+  report_printer = ReportPrinter!
 
   with Waker!
     \add_trigger PeriodicTrigger
       interval: 60 * 5
     \add_trigger RedstoneTrigger!
     \on_awaken ->
+      { :hour, :min, :sec } = os.date '!*t'
+      print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
+
       reactor, err = Reactor::find!
       if err?
         print "cannot find reactor: #{err}"
@@ -72,10 +77,35 @@ export main = $F '(control.Args) -> <>', (args) ->
         print "cannot get reactor state: #{err}"
         return
 
-      print 'reactor_state is...'
+      print 'Reactor state is...'
       (require 'cc.pretty').pretty_print reactor_state
-      -- TODO(kcza): control with the AI
-      -- TODO(kcza): log its advice
+
+      print 'Requesting advice from AI...'
+      recommendation, err = ai\recommend reactor_state
+      if err?
+        print "cannot get advice from LLM: #{err}"
+        return
+      print 'Got recommendation:'
+      (require 'cc.pretty').pretty_print recommendation
+
+      err = report_printer\print reactor_state, recommendation
+      if err?
+        print "cannot print report: #{err}"
+
+      {
+        :action
+      } = recommendation
+      switch action
+        when 'CONTINUE'
+          print "Taking no action"
+          -- Do nothing.
+        when 'SCRAM'
+          print "Scramming reactor!"
+          err = reactor\scram!
+          if err?
+            print "cannot scram reactor: #{err}"
+        else
+          print "unrecognised action: #{action}"
     \awaken! -- Kick-start
     \run!
 
@@ -87,7 +117,7 @@ react = ->
     ctx.active = false
 
     print 'analysing reactor state'
-    { :action_required, :recommended_action } = ai\request_advice state
+    recommendation = ai\recommend state
     if not action_required
       print 'no action required'
       continue
@@ -97,37 +127,53 @@ react = ->
     if not printer?
       print 'no printer'
       continue
-    err = print_report printer, state, recommended_action
+    err = print_report printer, state, recommendation
     if err?
       print "cannot print report: #{err}"
       continue
 
 fe_to_j = (fe) -> fe * 2.5
 
-declare_type 'control.ReactorAdvice', [[{
-  action_required: boolean,
-  recommended_action: control.RecommendedAction,
+declare_type 'control.ReasonedAction', [[
+  control.Action + { reasoning: string }
+]]
+declare_type 'control.Action', [[
+  control.NoAction
+  | control.ScramAction
+]]
+declare_type 'control.NoAction', [[{
+  action: "CONTINUE"
 }]]
-declare_type 'control.RecommendedAction', [[{}]] -- TODO(kcza): complete me!
+declare_type 'control.ScramAction', [[{
+  action: "SCRAM",
+}]]
+declare_type 'control.AiArgs', [[{
+  base_url: string,
+  model: string,
+  codec: control.LlmCodec,
+  timeout: ?number,
+}]]
 class Ai
-  new: $F '({base_url: string, model: string, codec: control.LlmCodec}) => <>', (opts) =>
+  new: $F '(control.AiArgs) => <>', (opts) =>
     {
       :base_url
       :model
       codec: @_codec
+      :timeout
     } = opts
     role = @_codec\role!
     @_llm = Llm
       :base_url
       :role
       :model
+      :timeout
 
-  request_advice: $F '(peripheral.ReactorState) => <?control.ReactorAdvice, ?string>', (state) =>
+  recommend: $F '(peripheral.ReactorState) => <?control.ReasonedAction, ?string>', (state) =>
     request = @_codec\encode state
-    raw_advice, err = @_llm\ask request
+    raw_recommendation, err = @_llm\ask request
     if err?
       return nil, err
-    advice, err = @_codec\decode raw_advice
+    recommendation, err = @_codec\decode raw_recommendation
     if err?
       return nil, err
-    advice, nil
+    recommendation, nil

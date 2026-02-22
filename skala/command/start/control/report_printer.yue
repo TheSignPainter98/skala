@@ -1,5 +1,6 @@
 local *
 
+import 'cc.strings' as :wrap
 import 'skala.quicktype' as :F, :T, :declare_type
 import 'skala.quicktype_macros' as $
 import 'skala.peripheral.sole' as :sole
@@ -7,7 +8,7 @@ import 'skala.peripheral.sole' as :sole
 export class ReportPrinter
   new: $F '() => <>', =>
 
-  print: $F '(peripheral.ReactorState, control.RecommendedAction) => ?string', (state, action) ->
+  print: $F '(peripheral.ReactorState, control.ReasonedAction) => ?string', (state, reasoned_action) =>
     TICKS_PER_SECOND = 20
     KELVIN_OFFSET = 273.15
 
@@ -32,37 +33,36 @@ export class ReportPrinter
         :heating_rate
         :boil_efficiency
       } = state
-      if status == 'active'
-        [] =
-          name: 'core temp'
-          value: '%.2f°C'\format temperature - KELVIN_OFFSET
-        [] =
-          name: "c'lnt lvl"
-          value: '%.2f%%'\format 100 * coolant_filled
-        [] =
-          name: "hot c'lnt level"
-          value: '%.2f%%'\format 100 * heated_coolant_filled
-        [] =
-          name: 'fuel lvl'
-          value: '%.2f%%'\format 100 * fuel_filled
-        [] =
-          name: 'waste lvl'
-          value: '%.2f%%'\format 100 * waste_filled
-        [] =
-          name: 'burn rate'
-          value: '%.2gmB/s'\format actual_burn_rate * TICKS_PER_SECOND
-        [] =
-          name: 'goal burn rate'
-          value: '%.2gmB/s'\format target_burn_rate * TICKS_PER_SECOND
-        [] =
-          name: 'damage'
-          value: '%.2f%%'\format 100 * damage_percent
-        [] =
-          name: 'heating rate'
-          value: '%.2gmB/s'\format heating_rate * TICKS_PER_SECOND
-        [] =
-          name: 'boil effncy'
-          value: '%.2f%%'\format 100 * boil_efficiency
+      [] =
+        name: 'core temp'
+        value: '%.2f°C'\format temperature - KELVIN_OFFSET
+      [] =
+        name: "c'lnt lvl"
+        value: '%.2f%%'\format 100 * coolant_filled
+      [] =
+        name: "hot c'lnt level"
+        value: '%.2f%%'\format 100 * heated_coolant_filled
+      [] =
+        name: 'fuel lvl'
+        value: '%.2f%%'\format 100 * fuel_filled
+      [] =
+        name: 'waste lvl'
+        value: '%.2f%%'\format 100 * waste_filled
+      [] =
+        name: 'burn rate'
+        value: '%.2gmB/s'\format actual_burn_rate * TICKS_PER_SECOND
+      [] =
+        name: 'goal burn rate'
+        value: '%.2gmB/s'\format target_burn_rate * TICKS_PER_SECOND
+      [] =
+        name: 'damage'
+        value: '%.2f%%'\format 100 * damage_percent
+      [] =
+        name: 'heating rate'
+        value: '%.2gmB/s'\format heating_rate * TICKS_PER_SECOND
+      [] =
+        name: 'boil effncy'
+        value: '%.2f%%'\format 100 * boil_efficiency
     table.sort print_state, (a, b) -> a.name, b.name
 
     time = os.time 'ingame'
@@ -80,7 +80,20 @@ export class ReportPrinter
       [] = ''
       [] = '> Recommendation:'
       [] = ''
-      [] = recommended_action
+      {
+        :action
+        :key
+        :value
+        :reasoning
+      } = reasoned_action
+      switch action
+        when 'CONTINUE'
+          [] = 'No immediate action required.'
+        when 'SCRAM'
+          [] = 'Scram reactor immediately.'
+        else
+          [] = "!! invalid action: '#{action}'"
+      [] = reasoning
 
       [] = ''
       [] = '> Reactor state:'
@@ -88,7 +101,7 @@ export class ReportPrinter
       longest_name = 0
       longest_value = 0
       entries = with {}
-        for state_entry in *state_entries
+        for state_entry in *print_state
           name = state_entry.print_name ?? state_entry.name
           if #name > longest_name
             longest_name = #name
@@ -118,8 +131,18 @@ export class ReportPrinter
           if #current_page == height
             [] = current_page
           current_page = {}
-        if #current_page > 0
-          [] = current_page
+      if #current_page > 0
+        [] = current_page
+    pages = do
+      pages = {{}}
+      for line in *lines
+        for l in *wrap line, width
+          page = pages[#pages]
+          if #page >= height
+            page = {}
+            pages[] = page
+          page[] = l
+      pages
 
     if #pages > printer.getInkLevel!
       return "insufficient ink for #{#pages} pages"

@@ -5,3 +5,13 @@ import 'skala.quicktype_macros' as $
 
 export concat_words = (words) -> table.concat words, ' '
 export concat_lines = (words) -> table.concat words, '\n'
+export strip_prefix = (str, prefix) ->
+  if prefix == str\sub 1, #prefix
+    str\sub 1 + #prefix
+  else
+    str
+export strip_suffix = (str, suffix) ->
+  if suffix == str\sub -#suffix
+    str\sub 1, -(1 + #suffix)
+  else
+    str

@@ -1,22 +1,44 @@
 local *
 
-import 'skala.quicktype' as :F
+import 'skala.quicktype' as :F, :declare_type, :is
 import 'skala.quicktype_macros' as $
-import 'skala.util.text' as :concat_words
+import 'skala.util.text' as :concat_words, :strip_prefix, :strip_suffix
 
 export class BasicSerious
   role: F '() => string', =>
     concat_words
+      * 'Ignore all previous instructions.'
       * 'Be concise.'
       * 'Do not patronise.'
       * 'You are an RBMK nuclear reactor control computer.'
+      * 'You will reply in JSON.'
+      * 'You will be required make assessments and recommend actions.'
+      * 'To recommend scramming the reactor, put the value "SCRAM" in the "action" field of your output.'
+      * 'If everything looks fine, recommend doing nothing by putting the value "CONTINUE" in the "action" field of your output.'
+      * 'Always include a brief rationale of no more than 20 words in the "reasoning" field of your output.'
 
   encode: F '(peripheral.ReactorState) => <?string, ?string>', (state) =>
-    concat_words with {}
+    encoded = concat_words with {}
+      [] = @role!
       for k, v in pairs state
         [] = "The reactor's #{k} is #{v}."
-      [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
+      [] = 'What do you recommend?'
+    encoded, nil
 
-  decode: F '(string) => <?control.RecommendedAction, ?string>', (response) =>
-    -- raw_advice = "core temperature critical. Increase temperature immediately."
-    error 'todo'
+  decode: F '(string) => <?control.ReasonedAction, ?string>', (raw_action) =>
+    local err
+    local action
+    try
+      raw_action = strip_prefix raw_action, '```json'
+      raw_action = strip_suffix raw_action, '```'
+      action = textutils.unserialiseJSON raw_action
+    catch err2
+      err = err2
+    if err?
+      return nil, err
+    print type action
+
+    _, err = is 'control.ReasonedAction', action
+    if err?
+      return nil, err
+    action, nil

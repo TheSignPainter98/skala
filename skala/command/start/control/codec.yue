@@ -5,5 +5,5 @@ import 'skala.quicktype' as :declare_type
 declare_type 'control.LlmCodec', [[{
   role: () => string,
   encode: (peripheral.ReactorState) => <?string, ?string>,
-  decode: (string) => <?control.RecommendedAction, ?string>,
+  decode: (string) => <?control.ReasonedAction, ?string>,
 }]]
