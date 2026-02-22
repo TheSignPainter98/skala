@@ -4,6 +4,7 @@ local *
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
+import 'skala.util.text' as :concat_words
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
 
 declare_type 'control.Heartbeat', [[{
@@ -84,19 +85,14 @@ declare_type 'control.ReactorAdvice', [[{
 }]]
 declare_type 'control.RecommendedAction', 'string' -- TODO(kcza): replace this placeholder with disjoined tables.
 class Ai
-  new: $F '(string) => <>', (@address) =>
-
-  request_advice: $F '(peripheral.ReactorState) => <?control.ReactorAdvice, ?string>', (state) =>
-    prompt_parts = with {}
+  new: $F '(string) => <>', (@_url) =>
+    @_history = $T '[string]', {}
+    @_role = concat_words with {}
       [] = 'Be concise.'
       [] = 'Do not patronise.'
       [] = 'You are an RBMK nuclear reactor control computer.'
-      for k, v in pairs state
-        [] = "The reactor's #{k} is #{v}."
-      [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
-      [] = '\n'
-    prompt = table.concat prompt_parts, ' '
 
+  request_advice: $F '(peripheral.ReactorState) => <?control.ReactorAdvice, ?string>', (state) =>
     -- local raw_advice
     -- with assert io.popen 'qwen-vl chat'
     --   print 'writing prompt'
@@ -106,6 +102,12 @@ class Ai
     --   print 'reading advice'
     --   raw_advice = \read '*a'
     --   \close!
+    message = concat_words with {}
+      for k, v in pairs state
+        [] = "The reactor's #{k} is #{v}."
+      [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
+      [] = '\n'
+    raw_advice, err = @_get_response message
     raw_advice = "core temperature critical. Increase temperature immediately."
 
     recommended_action = nil
@@ -117,3 +119,20 @@ class Ai
       :recommended_action
     }
     ret, nil
+
+  _get_response: $F '(string) => <?string, ?string>', (message) =>
+    @_history[] = "user: #{message}"
+    params =
+      ['x-message']: textutils.serialiseJSON @_history
+      ['x-role']: @_role
+    response, err = http.post @_address, 'string', params
+    if err?
+      return nil, err
+
+    response_text = concat_words with {}
+      while true
+        line = response.readLine!
+        if not line?
+          break
+        [] = line
+    response_text, nil

@@ -1,0 +1,6 @@
+local *
+
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
+
+export concat_words = (words) -> table.concat words, ' '
