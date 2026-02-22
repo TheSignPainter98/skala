@@ -14,6 +14,7 @@ export main = (_) ->
     base_url: 'http://localhost:8326/v1'
     role: "You are a computercraft computer in someone's base in Minecraft. Be nice... but not too nice."
     model: "qwen-vl"
+	timeout: 30
   print 'This is the debug chat.'
   print 'LLM responses are only shown once all'
   print 'tokens are generated.'

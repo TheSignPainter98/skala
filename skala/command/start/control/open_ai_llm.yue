@@ -38,13 +38,21 @@ declare_type 'control.LlmResponse', [[{
     predicted_per_second: number,
   },
 }]]
+declare_type 'control.LlmArgs', [[{
+  base_url: string,
+  role: string,
+  model: string,
+  temperature: ?number,
+  timeout: ?number,
+}]]
 export class Llm
-  new: $F '({base_url: string, role: string, model: string, temperature: ?number}) => <>', (opts) =>
+  new: $F '(control.LlmArgs) => <>', (opts) =>
     {
       base_url: @_base_url
       role: @_role
       model: @_model
       temperature: @_temperature = 0.7
+      timeout: @_timeout = 10
     } = opts
     @_history = $T '[control.HistoryEntry]', {}
 
@@ -54,16 +62,22 @@ export class Llm
       content: message
 
     url = "#{@_base_url}/chat/completions"
-    data = textutils.serialiseJSON
+    body = textutils.serialiseJSON
       model: @_model
       messages: @_history
       temperature: @_temperature
-    params =
+    headers =
       ['Content-Type']: 'application/json'
-    response, err, err_response = http.post url, data, params
+    response, err, err_response = http.post
+      :url
+      :headers
+      :body
+      timeout: @_timeout
     if err?
-      lines = err_response.readAll!
-      return nil, "#{err} (#{lines})"
+      if err_response?
+        lines = err_response.readAll!
+        return nil, "#{err} (#{lines})"
+      return nil, err
 
     raw_response = concat_lines with {}
       while true
