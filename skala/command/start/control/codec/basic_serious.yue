@@ -1,0 +1,22 @@
+local *
+
+import 'skala.quicktype' as :F
+import 'skala.quicktype_macros' as $
+import 'skala.util.text' as :concat_words
+
+export class BasicSerious
+  role: F '() => string', =>
+    concat_words
+      * 'Be concise.'
+      * 'Do not patronise.'
+      * 'You are an RBMK nuclear reactor control computer.'
+
+  encode: F '(peripheral.ReactorState) => <?string, ?string>', (state) =>
+    concat_words with {}
+      for k, v in pairs state
+        [] = "The reactor's #{k} is #{v}."
+      [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
+
+  decode: F '(string) => <?control.RecommendedAction, ?string>', (response) =>
+    -- raw_advice = "core temperature critical. Increase temperature immediately."
+    error 'todo'

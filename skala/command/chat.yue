@@ -3,7 +3,7 @@ local *
 import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.quicktype' as :is, :declare_type, :F
 import 'skala.quicktype_macros' as $
-import 'skala.command.start.control' as :Llm
+import 'skala.command.start.control.open_ai_llm' as :Llm
 
 export register_args = (parser) ->
   parser\add with Subcommand 'chat'
@@ -11,7 +11,7 @@ export register_args = (parser) ->
 
 export main = (_) ->
   llm = Llm
-    url: 'http://localhost:8326/v1'
+    base_url: 'http://localhost:8326/v1'
     role: "You are a computercraft computer in someone's base in Minecraft. Be nice... but not too nice."
     model: "qwen-vl"
   print 'This is the debug chat.'

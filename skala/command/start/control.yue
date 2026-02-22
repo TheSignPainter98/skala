@@ -1,11 +1,11 @@
 local *
 
 -- import 'cc.strings' as :wrap
-import 'skala.quicktype' as :declare_type, :F, :T, :is
+import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand
-import 'skala.util.text' as :concat_words, :concat_lines
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
+import 'skala.command.start.control.codec.basic_serious' as :BasicSerious
 
 declare_type 'control.Heartbeat', [[{
   id: number,
@@ -38,7 +38,10 @@ export DEFAULT_CONFIG = do
   table.concat lines, '\n'
 
 export main = $F '(control.Args) -> <>', (args) ->
-  ai = Ai 'http://localhost:8326/v1'
+  ai = Ai
+    base_url: 'http://localhost:8326/v1'
+    model: "qwen-vl"
+    codec: BasicSerious!
 
   with Waker!
     \add_trigger PeriodicTrigger
@@ -85,108 +88,24 @@ declare_type 'control.ReactorAdvice', [[{
 }]]
 declare_type 'control.RecommendedAction', [[{}]] -- TODO(kcza): complete me!
 class Ai
-  new: $F '(string) => <>', (@_url) =>
-    @_role = concat_words with {}
-      [] = 'Be concise.'
-      [] = 'Do not patronise.'
-      [] = 'You are an RBMK nuclear reactor control computer.'
-    @_llm = Llm @_url, @_role
+  new: $F '({base_url: string, model: string, codec: control.LlmCodec}) => <>', (opts) =>
+    {
+      :base_url
+      :model
+      codec: @_codec
+    } = opts
+    role = @_codec\role!
+    @_llm = Llm
+      :base_url
+      :role
+      :model
 
   request_advice: $F '(peripheral.ReactorState) => <?control.ReactorAdvice, ?string>', (state) =>
-    request = concat_words with {}
-      for k, v in pairs state
-        [] = "The reactor's #{k} is #{v}."
-      [] = 'If this is concerning, report why you are concerned and what the operator should do to remedy the situation, otherwise, just say "no".'
-      [] = '\n'
+    request = @_codec\encode state
     raw_advice, err = @_llm\ask request
-    raw_advice = "core temperature critical. Increase temperature immediately."
-
-    recommended_action = nil
-    action_required = not (raw_advice\sub 1, 3)\lower!\match '^No.'
-    if action_required
-      recommended_action = raw_advice
-    ret = {
-      :action_required
-      :recommended_action
-    }
-    ret, nil
-
-declare_type 'control.HistoryEntry', [[{
-  role: string,
-  content: string,
-}]]
-declare_type 'control.LlmResponse', [[{
-  choices: [{
-    finish_reason: "stop",
-    index: number,
-    message: {
-      role: "user"|"assistant",
-      content: string,
-    },
-  }],
-  created: number,
-  model: string,
-  system_fingerprint: string,
-  object: string,
-  usage: {
-    completion_tokens: number,
-    prompt_tokens: number,
-    total_tokens: number,
-  },
-  id: string,
-  timings: {
-    prompt_n: number,
-    prompt_ms: number,
-    prompt_per_token_ms: number,
-    prompt_per_second: number,
-    predicted_n: number,
-    predicted_ms: number,
-    predicted_per_token_ms: number,
-    predicted_per_second: number,
-  },
-}]]
-export class Llm
-  new: $F '({url: string, role: string, model: string, temperature: ?number}) => <>', (opts) =>
-    {
-      url: @_base_url
-      role: @_role
-      model: @_model
-      temperature: @_temperature = 0.7
-    } = opts
-    @_history = $T '[control.HistoryEntry]', {}
-
-  ask: $F '(string) => <?string, ?string>', (message) =>
-    @_history[] =
-      role: 'user'
-      content: message
-
-    url = "#{@_base_url}/chat/completions"
-    data = textutils.serialiseJSON
-      model: @_model
-      messages: @_history
-      temperature: @_temperature
-    params =
-      ['Content-Type']: 'application/json'
-    response, err, err_response = http.post url, data, params
     if err?
-      lines = err_response.readAll!
-      return nil, "#{err} (#{lines})"
-
-    raw_response = concat_lines with {}
-      while true
-        line = response.readLine!
-        if not line?
-          break
-        [] = line
-    local llm_response_text
-    llm_response = textutils.unserialiseJSON raw_response
-    _, err = is 'control.LlmResponse', llm_response
+      return nil, err
+    advice, err = @_codec\decode raw_advice
     if err?
-      return nil, "type error in response: #{err}"
-
-    choices = llm_response.choices
-    if #choices != 1
-      return nil, "llm returned unexpected number of choices: #{#choices}"
-    message = choices[1].message
-    @_history[] = message
-    message.content, nil
+      return nil, err
+    advice, nil
