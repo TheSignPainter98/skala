@@ -10,14 +10,15 @@ export register_args = (parser) ->
     \description 'chat with an LLM'
 
 export main = (_) ->
-  ADDR = 'http://localhost:8326/v1'
-  ROLE = "You are a computercraft computer in someone's base in Minecraft. Be nice... but not too nice."
-  with Llm ADDR, ROLE
-    while true
-      io.write '> '
-      line = io.read '*l'
-      response, err = \ask line
-      if err?
-        print "error: #{err}"
-        continue
-      print response
+  llm = Llm
+    url: 'http://localhost:8326/v1'
+    role: "You are a computercraft computer in someone's base in Minecraft. Be nice... but not too nice."
+    model: "qwen-vl"
+  while true
+    io.write '>> '
+    line = io.read '*l'
+    response, err = llm\ask line
+    if err?
+      print "error: #{err}"
+      continue
+    print response
