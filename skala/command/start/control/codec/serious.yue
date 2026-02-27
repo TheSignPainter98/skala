@@ -19,7 +19,6 @@ export class Serious
 
   encode: F '(peripheral.ReactorState) => <?string, ?string>', (state) =>
     encoded = concat_words with {}
-      [] = @role!
       for k, v in pairs state
         [] = "The reactor's #{k} is #{v}."
       [] = 'What do you recommend?'
