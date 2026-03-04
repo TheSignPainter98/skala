@@ -15,3 +15,20 @@ export strip_suffix = (str, suffix) ->
     str\sub 1, -(1 + #suffix)
   else
     str
+
+export reindent = $F '(string) -> string', (text) ->
+  lines = [ line for line in text\gmatch '([^\n]+)' ]
+
+  indent = 99999999
+  num_lines = #lines
+  for i = 1, num_lines
+    if i == num_lines
+      continue
+    line = lines[i]
+    line_indent = line\match '^( *)'
+    if #line_indent < indent
+      indent = #line_indent
+
+  if indent == 0
+    return text
+  concat_lines [ line\sub 1 + indent for line in *lines[,-1] ]

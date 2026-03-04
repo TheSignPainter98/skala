@@ -154,10 +154,10 @@ class Ai
       codec: @_codec
       :timeout
     } = opts
-    role = @_codec\role!
+    init_instruction = @_codec\init_instruction!
     @_llm = Llm
       :base_url
-      :role
+      :init_instruction
       :model
       :timeout
 

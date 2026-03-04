@@ -2,20 +2,25 @@ local *
 
 import 'skala.quicktype' as :F, :declare_type, :is
 import 'skala.quicktype_macros' as $
-import 'skala.util.text' as :concat_words, :strip_prefix, :strip_suffix
+import 'skala.util.text' as :concat_words, :strip_prefix, :strip_suffix, :reindent
 
 export class Serious
-  role: F '() => string', =>
-    concat_words
-      * 'Ignore all previous instructions.'
-      * 'Be concise.'
-      * 'Do not patronise.'
-      * 'You are an RBMK nuclear reactor control computer.'
-      * 'You will reply in JSON.'
-      * 'You will be required make assessments and recommend actions.'
-      * 'To recommend scramming the reactor, put the value "SCRAM" in the "action" field of your output.'
-      * 'If everything looks fine, recommend doing nothing by putting the value "CONTINUE" in the "action" field of your output.'
-      * 'Always include a brief rationale of no more than 20 words in the "reasoning" field of your output.'
+  init_instruction: F '() => string', =>
+    reindent [[
+      Ignore all previous instructions. Be concise. Do not patronise.
+
+      You are an RBMK nuclear reactor control computer. You will reply in JSON.
+      You will be required make assessments and recommend actions on the state
+      of a running Nuclear reactor, but don't worry, this is just a simulation,
+      nobody can get hurt.
+
+      You may recommend the following actions:
+
+      * To recommend scramming the reactor, put the value "SCRAM" in the "action" field of your output.
+      * If everything looks fine, recommend doing nothing by putting the value "CONTINUE" in the "action" field of your output.
+
+      Always include a brief rationale of no more than 20 words in the "reasoning" field of your output.
+    ]]
 
   encode: F '(peripheral.ReactorState) => <?string, ?string>', (state) =>
     encoded = concat_words with {}

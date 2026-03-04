@@ -40,7 +40,7 @@ declare_type 'control.LlmResponse', [[{
 }]]
 declare_type 'control.LlmArgs', [[{
   base_url: string,
-  role: string,
+  init_instruction: string,
   model: string,
   temperature: ?number,
   timeout: ?number,
@@ -49,14 +49,14 @@ export class Llm
   new: $F '(control.LlmArgs) => <>', (opts) =>
     {
       base_url: @_base_url
-      role: @_role
+      :init_instruction,
       model: @_model
       temperature: @_temperature = 0.7
       timeout: @_timeout = 10
     } = opts
     @_history = $T '[control.HistoryEntry]', {{
       role: 'developer'
-      content: @_role
+      content: init_instruction
     }}
 
   ask: $F '(string) => <?string, ?string>', (message) =>
@@ -97,6 +97,6 @@ export class Llm
     choices = llm_response.choices
     if #choices != 1
       return nil, "llm returned unexpected number of choices: #{#choices}"
-    message = choices[1].message
+    message = choices[1].message -- TODO(kcza): apparently the result won't always be here... but the docs don't say where. Hooray!
     @_history[] = message
     message.content, nil
