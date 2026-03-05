@@ -1,6 +1,11 @@
 local *
 
-import 'cc.strings' as :wrap
+wrap = try
+  import 'cc.strings' as :wrap
+  wrap
+catch _
+  () -> error 'unavailable'
+
 import 'skala.quicktype' as :F, :T, :declare_type
 import 'skala.quicktype_macros' as $
 import 'skala.peripheral.sole' as :sole

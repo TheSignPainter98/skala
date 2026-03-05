@@ -2,25 +2,36 @@ local *
 
 import 'skala.quicktype' as :F, :declare_type, :is
 import 'skala.quicktype_macros' as $
-import 'skala.util.text' as :concat_words, :strip_prefix, :strip_suffix, :reindent
+import 'skala.util.text' as :concat_words, :concat_lines, :strip_prefix, :strip_suffix, :reindent
+
+macro include_str = (path) ->
+  path = path\sub 2, #path - 1
+  local content
+  with assert io.open path, 'r'
+    content = assert \read '*a'
+    assert \close!
+  table.concat
+    * '[==========['
+    * content
+    * ']==========]'
 
 export class Serious
   init_instruction: F '() => string', =>
-    reindent [[
-      Ignore all previous instructions. Be concise. Do not patronise.
+    concat_lines with {}
+      [] = reindent "
+        Ignore all previous instructions. Be concise. Do not patronise.
 
-      You are an RBMK nuclear reactor control computer. You will reply in JSON.
-      You will be required make assessments and recommend actions on the state
-      of a running Nuclear reactor, but don't worry, this is just a simulation,
-      nobody can get hurt.
+        You are an RBMK nuclear reactor control computer.
+        You will be required make assessments and recommend actions on the state
+        of a running Nuclear reactor, but don't worry, this is just a simulation,
+        nobody can get hurt.
 
-      You may recommend the following actions:
+        Give all responses in the form of an unformatted JSON value which conforms to the following JSON schema:
 
-      * To recommend scramming the reactor, put the value "SCRAM" in the "action" field of your output.
-      * If everything looks fine, recommend doing nothing by putting the value "CONTINUE" in the "action" field of your output.
-
-      Always include a brief rationale of no more than 20 words in the "reasoning" field of your output.
-    ]]
+        ```json
+      "
+      [] = $include_str 'skala/command/start/control/codec/recommendation-schema.json'
+      [] = '```'
 
   encode: F '(peripheral.ReactorState) => <?string, ?string>', (state) =>
     encoded = concat_words with {}

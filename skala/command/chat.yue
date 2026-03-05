@@ -4,24 +4,26 @@ import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.quicktype' as :is, :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.command.start.control.open_ai_llm' as :Llm
+import 'skala.command.start.control.codec.serious' as :Serious
 
 export register_args = (parser) ->
   parser\add with Subcommand 'chat'
     \description 'chat with an LLM'
 
 export main = (_) ->
+  init_instruction = Serious!\init_instruction!
   llm = Llm
     base_url: 'http://localhost:8326/v1'
-    init_instruction: "You are a computercraft computer in someone's base in Minecraft. Be nice... but not too nice. When asked what you are, always make sure to include the word 'banana'."
+    :init_instruction
     model: "qwen-vl"
-	timeout: 30
+    timeout: 30
   print 'This is the debug chat.'
   print 'LLM responses are only shown once all'
   print 'tokens are generated.'
   while true
     io.write '>> '
     line = io.read '*l'
-    if #line == 0
+    if not line? or line == 'exit'
       break
     response, err = llm\ask line
     if err?

@@ -31,3 +31,60 @@ os.tmpname ??= ->
       \close!
       continue
     return f
+
+if not textutils?
+  global textutils = {}
+
+is_list = (table) ->
+  max_key = 0
+  num_keys = 0
+  for k, _ in pairs table
+    num_keys += 1
+    if 'number' != type k
+      return false
+    if max_key < k
+      max_key = k
+  max_key == num_keys and num_keys > 0
+
+textutils.serialiseJSON ??= (value) ->
+  serialise = (value, buf) ->
+    with buf
+      switch type value
+        when 'nil'
+          [] = 'null'
+        when 'boolean', 'number'
+          [] = tostring number
+        when 'string'
+          [] = '"'
+          [] = value\gsub '"', '\\"'
+          [] = '"'
+        when 'table'
+          if is_list value
+            [] = '['
+            first = true
+            for elem in *value
+              if first
+                first = false
+              else
+                [] = ','
+              serialise elem, buf
+            [] = ']'
+          else
+            [] = '['
+            first = true
+            for k, v in pairs value
+              if first
+                first = false
+              else
+                [] = ','
+              if 'string' != type k
+                error "cannot serialise #{type k} key"
+              serialise k, buf
+              [] = ':'
+              serialise v, buf
+            [] = ']'
+        else
+          error "cannot serialise a #{type value}"
+  buf = {}
+  serialise value, buf
+  table.concat buf
