@@ -1,0 +1,9 @@
+#!/bin/bash
+
+set -e
+
+skala=$(realpath bin/skala)
+
+for computer in ~/.local/share/PrismLauncher/instances/*/minecraft/saves/*/computercraft/*/; do
+	ln -sf "$skala" "$computer"
+done
