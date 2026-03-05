@@ -70,7 +70,7 @@ textutils.serialiseJSON ??= (value) ->
               serialise elem, buf
             [] = ']'
           else
-            [] = '['
+            [] = '{'
             first = true
             for k, v in pairs value
               if first
@@ -82,7 +82,7 @@ textutils.serialiseJSON ??= (value) ->
               serialise k, buf
               [] = ':'
               serialise v, buf
-            [] = ']'
+            [] = '}'
         else
           error "cannot serialise a #{type value}"
   buf = {}
