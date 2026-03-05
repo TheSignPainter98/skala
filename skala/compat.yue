@@ -88,3 +88,13 @@ textutils.serialiseJSON ??= (value) ->
   buf = {}
   serialise value, buf
   table.concat buf
+
+if not http?
+  global http = {}
+http.post ??= (opts) ->
+  { :url, :headers, :body, :timeout } = opts
+  headers = (textutils.serialiseJSON headers)\gsub '"', '\\"'
+  body = (textutils.serialiseJSON body)\gsub '"', '\\"'
+  cmd = "curl '#{url}' -H \"#{headers}\" -d \"#{body}\""
+  print "command is #{cmd}"
+  os.execute cmd
