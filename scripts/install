@@ -4,6 +4,6 @@ set -e
 
 skala=$(realpath bin/skala)
 
-for computer in ~/.local/share/PrismLauncher/instances/*/minecraft/saves/*/computercraft/*/; do
-	ln -sf "$skala" "$computer"
+for computer in ~/.local/share/PrismLauncher/instances/*/minecraft/saves/*/computercraft/computer/*/; do
+	ln -sfv "$skala" "$computer/skala"
 done
