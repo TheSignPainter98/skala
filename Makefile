@@ -1,22 +1,9 @@
-LUA = luajit
-SOURCES = $(shell find -name '*.yue')
-OBJECTS = $(patsubst %.yue,%.lua,$(SOURCES))
+YUE_SOURCES = $(shell find -name '*.yue')
+RUST_SOURCES = $(shell find -name '*.rs')
 
-all: bin/skala
+install: install-skala_client # install-skala_server
+.PHONY: install
 
-bin/skala: skala/main.lua moonpack.lua $(OBJECTS)
-	@mkdir -p bin/
-	$(LUA) moonpack.lua $< -o $@
-
-install: skala
-
-%.lua: %.yue
-	yue --target=5.1 -l -s --path="?.yue" $< -o $@
-	@touch $@
-.PRECIOUS: %.lua
-
-moonpack.yue: skala/clap.lua
-
-clean:
-	$(RM) bin/skala $(OBJECTS) moonpack.lua
-.PHONY: clean
+install-skala_client: skala_client/Makefile skala_client/bin/skala $(YUE_SOURCES)
+	make -C skala_client install
+.PHONY: install
