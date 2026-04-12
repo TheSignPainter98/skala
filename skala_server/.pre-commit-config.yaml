@@ -1,0 +1,78 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+fail_fast: true
+repos:
+  - repo: builtin
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+      - id: check-shebang-scripts-are-executable
+      - id: check-executables-have-shebangs
+      - id: no-commit-to-branch
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: check rust formatting
+        types_or:
+          - rust
+        language: system
+        entry: cargo
+        pass_filenames: false
+        args:
+          - 'fmt'
+          - '--'
+          - '--check'
+      - id: cargo-check
+        name: check for rust type errors
+        types_or:
+          - rust
+          - sql
+        language: system
+        entry: cargo
+        pass_filenames: false
+        args:
+          - 'check'
+      - id: cargo-clippy
+        name: check for rust lint
+        types_or:
+          - rust
+          - sql
+        language: system
+        entry: cargo
+        pass_filenames: false
+        args:
+          - 'clippy'
+          - '--'
+          - '-D'
+          - 'warnings'
+      - id: cargo-clippy-tests
+        name: check for rust lint in tests
+        types_or:
+          - rust
+          - sql
+        language: system
+        entry: cargo
+        pass_filenames: false
+        args:
+          - 'clippy'
+          - '--tests'
+          - '--'
+          - '-D'
+          - 'warnings'
+      - id: cargo-test
+        name: run rust tests
+        types_or:
+          - rust
+          - sql
+        language: system
+        entry: cargo
+        pass_filenames: false
+        args:
+          - 'test'
+          - '--workspace'
