@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::fs;
 use std::net::SocketAddr;
 use std::ops::Deref;
@@ -71,7 +72,8 @@ async fn run() -> Result<()> {
     let config = Config::try_read(config)?;
 
     let db_pool = load_db_pool(db_path).await?;
-    let app = app(config, db_pool);
+    let advisor = ();
+    let app = app(config, db_pool, advisor);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(addr).await.context("cannot bind tcp")?;
@@ -89,7 +91,7 @@ async fn load_db_pool(path: impl Into<Utf8PathBuf>) -> Result<SqlitePool> {
     let path = path.into();
     let url = format!("sqlite://{path}");
     let opts = SqliteConnectOptions::from_str(&url)?
-        .journal_mode(SqliteJournalMode::Delete)
+        .journal_mode(SqliteJournalMode::Wal)
         .foreign_keys(true)
         .optimize_on_close(true, None);
     let ret = SqlitePoolOptions::new()
@@ -99,8 +101,8 @@ async fn load_db_pool(path: impl Into<Utf8PathBuf>) -> Result<SqlitePool> {
     Ok(ret)
 }
 
-fn app(config: Config, db_pool: SqlitePool) -> Router {
-    let app_state = AppState::new(config, db_pool);
+fn app(config: Config, db_pool: SqlitePool, advisor: ()) -> Router {
+    let app_state = AppState::new(config, db_pool, advisor);
 
     Router::new()
         .route("/", get(|| async { ">:3" }))
@@ -112,7 +114,7 @@ fn app(config: Config, db_pool: SqlitePool) -> Router {
 struct AppState(Arc<AppStateInner>);
 
 impl AppState {
-    fn new(config: Config, db_pool: SqlitePool) -> Self {
+    fn new(config: Config, db_pool: SqlitePool, _advisor: ()) -> Self {
         let Config { general } = config;
         let GeneralConfig {
             url: ConfigUrl(url),
@@ -128,6 +130,7 @@ impl AppState {
         let schemas = Schemas::new();
         Self(Arc::new(AppStateInner {
             db_pool,
+            advisor: (),
             llm_client,
             schemas,
             temperature,
@@ -149,12 +152,21 @@ impl Deref for AppState {
 #[derive(Debug)]
 struct AppStateInner {
     db_pool: SqlitePool,
+    #[allow(unused)]
+    advisor: (),
     llm_client: Client<OpenAIConfig>,
     schemas: Schemas,
     temperature: f32,
     frequency_penalty: f32,
     presence_penalty: f32,
     max_completion_tokens: u32,
+}
+
+#[allow(unused)]
+trait Advisor {
+    type Context;
+
+    fn advise(reactor_state: ReactorState, ctx: Self::Context) -> Result<String>;
 }
 
 #[derive(Debug)]
@@ -182,19 +194,30 @@ struct Request {
 #[derive(Debug, serde::Deserialize)]
 struct ReactorState {
     status: ReactorStatus,
+    #[serde(default)] // REMOVE ME!
     temperature: f64,
+    #[serde(default)] // REMOVE ME!
     coolant_filled: f64,
+    #[serde(default)] // REMOVE ME!
     heated_coolant_filled: f64,
+    #[serde(default)] // REMOVE ME!
     fuel_filled: f64,
+    #[serde(default)] // REMOVE ME!
     waste_filled: f64,
+    #[serde(default)] // REMOVE ME!
     actual_burn_rate: f64,
+    #[serde(default)] // REMOVE ME!
     target_burn_rate: f64,
+    #[serde(default)] // REMOVE ME!
     damage_percent: f64,
+    #[serde(default)] // REMOVE ME!
     heating_rate: f64,
+    #[serde(default)] // REMOVE ME!
     boil_efficiency: f64,
 }
 
 #[derive(Copy, Clone, Debug, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 enum ReactorStatus {
     Inactive,
     Active,
@@ -242,6 +265,13 @@ struct Response {
 #[sqlx(transparent)]
 struct ReactorName(String);
 
+impl Display for ReactorName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(name) = self;
+        name.fmt(f)
+    }
+}
+
 async fn advise_route(app_state: State<AppState>, req: Json<Request>) -> Result<Json<Response>> {
     let State(app_state) = app_state;
     let Json(Request {
@@ -249,6 +279,9 @@ async fn advise_route(app_state: State<AppState>, req: Json<Request>) -> Result<
         reactor_state,
     }) = req;
 
+    info!("processing request for {reactor_name}");
+
+    info!("getting reactor id");
     let reactor_id = {
         struct Row {
             id: i64,
@@ -281,6 +314,7 @@ async fn advise_route(app_state: State<AppState>, req: Json<Request>) -> Result<
         }
     };
 
+    info!("recording reactor state");
     let ReactorState {
         status,
         temperature,
@@ -329,9 +363,11 @@ async fn advise_route(app_state: State<AppState>, req: Json<Request>) -> Result<
         .await?;
     let advice_id = info.last_insert_rowid();
 
+    info!("getting advice...");
     let advice_result = get_advice(&app_state, reactor_state).await;
     let advice = match advice_result {
         Ok(advice) => {
+            info!("recording advice");
             let advice_insertion_query = query!(
                 "
                     UPDATE advice
@@ -347,6 +383,7 @@ async fn advise_route(app_state: State<AppState>, req: Json<Request>) -> Result<
             advice
         }
         Err(err) => {
+            error!("could not get advice: {err}");
             let advice_insertion_query = query!(
                 "
                     UPDATE advice
@@ -360,17 +397,12 @@ async fn advise_route(app_state: State<AppState>, req: Json<Request>) -> Result<
         }
     };
 
+    info!("returning response");
     Ok(Json(Response {
         reactor_name,
         advice,
     }))
 }
-
-// trait Advisor {
-//     type Context;
-//
-//     fn advise(reactor_state: ReactorState, ctx: Self::Context) -> Result<String>;
-// }
 
 async fn get_advice(app_state: &AppState, _reactor_state: ReactorState) -> Result<String> {
     let messages = vec![
@@ -404,8 +436,16 @@ async fn get_advice(app_state: &AppState, _reactor_state: ReactorState) -> Resul
         .temperature(app_state.temperature)
         .safety_identifier("skala")
         .build()?;
-    let ret = app_state.llm_client.chat().create(req).await?;
-    Ok(format!("{ret:?}")) // Placeholder.
+    let llm_response = app_state.llm_client.chat().create(req).await?;
+    let raw_advice = llm_response
+        .choices
+        .into_iter()
+        .next()
+        .context("llm returned too few choices")?
+        .message
+        .content
+        .context("llm choice returned no content")?;
+    Ok(raw_advice)
 }
 
 #[derive(Debug, clap::Parser)]

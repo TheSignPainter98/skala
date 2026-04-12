@@ -1,3 +1,5 @@
+-- TODO(kcza): add timestamps (irl and mc)
+
 CREATE TABLE reactor (
     id INTEGER NOT NULL
         PRIMARY KEY,
