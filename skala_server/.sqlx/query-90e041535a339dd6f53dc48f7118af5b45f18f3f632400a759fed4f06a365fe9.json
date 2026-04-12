@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                        INSERT INTO reactor (name)\n                        VALUES (?)\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "90e041535a339dd6f53dc48f7118af5b45f18f3f632400a759fed4f06a365fe9"
+}

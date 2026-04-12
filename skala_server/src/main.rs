@@ -1,18 +1,55 @@
 use std::fs;
+use std::net::SocketAddr;
+use std::ops::Deref;
 use std::process::ExitCode;
-use std::sync::OnceLock;
+use std::str::FromStr;
+use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, anyhow};
+use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::{
-    ChatCompletionRequestMessage, CreateChatCompletionRequest, ReasoningEffort, ResponseFormat, ResponseFormatJsonSchema,
-    Verbosity, ChatCompletionRequestDeveloperMessage, ChatCompletionRequestDeveloperMessageContent,
+    ChatCompletionRequestDeveloperMessage, ChatCompletionRequestDeveloperMessageContent,
+    ChatCompletionRequestMessage, CreateChatCompletionRequestArgs, ReasoningEffort, ResponseFormat,
+    ResponseFormatJsonSchema, Verbosity,
 };
-use async_openai::Client;
+use axum::Router;
+use axum::extract::{Json, State};
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use log::{error, info};
 use serde_json::Value;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteTypeInfo};
+use sqlx::{Encode, Sqlite, SqlitePool, Type, query, query_as};
+use tokio::net::TcpListener;
+
+type Result<T, E = Error> = anyhow::Result<T, E>;
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+struct Error(anyhow::Error);
+
+macro_rules! impl_from_error {
+    ($error_type:path) => {
+        impl From<$error_type> for Error {
+            fn from(t: $error_type) -> Self {
+                Self(t.into())
+            }
+        }
+    };
+}
+impl_from_error!(anyhow::Error);
+impl_from_error!(async_openai::error::OpenAIError);
+impl_from_error!(sqlx::Error);
+
+impl IntoResponse for Error {
+    fn into_response(self) -> axum::response::Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
+    }
+}
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
@@ -26,20 +63,316 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<()> {
     let args = Args::parse();
-    let Args { config } = args;
-    let Config { general } = Config::try_read(config)?;
-    let GeneralConfig {
-        url: ConfigUrl(url),
-        temperature: ConfigTemperature(temperature),
-        frequency_penalty: ConfigFrequencyPenalty(frequency_penalty),
-        presence_penalty: ConfigPresencePenalty(presence_penalty),
-        max_completion_tokens: ConfigMaxCompletionTokens(max_completion_tokens),
-    } = general;
+    let Args {
+        config,
+        port,
+        db_path,
+    } = args;
+    let config = Config::try_read(config)?;
 
-    let config = OpenAIConfig::new().with_api_base(url);
-    let client = Client::with_config(config);
+    let db_pool = load_db_pool(db_path).await?;
+    let app = app(config, db_pool);
 
-    let schema = Schema::acquire()?;
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = TcpListener::bind(addr).await.context("cannot bind tcp")?;
+
+    let addr = listener.local_addr().context("Cannot get local addr")?;
+    info!("listening on {addr}");
+
+    axum::serve(listener, app)
+        .await
+        .context("Cannot serve app")?;
+    Ok(())
+}
+
+async fn load_db_pool(path: impl Into<Utf8PathBuf>) -> Result<SqlitePool> {
+    let path = path.into();
+    let url = format!("sqlite://{path}");
+    let opts = SqliteConnectOptions::from_str(&url)?
+        .journal_mode(SqliteJournalMode::Delete)
+        .foreign_keys(true)
+        .optimize_on_close(true, None);
+    let ret = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(opts)
+        .await?;
+    Ok(ret)
+}
+
+fn app(config: Config, db_pool: SqlitePool) -> Router {
+    let app_state = AppState::new(config, db_pool);
+
+    Router::new()
+        .route("/", get(|| async { ">:3" }))
+        .route("/advise", post(advise_route))
+        .with_state(app_state)
+}
+
+#[derive(Clone, Debug)]
+struct AppState(Arc<AppStateInner>);
+
+impl AppState {
+    fn new(config: Config, db_pool: SqlitePool) -> Self {
+        let Config { general } = config;
+        let GeneralConfig {
+            url: ConfigUrl(url),
+            temperature: ConfigTemperature(temperature),
+            frequency_penalty: ConfigFrequencyPenalty(frequency_penalty),
+            presence_penalty: ConfigPresencePenalty(presence_penalty),
+            max_completion_tokens: ConfigMaxCompletionTokens(max_completion_tokens),
+        } = general;
+
+        let llm_config = OpenAIConfig::new().with_api_base(url);
+        let llm_client = Client::with_config(llm_config);
+
+        let schemas = Schemas::new();
+        Self(Arc::new(AppStateInner {
+            db_pool,
+            llm_client,
+            schemas,
+            temperature,
+            frequency_penalty,
+            presence_penalty,
+            max_completion_tokens,
+        }))
+    }
+}
+
+impl Deref for AppState {
+    type Target = AppStateInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+struct AppStateInner {
+    db_pool: SqlitePool,
+    llm_client: Client<OpenAIConfig>,
+    schemas: Schemas,
+    temperature: f32,
+    frequency_penalty: f32,
+    presence_penalty: f32,
+    max_completion_tokens: u32,
+}
+
+#[derive(Debug)]
+struct Schemas {
+    advise_response: Value,
+}
+
+impl Schemas {
+    fn new() -> Self {
+        static RAW_ADVISE_RESPONSE_SCHEMA: &str =
+            include_str!("./reactor-control-commands-schema.json");
+        let advise_response =
+            serde_json::from_str(RAW_ADVISE_RESPONSE_SCHEMA).expect("cannot parse schema");
+
+        Self { advise_response }
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct Request {
+    reactor_name: ReactorName,
+    reactor_state: ReactorState,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ReactorState {
+    status: ReactorStatus,
+    temperature: f64,
+    coolant_filled: f64,
+    heated_coolant_filled: f64,
+    fuel_filled: f64,
+    waste_filled: f64,
+    actual_burn_rate: f64,
+    target_burn_rate: f64,
+    damage_percent: f64,
+    heating_rate: f64,
+    boil_efficiency: f64,
+}
+
+#[derive(Copy, Clone, Debug, serde::Deserialize)]
+enum ReactorStatus {
+    Inactive,
+    Active,
+}
+
+impl Type<Sqlite> for ReactorStatus {
+    fn type_info() -> SqliteTypeInfo {
+        <i64 as Type<Sqlite>>::type_info()
+    }
+}
+
+impl<'q> Encode<'q, Sqlite> for ReactorStatus {
+    fn encode(
+        self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'q>,
+    ) -> std::result::Result<sqlx::encode::IsNull, sqlx::error::BoxDynError>
+    where
+        Self: Sized,
+    {
+        self.encode_by_ref(buf)
+    }
+
+    fn encode_by_ref(
+        &self,
+        buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'q>,
+    ) -> std::result::Result<sqlx::encode::IsNull, sqlx::error::BoxDynError>
+    where
+        Self: Sized,
+    {
+        let value = match self {
+            Self::Inactive => 0,
+            Self::Active => 1,
+        };
+        <i64 as Encode<Sqlite>>::encode(value, buf)
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+struct Response {
+    reactor_name: ReactorName,
+    advice: String, // TODO(kcza): remove placeholder
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, sqlx::Type)]
+#[sqlx(transparent)]
+struct ReactorName(String);
+
+async fn advise_route(app_state: State<AppState>, req: Json<Request>) -> Result<Json<Response>> {
+    let State(app_state) = app_state;
+    let Json(Request {
+        reactor_name,
+        reactor_state,
+    }) = req;
+
+    let reactor_id = {
+        struct Row {
+            id: i64,
+        }
+        let reactor_id_query = query_as!(
+            Row,
+            "
+                SELECT id
+                FROM reactor
+                WHERE name = ?
+            ",
+            reactor_name,
+        );
+        let reactor_id = reactor_id_query.fetch_optional(&app_state.db_pool).await?;
+        match reactor_id {
+            Some(Row { id }) => id,
+            None => {
+                let reactor_name_insertion_query = query!(
+                    "
+                        INSERT INTO reactor (name)
+                        VALUES (?)
+                    ",
+                    reactor_name
+                );
+                let info = reactor_name_insertion_query
+                    .execute(&app_state.db_pool)
+                    .await?;
+                info.last_insert_rowid()
+            }
+        }
+    };
+
+    let ReactorState {
+        status,
+        temperature,
+        coolant_filled,
+        heated_coolant_filled,
+        fuel_filled,
+        waste_filled,
+        actual_burn_rate,
+        target_burn_rate,
+        damage_percent,
+        heating_rate,
+        boil_efficiency,
+    } = reactor_state;
+    let initial_advice_insertion_query = query!(
+        "
+            INSERT INTO advice (
+                reactor_id,
+                reactor_status,
+                reactor_temperature,
+                reactor_coolant_filled,
+                reactor_heated_coolant_filled,
+                reactor_fuel_filled,
+                reactor_waste_filled,
+                reactor_actual_burn_rate,
+                reactor_target_burn_rate,
+                reactor_damage_percent,
+                reactor_heating_rate,
+                reactor_boil_efficiency
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ",
+        reactor_id,
+        status,
+        temperature,
+        coolant_filled,
+        heated_coolant_filled,
+        fuel_filled,
+        waste_filled,
+        actual_burn_rate,
+        target_burn_rate,
+        damage_percent,
+        heating_rate,
+        boil_efficiency,
+    );
+    let info = initial_advice_insertion_query
+        .execute(&app_state.db_pool)
+        .await?;
+    let advice_id = info.last_insert_rowid();
+
+    let advice_result = get_advice(&app_state, reactor_state).await;
+    let advice = match advice_result {
+        Ok(advice) => {
+            let advice_insertion_query = query!(
+                "
+                    UPDATE advice
+                    SET
+                        status = 1,
+                        advice = ?
+                    WHERE id = ?
+                ",
+                advice,
+                advice_id,
+            );
+            advice_insertion_query.execute(&app_state.db_pool).await?;
+            advice
+        }
+        Err(err) => {
+            let advice_insertion_query = query!(
+                "
+                    UPDATE advice
+                    SET status = 2
+                    WHERE id = ?
+                ",
+                advice_id,
+            );
+            advice_insertion_query.execute(&app_state.db_pool).await?;
+            return Err(err);
+        }
+    };
+
+    Ok(Json(Response {
+        reactor_name,
+        advice,
+    }))
+}
+
+// trait Advisor {
+//     type Context;
+//
+//     fn advise(reactor_state: ReactorState, ctx: Self::Context) -> Result<String>;
+// }
+
+async fn get_advice(app_state: &AppState, _reactor_state: ReactorState) -> Result<String> {
     let messages = vec![
         ChatCompletionRequestMessage::Developer(ChatCompletionRequestDeveloperMessage {
             name: Some("god".to_owned()),
@@ -48,44 +381,43 @@ async fn run() -> Result<()> {
             ),
         }),
     ];
-    let req = CreateChatCompletionRequest {
-        messages,
-        model: "qwen-vl".to_owned(),
-        verbosity: Some(Verbosity::Low),
-        reasoning_effort: Some(ReasoningEffort::High),
-        max_completion_tokens: Some(max_completion_tokens),
-        frequency_penalty: Some(frequency_penalty),
-        presence_penalty: Some(presence_penalty),
-        web_search_options: None,
-        response_format: Some(ResponseFormat::JsonSchema {
-            json_schema: ResponseFormatJsonSchema {
-                name: "reactor-control-commands".to_owned(),
-                description: Some("reasoned reactor control commands".to_owned()),
-                schema: Some(schema.inner().to_owned()),
-                strict: Some(true),
-            },
-        }),
-        store: Some(false),
-        stream: Some(false), // TODO(kcza): allow streaming?
-        n: Some(1),
-        temperature: Some(temperature),
-        top_p: None,
-        tools: None, // TODO(kcza): add reactor control tools
-        parallel_tool_calls: Some(false),
-        safety_identifier: Some("skala".to_owned()),
-        prompt_cache_key: None,
-        ..Default::default()
+    let response_format = ResponseFormat::JsonSchema {
+        json_schema: ResponseFormatJsonSchema {
+            name: "reactor-control-commands".to_owned(),
+            description: Some("reasoned reactor control commands".to_owned()),
+            schema: Some(app_state.schemas.advise_response.clone()),
+            strict: Some(true),
+        },
     };
-    let resp = client.chat().create(req).await?;
-
-    info!("{resp:?}");
-    Ok(())
+    let req = CreateChatCompletionRequestArgs::default()
+        .messages(messages)
+        .model("qwen-vl")
+        .verbosity(Verbosity::Low)
+        .reasoning_effort(ReasoningEffort::High)
+        .max_completion_tokens(app_state.max_completion_tokens)
+        .frequency_penalty(app_state.frequency_penalty)
+        .presence_penalty(app_state.presence_penalty)
+        .response_format(response_format)
+        .store(false)
+        .stream(false)
+        .n(1)
+        .temperature(app_state.temperature)
+        .safety_identifier("skala")
+        .build()?;
+    let ret = app_state.llm_client.chat().create(req).await?;
+    Ok(format!("{ret:?}")) // Placeholder.
 }
 
 #[derive(Debug, clap::Parser)]
 struct Args {
     #[clap(long, default_value = "skala.toml")]
     config: Utf8PathBuf,
+
+    #[clap(long, default_value_t = 10101)]
+    port: u16,
+
+    #[clap(long, default_value = "skala.db")]
+    db_path: Utf8PathBuf,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -162,25 +494,13 @@ impl Default for ConfigMaxCompletionTokens {
     }
 }
 
-#[derive(Debug)]
-struct Schema(Value);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-impl Schema {
-    fn acquire() -> Result<&'static Self> {
-        static RAW_SCHEMA: &str = include_str!("./reactor-control-commands-schema.json");
-        static SCHEMA: OnceLock<Schema> = OnceLock::new();
-
-        if let Some(schema) = SCHEMA.get() {
-            return Ok(schema);
-        }
-
-        let schema =
-            serde_json::from_str(RAW_SCHEMA).with_context(|| anyhow!("cannot parse schema"))?;
-        Ok(SCHEMA.get_or_init(|| Self(schema)))
-    }
-
-    fn inner(&self) -> &Value {
-        let Self(schema) = self;
-        schema
+    #[test]
+    fn test_schemas_valid() {
+        // This function panics on an invalid schema.
+        Schemas::new();
     }
 }
