@@ -55,12 +55,14 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<()> {
     let args = Args::parse();
-    let Args {
-        config,
-        port,
-        db_path,
-    } = args;
+    let Args { config, db_path } = args;
     let config = Config::try_read(config)?;
+    let Config {
+        general: general_config,
+        ..
+    } = &config;
+    let GeneralConfig { port } = general_config;
+    let ConfigPort(port) = *port;
 
     let db_pool = load_db_pool(db_path).await?;
     let advisor = ();
@@ -104,18 +106,16 @@ struct Args {
     #[clap(long, default_value = "skala.toml")]
     config: Utf8PathBuf,
 
-    #[clap(long, default_value_t = 10101)]
-    port: u16,
-
     #[clap(long, default_value = "skala.db")]
     db_path: Utf8PathBuf,
 }
 
 #[derive(Debug, serde::Deserialize)]
 struct Config {
-    #[serde(rename = "skala")]
+    #[serde(rename = "skala", default)]
     general: GeneralConfig,
-    // TODO(kcza): llmconfig
+    #[serde(default)]
+    llm: LlmConfig,
 }
 
 impl Config {
@@ -126,9 +126,25 @@ impl Config {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Default, serde::Deserialize)]
 #[serde(rename = "kebab-case")]
 struct GeneralConfig {
+    #[serde(default)]
+    port: ConfigPort,
+}
+
+#[derive(Copy, Clone, Debug, serde::Deserialize)]
+struct ConfigPort(u16);
+
+impl Default for ConfigPort {
+    fn default() -> Self {
+        Self(15000)
+    }
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(rename = "kebab-case")]
+struct LlmConfig {
     #[serde(default)]
     url: ConfigUrl,
     #[serde(default)]

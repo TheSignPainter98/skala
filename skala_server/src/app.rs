@@ -9,7 +9,7 @@ use sqlx::SqlitePool;
 
 use crate::{
     Config, ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty,
-    ConfigTemperature, ConfigUrl, GeneralConfig, routes,
+    ConfigTemperature, ConfigUrl, LlmConfig, routes,
 };
 
 pub(crate) struct App {
@@ -33,14 +33,16 @@ pub(crate) struct AppState(Arc<AppStateInner>);
 
 impl AppState {
     fn new(config: Config, db_pool: SqlitePool, _advisor: ()) -> Self {
-        let Config { general } = config;
-        let GeneralConfig {
+        let Config {
+            llm: llm_config, ..
+        } = config;
+        let LlmConfig {
             url: ConfigUrl(url),
             temperature: ConfigTemperature(temperature),
             frequency_penalty: ConfigFrequencyPenalty(frequency_penalty),
             presence_penalty: ConfigPresencePenalty(presence_penalty),
             max_completion_tokens: ConfigMaxCompletionTokens(max_completion_tokens),
-        } = general;
+        } = llm_config;
 
         let llm_config = OpenAIConfig::new().with_api_base(url);
         let llm_client = Client::with_config(llm_config);
