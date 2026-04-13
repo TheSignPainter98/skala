@@ -1,0 +1,20 @@
+#!/bin/bash
+
+curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15000/advice <<EOF
+{
+    "reactor_name": "boomy",
+    "reactor_state": {
+        "status": "active",
+        "temperature": 1000,
+        "coolant_filled": 100,
+        "heated_coolant_filled": 100,
+        "fuel_filled": 100,
+        "waste_filled": 100,
+        "actual_burn_rate": 100,
+        "target_burn_rate": 100,
+        "damage_percent": 100,
+        "heating_rate": 100,
+        "boil_efficiency": 100
+    }
+}
+EOF

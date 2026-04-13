@@ -10,7 +10,7 @@
     },
     "reason": {
       "type": "string",
-      "description": "A concise rationale explaining why the specified action was recommended. At most 25 words, at least 4."
+      "description": "A concise rationale explaining why the specified action was recommended. This field must contain at most 25 words and at least 4."
     }
   },
   "required": ["action", "reason"],

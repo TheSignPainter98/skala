@@ -3,28 +3,20 @@ use std::fmt::Display;
 use sqlx::sqlite::SqliteTypeInfo;
 use sqlx::{Encode, Sqlite, Type};
 
+// TODO(kcza): communicate the reactor parameter constraints! E.g. critical temperature,
+// ranges of certain values.
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct ReactorState {
     pub(crate) status: ReactorStatus,
-    #[serde(default)] // REMOVE ME!
     pub(crate) temperature: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) coolant_filled: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) heated_coolant_filled: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) fuel_filled: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) waste_filled: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) actual_burn_rate: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) target_burn_rate: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) damage_percent: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) heating_rate: f64,
-    #[serde(default)] // REMOVE ME!
     pub(crate) boil_efficiency: f64,
 }
 

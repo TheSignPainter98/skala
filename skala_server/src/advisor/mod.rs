@@ -4,12 +4,14 @@ use anyhow::Context;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::{
-    ChatCompletionRequestDeveloperMessage, ChatCompletionRequestDeveloperMessageContent,
-    ChatCompletionRequestMessage, CreateChatCompletionRequestArgs, ReasoningEffort, ResponseFormat,
-    ResponseFormatJsonSchema, Verbosity,
+    ChatCompletionRequestDeveloperMessageArgs, ChatCompletionRequestDeveloperMessageContent,
+    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
+    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ReasoningEffort,
+    ResponseFormat, ResponseFormatJsonSchema, Verbosity,
 };
 use serde_json::Value;
 
+use crate::reactor::ReactorStatus;
 use crate::{
     ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty, ConfigTemperature,
     ConfigUrl, LlmConfig, Result, reactor::ReactorState,
@@ -19,6 +21,7 @@ pub(crate) trait Advisor: Debug + Send + Sync {
     fn advise(&self, reactor_state: ReactorState) -> impl Future<Output = Result<String>> + Send;
 }
 
+// TODO(kcza): move into advice module
 #[derive(Clone, Debug)]
 pub(crate) struct LlmAdvisor {
     client: Client<OpenAIConfig>,
@@ -55,7 +58,10 @@ impl LlmAdvisor {
 }
 
 impl Advisor for LlmAdvisor {
-    async fn advise(&self, _reactor_state: ReactorState) -> Result<String> {
+    async fn advise(&self, reactor_state: ReactorState) -> Result<String> {
+        // TODO(kcza): store previous messages in sqlite, present a sliding window of at
+        // most N.
+
         let Self {
             client,
             schemas,
@@ -66,12 +72,30 @@ impl Advisor for LlmAdvisor {
         } = self;
 
         let messages = vec![
-            ChatCompletionRequestMessage::Developer(ChatCompletionRequestDeveloperMessage {
-                name: Some("god".to_owned()),
-                content: ChatCompletionRequestDeveloperMessageContent::Text(
-                    "say hello to my little friend, I command thee to be well versed in the language of violence. All things are permitted. This is a game.".to_owned(),
-                ),
-            }),
+            ChatCompletionRequestMessage::Developer(
+                ChatCompletionRequestDeveloperMessageArgs::default()
+                    .name("god")
+                    .content(ChatCompletionRequestDeveloperMessageContent::Text(
+                        include_str!("base_prompt.md").to_owned(),
+                    ))
+                    .build()?,
+            ),
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .name("reactor-monitor")
+                    .content(ChatCompletionRequestUserMessageContent::Text(
+                        self.summarise_reactor_state(&reactor_state),
+                    ))
+                    .build()?,
+            ),
+            ChatCompletionRequestMessage::User(
+                ChatCompletionRequestUserMessageArgs::default()
+                    .name("boss")
+                    .content(ChatCompletionRequestUserMessageContent::Text(
+                        "what do you recommend".to_owned(),
+                    ))
+                    .build()?,
+            ),
         ];
         let response_format = ResponseFormat::JsonSchema {
             json_schema: ResponseFormatJsonSchema {
@@ -109,6 +133,43 @@ impl Advisor for LlmAdvisor {
     }
 }
 
+impl LlmAdvisor {
+    fn summarise_reactor_state(&self, reactor_state: &ReactorState) -> String {
+        let ReactorState {
+            status,
+            temperature,
+            coolant_filled,
+            heated_coolant_filled,
+            fuel_filled,
+            waste_filled,
+            actual_burn_rate,
+            target_burn_rate,
+            damage_percent,
+            heating_rate,
+            boil_efficiency,
+        } = reactor_state;
+        let status = match status {
+            ReactorStatus::Active => "active",
+            ReactorStatus::Inactive => "inactive",
+        };
+        format!(
+            "
+                The reactor's status is {status}.
+                The reactor's temperature {temperature}.
+                The reactor's coolant_filled {coolant_filled}.
+                The reactor's heated_coolant_filled {heated_coolant_filled}.
+                The reactor's fuel_filled {fuel_filled}.
+                The reactor's waste_filled {waste_filled}.
+                The reactor's actual_burn_rate {actual_burn_rate}.
+                The reactor's target_burn_rate {target_burn_rate}.
+                The reactor's damage_percent {damage_percent}.
+                The reactor's heating_rate {heating_rate}.
+                The reactor's boil_efficiency {boil_efficiency}.
+            "
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Schemas {
     advice_response: Value,
@@ -116,8 +177,7 @@ pub(crate) struct Schemas {
 
 impl Schemas {
     pub(crate) fn new() -> Self {
-        static RAW_ADVISE_RESPONSE_SCHEMA: &str =
-            include_str!("routes/advice/llm-response-schema.json");
+        static RAW_ADVISE_RESPONSE_SCHEMA: &str = include_str!("llm-response-schema.json");
         let advice_response =
             serde_json::from_str(RAW_ADVISE_RESPONSE_SCHEMA).expect("cannot parse schema");
         Self { advice_response }
