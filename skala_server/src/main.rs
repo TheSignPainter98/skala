@@ -1,4 +1,6 @@
+mod advisor;
 mod app;
+mod reactor;
 mod routes;
 
 use std::fs;
@@ -16,6 +18,7 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use tokio::net::TcpListener;
 
+use crate::advisor::LlmAdvisor;
 use crate::app::App;
 
 type Result<T, E = Error> = anyhow::Result<T, E>;
@@ -59,15 +62,15 @@ async fn run() -> Result<()> {
     let config = Config::try_read(config)?;
     let Config {
         general: general_config,
-        ..
-    } = &config;
+        llm: llm_config,
+    } = config;
     let GeneralConfig { port } = general_config;
-    let ConfigPort(port) = *port;
 
     let db_pool = load_db_pool(db_path).await?;
-    let advisor = ();
-    let app = App::new(config, db_pool, advisor);
+    let advisor = LlmAdvisor::new(llm_config);
+    let app = App::new(db_pool, advisor);
 
+    let ConfigPort(port) = port;
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     let listener = TcpListener::bind(addr).await.context("cannot bind tcp")?;
 
@@ -93,13 +96,6 @@ async fn load_db_pool(path: impl Into<Utf8PathBuf>) -> Result<SqlitePool> {
         .await?;
     Ok(ret)
 }
-
-// #[allow(unused)]
-// trait Advisor {
-//     type Context;
-//
-//     fn advise(reactor_state: ReactorState, ctx: Self::Context) -> Result<String>;
-// }
 
 #[derive(Debug, clap::Parser)]
 struct Args {
