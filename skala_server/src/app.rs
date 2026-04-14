@@ -6,12 +6,12 @@ use sqlx::SqlitePool;
 
 use crate::{advisor::Advisor, routes};
 
-pub(crate) struct App {
+pub struct App {
     router: Router<()>,
 }
 
 impl App {
-    pub(crate) fn new<A>(db_pool: SqlitePool, advisor: A) -> Self
+    pub fn new<A>(db_pool: SqlitePool, advisor: A) -> Self
     where
         A: Advisor + Clone + Send + Sync + 'static,
     {
@@ -20,7 +20,7 @@ impl App {
         Self { router }
     }
 
-    pub(crate) fn into_router(self) -> Router<()> {
+    pub fn into_router(self) -> Router<()> {
         let Self { router } = self;
         router
     }

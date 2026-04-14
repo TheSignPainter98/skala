@@ -6,23 +6,23 @@ use sqlx::{Encode, Sqlite, Type};
 // TODO(kcza): communicate the reactor parameter constraints! E.g. critical temperature,
 // ranges of certain values.
 #[derive(Debug, serde::Deserialize)]
-pub(crate) struct ReactorState {
-    pub(crate) status: ReactorStatus,
-    pub(crate) temperature: f64,
-    pub(crate) coolant_filled: f64,
-    pub(crate) heated_coolant_filled: f64,
-    pub(crate) fuel_filled: f64,
-    pub(crate) waste_filled: f64,
-    pub(crate) actual_burn_rate: f64,
-    pub(crate) target_burn_rate: f64,
-    pub(crate) damage_percent: f64,
-    pub(crate) heating_rate: f64,
-    pub(crate) boil_efficiency: f64,
+pub struct ReactorState {
+    pub status: ReactorStatus,
+    pub temperature: f64,
+    pub coolant_filled: f64,
+    pub heated_coolant_filled: f64,
+    pub fuel_filled: f64,
+    pub waste_filled: f64,
+    pub actual_burn_rate: f64,
+    pub target_burn_rate: f64,
+    pub damage_percent: f64,
+    pub heating_rate: f64,
+    pub boil_efficiency: f64,
 }
 
 #[derive(Copy, Clone, Debug, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(crate) enum ReactorStatus {
+pub enum ReactorStatus {
     Inactive,
     Active,
 }

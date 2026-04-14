@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct LlmAdvisor {
+pub struct LlmAdvisor {
     client: Client<OpenAIConfig>,
     schemas: Schemas,
     temperature: f32,
@@ -28,7 +28,7 @@ pub(crate) struct LlmAdvisor {
 }
 
 impl LlmAdvisor {
-    pub(crate) fn new(config: LlmConfig) -> Self {
+    pub fn new(config: LlmConfig) -> Self {
         let LlmConfig {
             url: ConfigUrl(url),
             temperature: ConfigTemperature(temperature),
