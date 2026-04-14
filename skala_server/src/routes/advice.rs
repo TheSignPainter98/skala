@@ -2,7 +2,7 @@ use axum::extract::{Json, State};
 use log::{error, info};
 use sqlx::{query, query_as};
 
-use crate::advisor::Advisor;
+use crate::advisor::{Advice, AdvisedAction, Advisor};
 use crate::reactor::{ReactorName, ReactorState};
 use crate::{Result, app::AppState};
 
@@ -15,7 +15,7 @@ pub(crate) struct Request {
 #[derive(Debug, serde::Serialize)]
 pub(crate) struct Response {
     reactor_name: ReactorName,
-    advice: String, // TODO(kcza): remove placeholder
+    advice: Advice,
 }
 
 pub(crate) async fn route(
@@ -118,15 +118,22 @@ pub(crate) async fn route(
     let advice = match advice_result {
         Ok(advice) => {
             info!("recording advice");
+            let Advice { action, reasoning } = &advice;
+            let advised_action_repr = match action {
+                AdvisedAction::NoAction => 0,
+                AdvisedAction::Scram => 1,
+            };
             let advice_insertion_query = query!(
                 "
                     UPDATE advice
                     SET
                         status = 1,
-                        advice = ?
+                        advised_action = ?,
+                        advised_action_reasoning = ?
                     WHERE id = ?
                 ",
-                advice,
+                advised_action_repr,
+                reasoning,
                 advice_id,
             );
             advice_insertion_query.execute(&app_state.db_pool).await?;

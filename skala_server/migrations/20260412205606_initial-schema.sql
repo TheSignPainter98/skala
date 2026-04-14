@@ -25,8 +25,17 @@ CREATE TABLE advice (
         ELSE 'unknown'
     END),
 
-    advice TEXT NULL
+    advised_action INTEGER NULL
+        CHECK (advised_action IS NULL OR advised_action IN (0, 1))
         DEFAULT NULL,
+    pretty_advised_action TEXT AS (CASE
+        WHEN advised_action = 0 THEN 'no-action'
+        WHEN advised_action = 1 THEN 'scram'
+        WHEN advised_action IS NULL THEN 'unassigned'
+        ELSE 'unknown'
+    END),
+
+    advised_action_reasoning TEXT NULL,
 
     reactor_status INTEGER NOT NULL
         CHECK (reactor_status IN (0, 1)),
@@ -47,5 +56,5 @@ CREATE TABLE advice (
     reactor_heating_rate REAL NOT NULL,
     reactor_boil_efficiency REAL NOT NULL,
 
-    CHECK ((status = 1) = (advice IS NOT NULL))
+    CHECK ((status = 1) = (advised_action IS NOT NULL AND advised_action_reasoning IS NOT NULL))
 ) STRICT;

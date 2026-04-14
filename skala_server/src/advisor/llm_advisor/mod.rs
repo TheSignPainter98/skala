@@ -7,9 +7,10 @@ use async_openai::types::chat::{
     ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ReasoningEffort,
     ResponseFormat, ResponseFormatJsonSchema, Verbosity,
 };
+use schemars::schema_for;
 use serde_json::Value;
 
-use crate::advisor::Advisor;
+use crate::advisor::{Advice, Advisor};
 use crate::reactor::{ReactorState, ReactorStatus};
 use crate::{
     ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty, ConfigTemperature,
@@ -52,7 +53,7 @@ impl LlmAdvisor {
 }
 
 impl Advisor for LlmAdvisor {
-    async fn advise(&self, reactor_state: ReactorState) -> Result<String> {
+    async fn advise(&self, reactor_state: ReactorState) -> Result<Advice> {
         // TODO(kcza): store previous messages in sqlite, present a sliding window of at
         // most N.
 
@@ -123,7 +124,8 @@ impl Advisor for LlmAdvisor {
             .message
             .content
             .context("llm choice returned no content")?;
-        Ok(raw_advice)
+        let ret = serde_json::from_str(&raw_advice)?;
+        Ok(ret)
     }
 }
 
@@ -171,9 +173,7 @@ pub(crate) struct Schemas {
 
 impl Schemas {
     pub(crate) fn new() -> Self {
-        static RAW_ADVISE_RESPONSE_SCHEMA: &str = include_str!("llm-response-schema.json");
-        let advice_response =
-            serde_json::from_str(RAW_ADVISE_RESPONSE_SCHEMA).expect("cannot parse schema");
+        let advice_response = schema_for!(Advice).to_value();
         Self { advice_response }
     }
 

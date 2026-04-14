@@ -38,6 +38,7 @@ macro_rules! impl_from_error {
 }
 impl_from_error!(anyhow::Error);
 impl_from_error!(async_openai::error::OpenAIError);
+impl_from_error!(serde_json::Error);
 impl_from_error!(sqlx::Error);
 
 impl IntoResponse for Error {
