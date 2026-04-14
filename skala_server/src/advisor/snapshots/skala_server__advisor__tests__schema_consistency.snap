@@ -1,0 +1,39 @@
+---
+source: src/advisor/mod.rs
+expression: schema_for!(Advice)
+---
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Advice",
+  "description": "Holds the advice to apply to the reactor.",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/AdvisedAction"
+    },
+    "reasoning": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "action",
+    "reasoning"
+  ],
+  "$defs": {
+    "AdvisedAction": {
+      "description": "Holds the action to apply to the reactor.",
+      "oneOf": [
+        {
+          "description": "Represents that the reactor's state is okay and hence that no action is required.",
+          "type": "string",
+          "const": "no-action"
+        },
+        {
+          "description": "Represents that the reactor is either critical or will soon go critical, hence the reaction must be stopped immediately.",
+          "type": "string",
+          "const": "scram"
+        }
+      ]
+    }
+  }
+}

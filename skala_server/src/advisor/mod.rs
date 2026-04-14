@@ -28,3 +28,16 @@ pub(crate) enum AdvisedAction {
     /// Represents that the reactor is either critical or will soon go critical, hence the reaction must be stopped immediately.
     Scram,
 }
+
+#[cfg(test)]
+mod tests {
+    use insta::assert_json_snapshot;
+    use schemars::schema_for;
+
+    use super::*;
+
+    #[googletest::test]
+    fn test_schema_consistency() {
+        assert_json_snapshot!(schema_for!(Advice));
+    }
+}

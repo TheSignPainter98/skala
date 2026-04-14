@@ -59,6 +59,16 @@ impl<'q> Encode<'q, Sqlite> for ReactorStatus {
     }
 }
 
+#[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize, sqlx::Type)]
+#[sqlx(transparent)]
+pub(crate) struct ReactorId(i64);
+
+impl From<i64> for ReactorId {
+    fn from(inner: i64) -> Self {
+        Self(inner)
+    }
+}
+
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize, sqlx::Type)]
 #[sqlx(transparent)]
 pub(crate) struct ReactorName(String);

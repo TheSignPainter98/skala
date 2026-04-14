@@ -21,3 +21,5 @@ toml = "1.1.2"
 
 [dev-dependencies]
 axum-test = "20.0.0"
+googletest = "0.14.2"
+insta = { version = "1.47.2", features = ["json"] }
