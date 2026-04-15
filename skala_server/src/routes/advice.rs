@@ -3,19 +3,22 @@ use log::info;
 use sqlx::{SqliteTransaction, query, query_as};
 
 use crate::advisor::{Advice, AdvisedAction, Advisor};
-use crate::reactor::{ReactorId, ReactorName, ReactorState};
+use crate::reactor::{IntactReactorState, ReactorId, ReactorName, ReactorState};
 use crate::{Result, app::AppState};
 
 #[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct Request {
     reactor_name: ReactorName,
     reactor_state: ReactorState,
 }
 
 #[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) struct Response {
     reactor_name: ReactorName,
-    advice: Advice,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    advice: Option<Advice>,
 }
 
 pub(crate) async fn route(
@@ -42,10 +45,18 @@ pub(crate) async fn route(
 
     // TODO(kcza): fetch reactor state history, pass as context to the advisor.
 
-    info!("getting advice...");
-    let advice = app_state.advisor.advise(reactor_state).await?;
-    info!("recording advice...");
-    record_advice(&mut txn, event_id, &advice).await?;
+    let advice = match reactor_state {
+        ReactorState::Destroyed => None,
+        ReactorState::Intact(intact_reactor_state) => {
+            info!("getting advice...");
+            let advice = app_state.advisor.advise(intact_reactor_state).await?;
+
+            info!("recording advice...");
+            record_advice(&mut txn, event_id, &advice).await?;
+
+            Some(advice)
+        }
+    };
 
     info!("returning response");
     Ok(Json(Response {
@@ -111,24 +122,21 @@ async fn store_reactor_state(
     event_id: EventId,
     reactor_state: &ReactorState,
 ) -> Result<()> {
-    let ReactorState {
-        status,
-        temperature,
-        coolant_filled,
-        heated_coolant_filled,
-        fuel_filled,
-        waste_filled,
-        actual_burn_rate,
-        target_burn_rate,
-        damage_percent,
-        heating_rate,
-        boil_efficiency,
-    } = reactor_state;
-    let initial_advice_insertion_query = query!(
-        "
-            INSERT INTO reactor_state (
+    let intact = matches!(reactor_state, ReactorState::Intact(_));
+    match reactor_state {
+        ReactorState::Destroyed => {
+            let state_insertion_query = query!(
+                "
+                    INSERT INTO reactor_state (event_id, intact) VALUES (?, ?)
+                ",
                 event_id,
-                status,
+                intact,
+            );
+            state_insertion_query.execute(&mut **txn).await?;
+        }
+        ReactorState::Intact(intact_reactor_state) => {
+            let IntactReactorState {
+                mode,
                 temperature,
                 coolant_filled,
                 heated_coolant_filled,
@@ -138,23 +146,43 @@ async fn store_reactor_state(
                 target_burn_rate,
                 damage_percent,
                 heating_rate,
-                boil_efficiency
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ",
-        event_id,
-        status,
-        temperature,
-        coolant_filled,
-        heated_coolant_filled,
-        fuel_filled,
-        waste_filled,
-        actual_burn_rate,
-        target_burn_rate,
-        damage_percent,
-        heating_rate,
-        boil_efficiency,
-    );
-    initial_advice_insertion_query.execute(&mut **txn).await?;
+                boil_efficiency,
+            } = intact_reactor_state;
+            let state_insertion_query = query!(
+                "
+                    INSERT INTO reactor_state (
+                        event_id,
+                        intact,
+                        mode,
+                        temperature,
+                        coolant_filled,
+                        heated_coolant_filled,
+                        fuel_filled,
+                        waste_filled,
+                        actual_burn_rate,
+                        target_burn_rate,
+                        damage_percent,
+                        heating_rate,
+                        boil_efficiency
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ",
+                event_id,
+                intact,
+                mode,
+                temperature,
+                coolant_filled,
+                heated_coolant_filled,
+                fuel_filled,
+                waste_filled,
+                actual_burn_rate,
+                target_burn_rate,
+                damage_percent,
+                heating_rate,
+                boil_efficiency,
+            );
+            state_insertion_query.execute(&mut **txn).await?;
+        }
+    }
     Ok(())
 }
 

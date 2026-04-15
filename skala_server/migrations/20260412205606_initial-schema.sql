@@ -21,24 +21,43 @@ CREATE TABLE reactor_state (
     event_id INTEGER NOT NULL
         REFERENCES event(id),
 
-    status INTEGER NOT NULL
-        CHECK (status IN (0, 1)),
-    pretty_status TEXT AS (CASE
-        WHEN status = 0 THEN 'inactive'
-        WHEN status = 1 THEN 'active'
+    intact INTEGER NOT NULL
+        CHECK (intact IN (0, 1)),
+    pretty_intact TEXT AS (CASE
+        WHEN intact = 0 THEN 'destroyed'
+        WHEN intact = 0 THEN 'intact'
+    END),
+
+    mode INTEGER NULL
+        DEFAULT NULL
+        CHECK (mode IS NULL OR mode IN (0, 1)),
+    pretty_mode TEXT AS (CASE
+        WHEN mode = 0 THEN 'inactive'
+        WHEN mode = 1 THEN 'active'
+        WHEN NULL THEN '-'
         ELSE 'unknown'
     END),
 
-    temperature REAL NOT NULL,
-    coolant_filled REAL NOT NULL,
-    heated_coolant_filled REAL NOT NULL,
-    fuel_filled REAL NOT NULL,
-    waste_filled REAL NOT NULL,
-    actual_burn_rate REAL NOT NULL,
-    target_burn_rate REAL NOT NULL,
-    damage_percent REAL NOT NULL,
-    heating_rate REAL NOT NULL,
-    boil_efficiency REAL NOT NULL
+    temperature REAL NULL
+        DEFAULT NULL,
+    coolant_filled REAL NULL
+        DEFAULT NULL,
+    heated_coolant_filled REAL NULL
+        DEFAULT NULL,
+    fuel_filled REAL NULL
+        DEFAULT NULL,
+    waste_filled REAL NULL
+        DEFAULT NULL,
+    actual_burn_rate REAL NULL
+        DEFAULT NULL,
+    target_burn_rate REAL NULL
+        DEFAULT NULL,
+    damage_percent REAL NULL
+        DEFAULT NULL,
+    heating_rate REAL NULL
+        DEFAULT NULL,
+    boil_efficiency REAL NULL
+        DEFAULT NULL
 ) STRICT;
 
 CREATE TABLE advice (

@@ -5,14 +5,17 @@ pub use self::llm_advisor::LlmAdvisor;
 use std::fmt::Debug;
 
 use crate::Result;
-use crate::reactor::ReactorState;
+use crate::reactor::IntactReactorState;
 
 pub trait Advisor: Debug + Send + Sync {
-    fn advise(&self, reactor_state: ReactorState) -> impl Future<Output = Result<Advice>> + Send;
+    fn advise(
+        &self,
+        reactor_state: IntactReactorState,
+    ) -> impl Future<Output = Result<Advice>> + Send;
 }
 
 /// Holds the advice to apply to the reactor.
-#[derive(Debug, schemars::JsonSchema, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, schemars::JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Advice {
     pub action: AdvisedAction,
@@ -20,7 +23,7 @@ pub struct Advice {
 }
 
 /// Holds the action to apply to the reactor.
-#[derive(Debug, schemars::JsonSchema, serde::Deserialize, serde::Serialize)]
+#[derive(Clone, Debug, schemars::JsonSchema, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AdvisedAction {
     /// Represents that the reactor's state is okay and hence that no action is required.

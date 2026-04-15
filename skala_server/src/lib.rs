@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
 pub use crate::app::App;
+pub use crate::reactor::{IntactReactorState, ReactorMode};
 
 pub type Result<T, E = Error> = anyhow::Result<T, E>;
 

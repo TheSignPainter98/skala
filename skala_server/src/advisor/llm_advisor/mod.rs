@@ -11,7 +11,7 @@ use schemars::schema_for;
 use serde_json::Value;
 
 use crate::advisor::{Advice, Advisor};
-use crate::reactor::{ReactorState, ReactorStatus};
+use crate::reactor::{IntactReactorState, ReactorMode};
 use crate::{
     ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty, ConfigTemperature,
     ConfigUrl, LlmConfig, Result,
@@ -53,7 +53,7 @@ impl LlmAdvisor {
 }
 
 impl Advisor for LlmAdvisor {
-    async fn advise(&self, reactor_state: ReactorState) -> Result<Advice> {
+    async fn advise(&self, reactor_state: IntactReactorState) -> Result<Advice> {
         // TODO(kcza): store previous messages in sqlite, present a sliding window of at
         // most N.
 
@@ -130,9 +130,9 @@ impl Advisor for LlmAdvisor {
 }
 
 impl LlmAdvisor {
-    fn summarise_reactor_state(&self, reactor_state: &ReactorState) -> String {
-        let ReactorState {
-            status,
+    fn summarise_reactor_state(&self, reactor_state: &IntactReactorState) -> String {
+        let IntactReactorState {
+            mode,
             temperature,
             coolant_filled,
             heated_coolant_filled,
@@ -144,13 +144,13 @@ impl LlmAdvisor {
             heating_rate,
             boil_efficiency,
         } = reactor_state;
-        let status = match status {
-            ReactorStatus::Active => "active",
-            ReactorStatus::Inactive => "inactive",
+        let mode = match mode {
+            ReactorMode::Active => "active",
+            ReactorMode::Inactive => "shut down",
         };
         format!(
             "
-                The reactor's status is {status}.
+                The reactor is currently {mode}.
                 The reactor's temperature {temperature}.
                 The reactor's coolant_filled {coolant_filled}.
                 The reactor's heated_coolant_filled {heated_coolant_filled}.

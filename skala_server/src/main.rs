@@ -36,7 +36,7 @@ async fn run() -> Result<()> {
 
     let db_pool = load_db_pool(db_path).await?;
     let advisor = LlmAdvisor::new(llm_config);
-    let app = App::new(db_pool, advisor);
+    let app = App::new(db_pool.clone(), advisor);
 
     let port = port.into_inner();
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -48,6 +48,7 @@ async fn run() -> Result<()> {
     axum::serve(listener, app.into_router())
         .await
         .context("Cannot serve app")?;
+    db_pool.close().await; // Await optimisation.
     Ok(())
 }
 

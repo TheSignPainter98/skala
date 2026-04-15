@@ -13,7 +13,7 @@ pub struct App {
 impl App {
     pub fn new<A>(db_pool: SqlitePool, advisor: A) -> Self
     where
-        A: Advisor + Clone + Send + Sync + 'static,
+        A: Advisor + 'static,
     {
         let app_state = AppState::new(db_pool, advisor);
         let router = routes::register(Router::new()).with_state(app_state);

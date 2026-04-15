@@ -6,8 +6,16 @@ use sqlx::{Encode, Sqlite, Type};
 // TODO(kcza): communicate the reactor parameter constraints! E.g. critical temperature,
 // ranges of certain values.
 #[derive(Debug, serde::Deserialize)]
-pub struct ReactorState {
-    pub status: ReactorStatus,
+#[serde(tag = "status")]
+#[serde(rename_all = "kebab-case")]
+pub enum ReactorState {
+    Intact(IntactReactorState),
+    Destroyed,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct IntactReactorState {
+    pub mode: ReactorMode,
     pub temperature: f64,
     pub coolant_filled: f64,
     pub heated_coolant_filled: f64,
@@ -20,20 +28,20 @@ pub struct ReactorState {
     pub boil_efficiency: f64,
 }
 
-#[derive(Copy, Clone, Debug, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ReactorStatus {
+#[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReactorMode {
     Inactive,
     Active,
 }
 
-impl Type<Sqlite> for ReactorStatus {
+impl Type<Sqlite> for ReactorMode {
     fn type_info() -> SqliteTypeInfo {
         <i64 as Type<Sqlite>>::type_info()
     }
 }
 
-impl<'q> Encode<'q, Sqlite> for ReactorStatus {
+impl<'q> Encode<'q, Sqlite> for ReactorMode {
     fn encode(
         self,
         buf: &mut <Sqlite as sqlx::Database>::ArgumentBuffer<'q>,
