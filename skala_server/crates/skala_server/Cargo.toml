@@ -1,0 +1,20 @@
+[package]
+name = "skala_server"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+async-openai = { version = "0.34.0", features = ["chat-completion", "completions"] }
+axum = { version = "0.8.8", features = ["json"] }
+log = "0.4.29"
+schemars = "1.2.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
+thiserror = "2.0.18"
+time = "0.3.47"
+
+[dev-dependencies]
+googletest = "0.14.2"
+insta = { version = "1.47.2", features = ["json"] }
