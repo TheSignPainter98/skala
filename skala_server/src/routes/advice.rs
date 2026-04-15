@@ -1,6 +1,7 @@
 use axum::extract::{Json, State};
 use log::info;
 use sqlx::{SqliteTransaction, query, query_as};
+use time::UtcDateTime;
 
 use crate::advisor::{Advice, AdvisedAction, Advisor};
 use crate::reactor::{IntactReactorState, ReactorId, ReactorName, ReactorState};
@@ -11,6 +12,7 @@ use crate::{Result, app::AppState};
 pub(crate) struct Request {
     reactor_name: ReactorName,
     reactor_state: ReactorState,
+    timestamp: IngameDateTime,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -29,6 +31,7 @@ pub(crate) async fn route(
     let Json(Request {
         reactor_name,
         reactor_state,
+        timestamp: ingame_timestamp,
     }) = req;
     let mut txn = app_state.db_pool.begin_with("BEGIN IMMEDIATE").await?;
 
@@ -38,7 +41,8 @@ pub(crate) async fn route(
     let reactor_id = get_reactor_id(&mut txn, &reactor_name).await?;
 
     info!("recording request event");
-    let event_id = register_event(&mut txn, reactor_id).await?;
+    let irl_timestamp = UtcDateTime::now();
+    let event_id = register_event(&mut txn, reactor_id, irl_timestamp, ingame_timestamp).await?;
 
     info!("recording reactor state");
     store_reactor_state(&mut txn, event_id, &reactor_state).await?;
@@ -98,9 +102,13 @@ async fn get_reactor_id(txn: &mut SqliteTransaction<'_>, name: &ReactorName) -> 
 #[sqlx(transparent)]
 pub(crate) struct EventId(i64);
 
-async fn register_event(txn: &mut SqliteTransaction<'_>, reactor_id: ReactorId) -> Result<EventId> {
-    let irl_timestamp = -1;
-    let ingame_timestamp = -1;
+async fn register_event(
+    txn: &mut SqliteTransaction<'_>,
+    reactor_id: ReactorId,
+    irl_timestamp: UtcDateTime,
+    ingame_timestamp: IngameDateTime,
+) -> Result<EventId> {
+    let irl_timestamp = irl_timestamp.unix_timestamp();
     let event_insertion_query = query!(
         "
             INSERT INTO event (reactor_id, irl_timestamp, ingame_timestamp)
@@ -116,6 +124,10 @@ async fn register_event(txn: &mut SqliteTransaction<'_>, reactor_id: ReactorId) 
         .last_insert_rowid();
     Ok(EventId(id))
 }
+
+#[derive(Debug, serde::Deserialize, sqlx::Type)]
+#[sqlx(transparent)]
+struct IngameDateTime(String);
 
 async fn store_reactor_state(
     txn: &mut SqliteTransaction<'_>,

@@ -17,7 +17,8 @@ async fn test_destroyed_reactor(db_pool: SqlitePool) {
             "reactor-name": REACTOR_NAME,
             "reactor-state": {
                 "status": "destroyed"
-            }
+            },
+            "timestamp": "2026-04-15T00:00:00"
         }))
         .expected_response(json!({
             "reactor-name": REACTOR_NAME,
@@ -48,6 +49,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 "heating_rate": 999.0,
                 "boil_efficiency": 1234.0,
             },
+            "timestamp": "2026-04-15T00:00:00"
         }))
         .advice(Advice {
             action: AdvisedAction::NoAction,
@@ -112,6 +114,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 "heating_rate": 0.0,
                 "boil_efficiency": 0.0,
             },
+            "timestamp": "2026-04-15T00:00:00"
         }))
         .advice(Advice {
             action: AdvisedAction::Scram,

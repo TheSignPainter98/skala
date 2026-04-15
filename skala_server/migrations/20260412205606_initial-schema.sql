@@ -3,7 +3,7 @@ CREATE TABLE event (
         PRIMARY KEY,
     reactor_id INTEGER NOT NULL,
     irl_timestamp INTEGER NOT NULL,
-    ingame_timestamp INTEGER NOT NULL
+    ingame_timestamp TEXT NOT NULL
 ) STRICT;
 
 CREATE TABLE reactor (
