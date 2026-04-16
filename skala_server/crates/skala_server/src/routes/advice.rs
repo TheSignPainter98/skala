@@ -7,16 +7,18 @@ use crate::advisor::{Advice, AdvisedAction, Advisor};
 use crate::reactor::{IntactReactorState, ReactorId, ReactorName, ReactorState};
 use crate::{Result, app::AppState};
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, quicktype::Quicktype, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[quicktype(namespace = "server")]
 pub(crate) struct Request {
     reactor_name: ReactorName,
     reactor_state: ReactorState,
     timestamp: IngameDateTime,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, quicktype::Quicktype, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
+#[quicktype(namespace = "server")]
 pub(crate) struct Response {
     reactor_name: ReactorName,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -219,4 +221,19 @@ async fn record_advice(
     );
     advice_insertion_query.execute(&mut **txn).await?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use insta::assert_json_snapshot;
+    use quicktype::Quicktype;
+
+    use super::*;
+
+    #[test]
+    fn test_foo() {
+        // TODO(kcza): plumb the namespace!
+        assert_eq!("server.Response", Response::type_name().to_string());
+        assert_json_snapshot!(Response::type_spec().to_string());
+    }
 }

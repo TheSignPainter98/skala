@@ -1836,6 +1836,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "quicktype"
+version = "0.1.0"
+dependencies = [
+ "quicktype_macros",
+]
+
+[[package]]
+name = "quicktype_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2485,6 +2501,7 @@ dependencies = [
  "googletest",
  "insta",
  "log",
+ "quicktype",
  "schemars",
  "serde",
  "serde_json",
