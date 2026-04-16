@@ -52,6 +52,9 @@ pub(crate) async fn route(
 
     // TODO(kcza): fetch reactor state history, pass as context to the advisor.
 
+    txn.commit().await?;
+    let mut txn = app_state.db_pool.begin_with("BEGIN IMMEDIATE").await?;
+
     let advice = match reactor_state {
         ReactorState::Destroyed => None,
         ReactorState::Intact(intact_reactor_state) => {
@@ -64,6 +67,7 @@ pub(crate) async fn route(
             Some(advice)
         }
     };
+    txn.commit().await?;
 
     info!("returning response");
     Ok(Json(Response {
