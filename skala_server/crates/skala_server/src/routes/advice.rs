@@ -237,7 +237,6 @@ mod tests {
 
     #[test]
     fn test_foo() {
-        // TODO(kcza): plumb the namespace!
         assert_eq!("server.Response", Response::type_name().to_string());
         assert_json_snapshot!(Response::type_spec().to_string());
     }
