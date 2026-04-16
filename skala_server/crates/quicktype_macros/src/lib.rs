@@ -226,7 +226,6 @@ where
 
     fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs<A>) -> Result<()> {
         let mut prev_punct: Option<&P> = None;
-
         for pair in self.pairs() {
             match pair {
                 Pair::Punctuated(t, p) => {
