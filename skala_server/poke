@@ -4,7 +4,8 @@ curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15
 {
     "reactor_name": "boomy",
     "reactor_state": {
-        "status": "active",
+        "status": "intact",
+        "mode": "active",
         "temperature": 1000,
         "coolant_filled": 100,
         "heated_coolant_filled": 100,
@@ -15,6 +16,7 @@ curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15
         "damage_percent": 100,
         "heating_rate": 100,
         "boil_efficiency": 100
-    }
+    },
+    "timestamp": "2026-01-01T11:11:11"
 }
 EOF

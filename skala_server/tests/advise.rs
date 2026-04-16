@@ -14,14 +14,14 @@ async fn test_destroyed_reactor(db_pool: SqlitePool) {
     Test::new()
         .reactor_name(REACTOR_NAME)
         .input(json!({
-            "reactor-name": REACTOR_NAME,
-            "reactor-state": {
+            "reactor_name": REACTOR_NAME,
+            "reactor_state": {
                 "status": "destroyed"
             },
             "timestamp": "2026-04-15T00:00:00"
         }))
         .expected_response(json!({
-            "reactor-name": REACTOR_NAME,
+            "reactor_name": REACTOR_NAME,
         }))
         .run(db_pool)
         .await;
@@ -34,8 +34,8 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
     Test::new()
         .reactor_name(REACTOR_NAME)
         .input(json!({
-            "reactor-name": REACTOR_NAME,
-            "reactor-state": {
+            "reactor_name": REACTOR_NAME,
+            "reactor_state": {
                 "status": "intact",
                 "mode": "inactive",
                 "temperature": 111.0,
@@ -56,7 +56,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
             reasoning: "all good".into(),
         })
         .expected_response(json!({
-            "reactor-name": REACTOR_NAME,
+            "reactor_name": REACTOR_NAME,
             "advice": {
                 "action": "no-action",
                 "reasoning": "all good",
@@ -99,8 +99,8 @@ async fn test_active_reactor(db_pool: SqlitePool) {
     Test::new()
         .reactor_name(REACTOR_NAME)
         .input(json!({
-            "reactor-name": REACTOR_NAME,
-            "reactor-state": {
+            "reactor_name": REACTOR_NAME,
+            "reactor_state": {
                 "status": "intact",
                 "mode": "active",
                 "temperature": 0.0,
@@ -121,7 +121,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
             reasoning: "let's see what happens".into(),
         })
         .expected_response(json!({
-            "reactor-name": REACTOR_NAME,
+            "reactor_name": REACTOR_NAME,
             "advice": {
                 "action": "scram",
                 "reasoning": "let's see what happens",
@@ -205,7 +205,7 @@ impl Test {
 
         let resp = test_server.post("/advice").json(&input).await;
         let body: Value = resp.json();
-        assert_eq!(body["reactor-name"], reactor_name);
+        assert_eq!(body["reactor_name"], reactor_name);
         assert_eq!(body, expected_response);
     }
 }

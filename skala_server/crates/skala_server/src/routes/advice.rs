@@ -8,7 +8,7 @@ use crate::reactor::{IntactReactorState, ReactorId, ReactorName, ReactorState};
 use crate::{Result, app::AppState};
 
 #[derive(Debug, quicktype::Quicktype, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 #[quicktype(namespace = "server")]
 pub(crate) struct Request {
     reactor_name: ReactorName,
@@ -17,7 +17,7 @@ pub(crate) struct Request {
 }
 
 #[derive(Debug, quicktype::Quicktype, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 #[quicktype(namespace = "server")]
 pub(crate) struct Response {
     reactor_name: ReactorName,

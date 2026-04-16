@@ -16,7 +16,7 @@ pub trait Advisor: Debug + Send + Sync {
 
 /// Holds the advice to apply to the reactor.
 #[derive(Clone, Debug, schemars::JsonSchema, serde::Deserialize, serde::Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub struct Advice {
     pub action: AdvisedAction,
     pub reasoning: String,

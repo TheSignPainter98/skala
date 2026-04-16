@@ -14,6 +14,7 @@ pub enum ReactorState {
 }
 
 #[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct IntactReactorState {
     pub mode: ReactorMode,
     pub temperature: f64,
@@ -29,7 +30,7 @@ pub struct IntactReactorState {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "snake_case")]
 pub enum ReactorMode {
     Inactive,
     Active,

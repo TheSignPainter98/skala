@@ -16,16 +16,17 @@ CREATE TABLE reactor (
 CREATE INDEX reactor__name_index ON reactor(name);
 
 CREATE TABLE reactor_state (
-    id INTEGER NOT NULL
-        PRIMARY KEY,
     event_id INTEGER NOT NULL
-        REFERENCES event(id),
+        PRIMARY KEY
+        REFERENCES event(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
 
     intact INTEGER NOT NULL
         CHECK (intact IN (0, 1)),
     pretty_intact TEXT AS (CASE
         WHEN intact = 0 THEN 'destroyed'
-        WHEN intact = 0 THEN 'intact'
+        WHEN intact = 1 THEN 'intact'
     END),
 
     mode INTEGER NULL
@@ -61,10 +62,11 @@ CREATE TABLE reactor_state (
 ) STRICT;
 
 CREATE TABLE advice (
-    id INTEGER NOT NULL
-        PRIMARY KEY,
     event_id INTEGER NOT NULL
-        REFERENCES event(id),
+        PRIMARY KEY
+        REFERENCES event(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
 
     action INTEGER NOT NULL
         CHECK (action IN (0, 1)),
