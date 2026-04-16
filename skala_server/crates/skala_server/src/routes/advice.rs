@@ -35,6 +35,8 @@ pub(crate) async fn route(
         reactor_state,
         timestamp: ingame_timestamp,
     }) = req;
+    let irl_timestamp = UtcDateTime::now();
+
     let mut txn = app_state.db_pool.begin_with("BEGIN IMMEDIATE").await?;
 
     info!("processing request for {reactor_name}");
@@ -43,7 +45,6 @@ pub(crate) async fn route(
     let reactor_id = get_reactor_id(&mut txn, &reactor_name).await?;
 
     info!("recording request event");
-    let irl_timestamp = UtcDateTime::now();
     let event_id = register_event(&mut txn, reactor_id, irl_timestamp, ingame_timestamp).await?;
 
     info!("recording reactor state");
