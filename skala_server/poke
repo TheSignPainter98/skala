@@ -2,7 +2,7 @@
 
 curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15000/advice <<EOF
 {
-    "reactor_name": "boomy",
+    "reactor_name": "kcza'z diskount reakter",
     "reactor_state": {
         "status": "intact",
         "mode": "active",
