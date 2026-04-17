@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 use proc_macro2::TokenStream;
 use quote::{ToTokens, quote};
@@ -46,19 +46,25 @@ fn quicktype_impl(item: DeriveInput) -> Result<TokenStream> {
         None => quote!(None),
     };
     let unqualified_name = ident.to_string();
-    let quicktype_spec = {
-        let mut quicktype_type = String::new();
+    let (spec, required_types) = {
+        let mut quicktype_buf = QuicktypeBuf::new();
         match data {
             Data::Struct(strukt) => {
                 let args = args.with_extra(ident.clone());
-                strukt.fmt_quicktype(&mut quicktype_type, args)?
+                strukt.fmt_quicktype(&mut quicktype_buf, args)?
             }
-            Data::Enum(enom) => enom.fmt_quicktype(&mut quicktype_type, args)?,
+            Data::Enum(enom) => enom.fmt_quicktype(&mut quicktype_buf, args)?,
             Data::Union(_) => return Err(unsupported(item, "unions")),
         }
-        quicktype_type
+        let QuicktypeBuf {
+            spec,
+            required_types,
+        } = quicktype_buf;
+        (spec, required_types)
     };
+
     Ok(quote! {
+
         impl ::quicktype::Quicktype for #ident {
             fn type_name() -> ::quicktype::TypeName {
                 ::quicktype::TypeName {
@@ -68,7 +74,14 @@ fn quicktype_impl(item: DeriveInput) -> Result<TokenStream> {
             }
 
             fn type_spec() -> ::quicktype::TypeSpec {
-                ::quicktype::TypeSpec::from(#quicktype_spec)
+                {
+                    fn _assert_implements_quicktype() {
+                        #[allow(unused)]
+                        fn assert_implements_quicktype<T: ::quicktype::Quicktype>() {}
+                        #(assert_implements_quicktype::<#required_types>());*
+                    }
+                }
+                ::quicktype::TypeSpec::from(#spec)
             }
         }
     })
@@ -77,7 +90,30 @@ fn quicktype_impl(item: DeriveInput) -> Result<TokenStream> {
 trait Quicktype {
     type Args;
 
-    fn fmt_quicktype(&self, f: &mut String, args: Self::Args) -> Result<()>;
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: Self::Args) -> Result<()>;
+}
+
+#[derive(Debug, Default)]
+struct QuicktypeBuf {
+    spec: String,
+    required_types: Vec<Ident>,
+}
+
+impl QuicktypeBuf {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn write(&mut self, to_write: impl Display) {
+        write!(&mut self.spec, "{to_write}").expect("internal error: could not write to spec");
+    }
+
+    fn require_type(&mut self, ty: Ident) {
+        if self.required_types.contains(&ty) {
+            return;
+        }
+        self.required_types.push(ty);
+    }
 }
 
 #[derive(Clone)]
@@ -124,7 +160,7 @@ impl<A> QuicktypeArgs<A> {
 impl<T: Quicktype> Quicktype for &T {
     type Args = T::Args;
 
-    fn fmt_quicktype(&self, f: &mut String, args: Self::Args) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: Self::Args) -> Result<()> {
         (*self).fmt_quicktype(f, args)
     }
 }
@@ -132,7 +168,7 @@ impl<T: Quicktype> Quicktype for &T {
 impl Quicktype for DataStruct {
     type Args = QuicktypeArgs<Ident>;
 
-    fn fmt_quicktype(&self, f: &mut String, args: Self::Args) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: Self::Args) -> Result<()> {
         let Self {
             struct_token: _,
             fields,
@@ -145,7 +181,7 @@ impl Quicktype for DataStruct {
 impl Quicktype for DataEnum {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             enum_token: _,
             brace_token: _,
@@ -159,7 +195,7 @@ impl Quicktype for DataEnum {
 impl Quicktype for Variant {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             attrs: _,
             ident,
@@ -174,7 +210,7 @@ impl Quicktype for Variant {
 impl Quicktype for Fields {
     type Args = QuicktypeArgs<Ident>;
 
-    fn fmt_quicktype(&self, f: &mut String, args: Self::Args) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: Self::Args) -> Result<()> {
         let (args, name) = args.split_extra();
         match self {
             Self::Named(named) => named.fmt_quicktype(f, args),
@@ -187,7 +223,7 @@ impl Quicktype for Fields {
 impl Quicktype for String {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         self.as_str().fmt_quicktype(f, args)
     }
 }
@@ -195,8 +231,8 @@ impl Quicktype for String {
 impl Quicktype for &str {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, _args: QuicktypeArgs) -> Result<()> {
-        write!(f, "{self:?}").ok();
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, _args: QuicktypeArgs) -> Result<()> {
+        f.write(format_args!("{self:?}"));
         Ok(())
     }
 }
@@ -204,14 +240,14 @@ impl Quicktype for &str {
 impl Quicktype for FieldsNamed {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             brace_token: _,
             named,
         } = self;
-        f.push('{');
+        f.write('{');
         named.fmt_quicktype(f, args)?;
-        f.push('}');
+        f.write('}');
         Ok(())
     }
 }
@@ -224,7 +260,7 @@ where
 {
     type Args = QuicktypeArgs<A>;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs<A>) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs<A>) -> Result<()> {
         let mut prev_punct: Option<&P> = None;
         for pair in self.pairs() {
             match pair {
@@ -246,8 +282,8 @@ where
 impl Quicktype for Token![,] {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, _args: QuicktypeArgs) -> Result<()> {
-        f.push_str(", ");
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, _args: QuicktypeArgs) -> Result<()> {
+        f.write(", ");
         Ok(())
     }
 }
@@ -255,8 +291,8 @@ impl Quicktype for Token![,] {
 impl Quicktype for Token![+] {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, _args: QuicktypeArgs) -> Result<()> {
-        f.push_str(" + ");
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, _args: QuicktypeArgs) -> Result<()> {
+        f.write(" + ");
         Ok(())
     }
 }
@@ -264,8 +300,8 @@ impl Quicktype for Token![+] {
 impl Quicktype for Token![|] {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, _args: QuicktypeArgs) -> Result<()> {
-        f.push_str(" | ");
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, _args: QuicktypeArgs) -> Result<()> {
+        f.write(" | ");
         Ok(())
     }
 }
@@ -273,14 +309,14 @@ impl Quicktype for Token![|] {
 impl Quicktype for FieldsUnnamed {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             paren_token: _,
             unnamed,
         } = self;
-        f.push('(');
+        f.write('(');
         unnamed.fmt_quicktype(f, args)?;
-        f.push(')');
+        f.write(')');
         Ok(())
     }
 }
@@ -288,9 +324,9 @@ impl Quicktype for FieldsUnnamed {
 impl Quicktype for Field {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
-            attrs: _, // TODO(kcza): check serde attrs
+            attrs: _,
             vis: _,
             mutability: _,
             ident,
@@ -299,7 +335,7 @@ impl Quicktype for Field {
         } = self;
         if let Some(ident) = ident {
             ident.fmt_quicktype(f, args.clone().with_extra(IdentPosition::FieldName))?;
-            f.push_str(": ");
+            f.write(": ");
         }
         ty.fmt_quicktype(f, args)?;
         Ok(())
@@ -309,16 +345,27 @@ impl Quicktype for Field {
 impl Quicktype for Ident {
     type Args = QuicktypeArgs<IdentPosition>;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs<IdentPosition>) -> Result<()> {
+    fn fmt_quicktype(
+        &self,
+        f: &mut QuicktypeBuf,
+        args: QuicktypeArgs<IdentPosition>,
+    ) -> Result<()> {
         let (args, ident_position) = args.split_extra();
         match ident_position {
-            IdentPosition::FieldName => f.push_str(&self.to_string()),
+            IdentPosition::FieldName => {
+                for chr in self.to_string().chars() {
+                    if chr.is_ascii_uppercase() {
+                        f.write('_');
+                    }
+                    f.write(chr.to_ascii_lowercase());
+                }
+            }
             IdentPosition::TypeName => {
                 if let Some(namespace) = args.namespace {
-                    f.push_str(&namespace.value());
-                    f.push('.');
+                    f.write(namespace.value());
+                    f.write('.');
                 }
-                f.push_str(&self.to_string());
+                f.write(self.to_string());
             }
         }
         Ok(())
@@ -333,7 +380,7 @@ enum IdentPosition {
 impl Quicktype for Type {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         match self {
             Type::Array(array) => array.fmt_quicktype(f, args),
             Type::BareFn(bare_fn) => bare_fn.fmt_quicktype(f, args),
@@ -358,7 +405,7 @@ impl Quicktype for Type {
 impl Quicktype for TypeArray {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             bracket_token: _,
             elem,
@@ -372,7 +419,7 @@ impl Quicktype for TypeArray {
 impl Quicktype for TypeBareFn {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             lifetimes: _,
             unsafety: _,
@@ -386,9 +433,9 @@ impl Quicktype for TypeBareFn {
         if let Some(variadic) = variadic {
             return Err(unsupported(variadic, "variadic function parameters"));
         }
-        f.push('(');
+        f.write('(');
         inputs.fmt_quicktype(f, args.clone())?;
-        f.push_str(") -> ");
+        f.write(") -> ");
         output.fmt_quicktype(f, args)?;
         Ok(())
     }
@@ -397,7 +444,7 @@ impl Quicktype for TypeBareFn {
 impl Quicktype for BareFnArg {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             attrs: _,
             name: _,
@@ -410,7 +457,7 @@ impl Quicktype for BareFnArg {
 impl Quicktype for ReturnType {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         match self {
             Self::Default => Err(unsupported(self, "inferred return types")),
             Self::Type(_, ty) => ty.fmt_quicktype(f, args),
@@ -421,7 +468,7 @@ impl Quicktype for ReturnType {
 impl Quicktype for TypeImplTrait {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             impl_token: _,
             bounds,
@@ -440,7 +487,7 @@ impl Quicktype for TypeImplTrait {
 impl Quicktype for TypeParamBound {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         match self {
             Self::Trait(trayt) => trayt.fmt_quicktype(f, args),
             _ => Err(unsupported(self, "non-trait type bound")),
@@ -451,7 +498,7 @@ impl Quicktype for TypeParamBound {
 impl Quicktype for TraitBound {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             paren_token: _,
             modifier: _,
@@ -465,9 +512,9 @@ impl Quicktype for TraitBound {
 impl Quicktype for TypeNever {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, _args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, _args: QuicktypeArgs) -> Result<()> {
         let Self { bang_token: _ } = self;
-        f.push('!');
+        f.write('!');
         Ok(())
     }
 }
@@ -475,7 +522,7 @@ impl Quicktype for TypeNever {
 impl Quicktype for TypeParen {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             paren_token: _,
             elem,
@@ -487,7 +534,7 @@ impl Quicktype for TypeParen {
 impl Quicktype for TypePath {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self { qself, path } = self;
         if let Some(qself) = qself {
             let QSelf {
@@ -506,11 +553,7 @@ impl Quicktype for TypePath {
 impl Quicktype for Path {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
-        if let Some(ident) = self.get_ident() {
-            return ident.fmt_quicktype(f, args.with_extra(IdentPosition::TypeName));
-        }
-
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             leading_colon: _,
             segments,
@@ -525,7 +568,7 @@ impl Quicktype for Path {
         };
         let PathSegment { ident, arguments } = segment;
         match arguments {
-            PathArguments::None => ident.fmt_quicktype(f, args.with_extra(IdentPosition::TypeName)),
+            PathArguments::None => QuicktypeType::new(ident)?.fmt_quicktype(f, args),
             PathArguments::AngleBracketed(bracketed_args) => {
                 let AngleBracketedGenericArguments {
                     colon2_token: _,
@@ -533,41 +576,108 @@ impl Quicktype for Path {
                     args: generic_args,
                     gt_token: _,
                 } = bracketed_args;
-                let ident_name = ident.to_string();
-
-                // Special cases.
-                if generic_args.len() == 1 && ident_name == "Option" {
-                    f.push('?');
-                    generic_args[0].fmt_quicktype(f, args)?;
-                    return Ok(());
-                }
-                if generic_args.len() == 1 && ident_name == "Vec" {
-                    f.push('[');
-                    generic_args[0].fmt_quicktype(f, args)?;
-                    f.push(']');
-                    return Ok(());
-                }
-                if generic_args.len() == 1 && ident_name.ends_with("Set") {
-                    f.push('{');
-                    generic_args[0].fmt_quicktype(f, args)?;
-                    f.push('}');
-                    return Ok(());
-                }
-                if generic_args.len() == 2 && ident_name.ends_with("Map") {
-                    f.push('{');
-                    generic_args[0].fmt_quicktype(f, args.clone())?;
-                    f.push_str(" -> ");
-                    generic_args[1].fmt_quicktype(f, args)?;
-                    f.push('}');
-                    return Ok(());
-                }
-                if generic_args.is_empty() {
-                    generic_args[0].fmt_quicktype(f, args)?;
-                    return Ok(());
-                }
-                Err(unsupported(generic_args, "arbitrary generic arguments"))
+                QuicktypeType::with_generics(ident, generic_args)?.fmt_quicktype(f, args)
             }
             PathArguments::Parenthesized(p) => p.fmt_quicktype(f, args),
+        }
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+enum QuicktypeType {
+    Boolean,
+    String,
+    Number,
+    Option(GenericArgument),
+    Set(GenericArgument),
+    List(GenericArgument),
+    Map(GenericArgument, GenericArgument),
+    Custom(Ident),
+}
+
+impl QuicktypeType {
+    fn new(name: &Ident) -> Result<Self> {
+        Self::with_generics_impl(name, None)
+    }
+
+    fn with_generics(
+        name: &Ident,
+        generics: &Punctuated<GenericArgument, Token![,]>,
+    ) -> Result<Self> {
+        Self::with_generics_impl(name, Some(generics))
+    }
+
+    fn with_generics_impl(
+        name: &Ident,
+        generics: Option<&Punctuated<GenericArgument, Token![,]>>,
+    ) -> Result<Self> {
+        let ident_string = name.to_string();
+        let generic_args: Vec<_> = generics.into_iter().flatten().collect();
+        match (generic_args.as_slice(), ident_string.as_str()) {
+            ([], "bool") => Ok(Self::Boolean),
+            ([], "String" | "str") => Ok(Self::String),
+            (
+                [],
+                "u8" | "u16" | "u32" | "u64" | "u128" | "i8" | "i16" | "i32" | "i64" | "i128"
+                | "usize" | "isize" | "f32" | "f64",
+            ) => Ok(Self::Number),
+            ([], _) => Ok(Self::Custom(name.to_owned())),
+            ([elem_type], "Option") => Ok(Self::Option((*elem_type).to_owned())),
+            ([elem_type], "Vec") => Ok(Self::List((*elem_type).to_owned())),
+            ([elem_type], name) if name.ends_with("Set") => Ok(Self::Set((*elem_type).to_owned())),
+            ([key_type, value_type], name) if name.ends_with("Map") => {
+                Ok(Self::Map((*key_type).clone(), (*value_type).clone()))
+            }
+            _ => Err(unsupported(generics, "arbitrary generic arguments")),
+        }
+    }
+}
+
+impl Quicktype for QuicktypeType {
+    type Args = QuicktypeArgs;
+
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
+        match self {
+            Self::Boolean => {
+                f.write("boolean");
+                Ok(())
+            }
+            Self::String => {
+                f.write("string");
+                Ok(())
+            }
+            Self::Number => {
+                f.write("number");
+                Ok(())
+            }
+            Self::Option(elem_type) => {
+                f.write('?');
+                elem_type.fmt_quicktype(f, args)
+            }
+            Self::Set(elem_type) => {
+                f.write('{');
+                elem_type.fmt_quicktype(f, args)?;
+                f.write('}');
+                Ok(())
+            }
+            Self::List(elem_type) => {
+                f.write('[');
+                elem_type.fmt_quicktype(f, args)?;
+                f.write(']');
+                Ok(())
+            }
+            Self::Map(key_type, value_type) => {
+                f.write('{');
+                key_type.fmt_quicktype(f, args.clone())?;
+                f.write(" -> ");
+                value_type.fmt_quicktype(f, args)?;
+                f.write('}');
+                Ok(())
+            }
+            Self::Custom(ty) => {
+                f.require_type(ty.clone());
+                ty.fmt_quicktype(f, args.with_extra(IdentPosition::TypeName))
+            }
         }
     }
 }
@@ -575,15 +685,15 @@ impl Quicktype for Path {
 impl Quicktype for ParenthesizedGenericArguments {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             paren_token: _,
             inputs,
             output,
         } = self;
-        f.push('(');
+        f.write('(');
         inputs.fmt_quicktype(f, args.clone())?;
-        f.push_str(") -> ");
+        f.write(") -> ");
         output.fmt_quicktype(f, args)?;
         Ok(())
     }
@@ -592,7 +702,7 @@ impl Quicktype for ParenthesizedGenericArguments {
 impl Quicktype for GenericArgument {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         match self {
             Self::Lifetime(lifetime) => Err(unsupported(lifetime, "lifetime arguments")),
             Self::Type(ty) => ty.fmt_quicktype(f, args),
@@ -615,7 +725,7 @@ impl Quicktype for GenericArgument {
 impl Quicktype for TypeReference {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             and_token: _,
             lifetime: _,
@@ -629,14 +739,14 @@ impl Quicktype for TypeReference {
 impl Quicktype for TypeSlice {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             bracket_token: _,
             elem,
         } = self;
-        f.push('[');
+        f.write('[');
         elem.fmt_quicktype(f, args)?;
-        f.push(']');
+        f.write(']');
         Ok(())
     }
 }
@@ -644,7 +754,7 @@ impl Quicktype for TypeSlice {
 impl Quicktype for TypeTraitObject {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             dyn_token: _,
             bounds,
@@ -656,14 +766,14 @@ impl Quicktype for TypeTraitObject {
 impl Quicktype for TypeTuple {
     type Args = QuicktypeArgs;
 
-    fn fmt_quicktype(&self, f: &mut String, args: QuicktypeArgs) -> Result<()> {
+    fn fmt_quicktype(&self, f: &mut QuicktypeBuf, args: QuicktypeArgs) -> Result<()> {
         let Self {
             paren_token: _,
             elems,
         } = self;
-        f.push('(');
+        f.write('(');
         elems.fmt_quicktype(f, args)?;
-        f.push(')');
+        f.write(')');
         Ok(())
     }
 }

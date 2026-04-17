@@ -15,15 +15,20 @@ pub trait Advisor: Debug + Send + Sync {
 }
 
 /// Holds the advice to apply to the reactor.
-#[derive(Clone, Debug, schemars::JsonSchema, serde::Deserialize, serde::Serialize)]
+#[derive(
+    Clone, Debug, quicktype::Quicktype, schemars::JsonSchema, serde::Deserialize, serde::Serialize,
+)]
 #[serde(rename_all = "snake_case")]
+#[quicktype(namespace = "server")]
 pub struct Advice {
     pub action: AdvisedAction,
     pub reasoning: String,
 }
 
 /// Holds the action to apply to the reactor.
-#[derive(Clone, Debug, schemars::JsonSchema, serde::Deserialize, serde::Serialize)]
+#[derive(
+    Clone, Debug, quicktype::Quicktype, schemars::JsonSchema, serde::Deserialize, serde::Serialize,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum AdvisedAction {
     /// Represents that the reactor's state is okay and hence that no action is required.

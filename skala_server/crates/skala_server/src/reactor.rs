@@ -5,16 +5,18 @@ use sqlx::{Encode, Sqlite, Type};
 
 // TODO(kcza): communicate the reactor parameter constraints! E.g. critical temperature,
 // ranges of certain values.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, quicktype::Quicktype, serde::Deserialize)]
 #[serde(tag = "status")]
 #[serde(rename_all = "kebab-case")]
+#[quicktype(namespace = "server")]
 pub enum ReactorState {
     Intact(IntactReactorState),
     Destroyed,
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, quicktype::Quicktype, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[quicktype(namespace = "server")]
 pub struct IntactReactorState {
     pub mode: ReactorMode,
     pub temperature: f64,
@@ -29,8 +31,9 @@ pub struct IntactReactorState {
     pub boil_efficiency: f64,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, quicktype::Quicktype, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[quicktype(namespace = "server")]
 pub enum ReactorMode {
     Inactive,
     Active,
@@ -78,8 +81,9 @@ impl From<i64> for ReactorId {
     }
 }
 
-#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, sqlx::Type)]
+#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize, serde::Serialize, sqlx::Type)]
 #[sqlx(transparent)]
+#[quicktype(namespace = "server")]
 pub(crate) struct ReactorName(String);
 
 impl Display for ReactorName {

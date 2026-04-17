@@ -132,8 +132,9 @@ async fn register_event(
     Ok(EventId(id))
 }
 
-#[derive(Debug, serde::Deserialize, sqlx::Type)]
+#[derive(Debug, quicktype::Quicktype, serde::Deserialize, sqlx::Type)]
 #[sqlx(transparent)]
+#[quicktype(namespace = "server")]
 struct IngameDateTime(String);
 
 async fn store_reactor_state(
@@ -236,7 +237,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_foo() {
+    fn test_request_quicktype_def() {
+        assert_eq!("server.Request", Request::type_name().to_string());
+        assert_json_snapshot!(Request::type_spec().to_string());
+    }
+
+    #[test]
+    fn test_response_quicktype_def() {
         assert_eq!("server.Response", Response::type_name().to_string());
         assert_json_snapshot!(Response::type_spec().to_string());
     }
