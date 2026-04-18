@@ -18,7 +18,7 @@ use tokio::net::TcpListener;
 async fn main() -> ExitCode {
     colog::init();
     if let Err(err) = run().await {
-        error!("{err}");
+        error!("{err:?}");
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS

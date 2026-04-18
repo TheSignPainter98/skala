@@ -37,6 +37,7 @@ impl IntoResponse for Error {
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(rename = "skala", default)]
     pub general: GeneralConfig,
@@ -45,7 +46,8 @@ pub struct Config {
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
-#[serde(rename = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct GeneralConfig {
     #[serde(default)]
     pub port: ConfigPort,
@@ -86,7 +88,8 @@ impl Default for ReactorSnapshotWindowLimit {
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
-#[serde(rename = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
+#[serde(deny_unknown_fields)]
 pub struct LlmConfig {
     #[serde(default)]
     url: ConfigUrl,

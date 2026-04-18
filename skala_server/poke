@@ -21,4 +21,4 @@ for i in $(seq 10); do
             "timestamp": "2026-01-01T11:11:11"
         }
 EOF
-end
+done
