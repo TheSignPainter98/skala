@@ -1,11 +1,14 @@
 use std::fmt::Display;
 
+use anyhow::anyhow;
 use sqlx::sqlite::SqliteTypeInfo;
 use sqlx::{Encode, Sqlite, Type};
 
+use crate::Error;
+
 // TODO(kcza): communicate the reactor parameter constraints! E.g. critical temperature,
 // ranges of certain values.
-#[derive(Debug, quicktype::Quicktype, serde::Deserialize)]
+#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize)]
 #[serde(tag = "status")]
 #[serde(rename_all = "kebab-case")]
 #[quicktype(namespace = "server")]
@@ -14,7 +17,7 @@ pub enum ReactorState {
     Destroyed,
 }
 
-#[derive(Debug, quicktype::Quicktype, serde::Deserialize)]
+#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[quicktype(namespace = "server")]
 pub struct IntactReactorState {
@@ -37,6 +40,18 @@ pub struct IntactReactorState {
 pub enum ReactorMode {
     Inactive,
     Active,
+}
+
+impl TryFrom<i64> for ReactorMode {
+    type Error = Error;
+
+    fn try_from(raw: i64) -> Result<Self, Self::Error> {
+        match raw {
+            0 => Ok(Self::Inactive),
+            1 => Ok(Self::Active),
+            _ => Err(anyhow!("invalid reactor mode {raw}").into()),
+        }
+    }
 }
 
 impl Type<Sqlite> for ReactorMode {

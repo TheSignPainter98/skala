@@ -32,11 +32,15 @@ async fn run() -> Result<()> {
         general: general_config,
         llm: llm_config,
     } = config;
-    let GeneralConfig { port } = general_config;
+    let GeneralConfig {
+        port,
+        reactor_snapshot_window_limit,
+    } = general_config;
 
     let db_pool = load_db_pool(db_path).await?;
     let advisor = LlmAdvisor::new(llm_config);
-    let app = App::new(db_pool.clone(), advisor);
+    let reactor_snapshot_window_limit = reactor_snapshot_window_limit.into_inner();
+    let app = App::new(db_pool.clone(), reactor_snapshot_window_limit, advisor);
 
     let port = port.into_inner();
     let addr = SocketAddr::from(([0, 0, 0, 0], port));

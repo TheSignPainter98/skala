@@ -1,8 +1,8 @@
 mod common;
 
 use serde_json::{Value, json};
-use skala_server::advisor::{Advice, AdvisedAction};
-use skala_server::{IntactReactorState, ReactorMode};
+use skala_server::advisor::{Advice, AdvisedAction, ReactorSnapshot};
+use skala_server::{IntactReactorState, ReactorMode, ReactorState};
 use sqlx::SqlitePool;
 
 use crate::common::MockAdvisor;
@@ -30,6 +30,7 @@ async fn test_destroyed_reactor(db_pool: SqlitePool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn test_inactive_reactor(db_pool: SqlitePool) {
     const REACTOR_NAME: &str = "pop";
+    const TIMESTAMP: &str = "2026-04-15T00:00:00";
 
     Test::new()
         .reactor_name(REACTOR_NAME)
@@ -49,7 +50,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 "heating_rate": 999.0,
                 "boil_efficiency": 1234.0,
             },
-            "timestamp": "2026-04-15T00:00:00"
+            "timestamp": TIMESTAMP,
         }))
         .advice(Advice {
             action: AdvisedAction::NoAction,
@@ -62,7 +63,18 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 "reasoning": "all good",
             },
         }))
-        .check_reactor_state(|state| {
+        .check_reactor_snapshots(|snapshots| {
+            let snapshot = match snapshots.as_slice() {
+                [] => panic!("too few snapshots"),
+                [snapshot] => snapshot.to_owned(),
+                _ => panic!("too many snapshots"),
+            };
+            let ReactorSnapshot { timestamp, state } = snapshot;
+            assert_eq!(timestamp.into_inner(), TIMESTAMP);
+            let intact_reactor_state = match state {
+                ReactorState::Intact(intact_reactor_state) => intact_reactor_state,
+                _ => panic!("unexpected reactor state"),
+            };
             let IntactReactorState {
                 mode,
                 temperature,
@@ -75,7 +87,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 damage_percent,
                 heating_rate,
                 boil_efficiency,
-            } = state;
+            } = intact_reactor_state;
             assert!(matches!(mode, ReactorMode::Inactive));
             assert_eq!(temperature, 111.0);
             assert_eq!(coolant_filled, 222.0);
@@ -127,8 +139,17 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 "reasoning": "let's see what happens",
             },
         }))
-        .check_reactor_state(|state| {
-            assert!(matches!(state.mode, ReactorMode::Active));
+        .check_reactor_snapshots(|snapshots| {
+            assert!(matches!(
+                snapshots.as_slice(),
+                [ReactorSnapshot {
+                    state: ReactorState::Intact(IntactReactorState {
+                        mode: ReactorMode::Active,
+                        ..
+                    }),
+                    ..
+                }],
+            ));
         })
         .run(db_pool)
         .await;
@@ -138,7 +159,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
 struct Test {
     reactor_name: Option<&'static str>,
     input: Option<Value>,
-    check_reactor_state: Option<Box<dyn Fn(IntactReactorState) + Send>>,
+    check_reactor_snapshots: Option<Box<dyn Fn(Vec<ReactorSnapshot>) + Send>>,
     advice: Option<Advice>,
     expected_response: Option<Value>,
 }
@@ -148,7 +169,7 @@ impl Test {
         Self {
             reactor_name: None,
             input: None,
-            check_reactor_state: None,
+            check_reactor_snapshots: None,
             advice: None,
             expected_response: None,
         }
@@ -164,8 +185,11 @@ impl Test {
         self
     }
 
-    fn check_reactor_state(mut self, f: impl Fn(IntactReactorState) + Send + 'static) -> Self {
-        self.check_reactor_state = Some(Box::new(f));
+    fn check_reactor_snapshots(
+        mut self,
+        f: impl Fn(Vec<ReactorSnapshot>) + Send + 'static,
+    ) -> Self {
+        self.check_reactor_snapshots = Some(Box::new(f));
         self
     }
 
@@ -183,7 +207,7 @@ impl Test {
         let Self {
             reactor_name,
             input,
-            check_reactor_state,
+            check_reactor_snapshots: check_reactor_states,
             advice,
             expected_response,
         } = self;
@@ -192,12 +216,12 @@ impl Test {
         let expected_response = expected_response.expect("no expected response");
 
         let advisor = {
-            MockAdvisor::new(move |reactor_state| {
+            MockAdvisor::new(move |reactor_states| {
                 let advice = advice.clone().expect("no advice");
-                let check_reactor_state = check_reactor_state
+                let check_reactor_states = check_reactor_states
                     .as_ref()
                     .expect("no reactor state check");
-                check_reactor_state(reactor_state);
+                check_reactor_states(reactor_states);
                 Ok(advice)
             })
         };

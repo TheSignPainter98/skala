@@ -1,22 +1,24 @@
 #!/bin/bash
 
-curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15000/advice <<EOF
-{
-    "reactor_name": "kcza'z diskount reakter",
-    "reactor_state": {
-        "status": "intact",
-        "mode": "active",
-        "temperature": 1000,
-        "coolant_filled": 100,
-        "heated_coolant_filled": 100,
-        "fuel_filled": 100,
-        "waste_filled": 100,
-        "actual_burn_rate": 100,
-        "target_burn_rate": 100,
-        "damage_percent": 100,
-        "heating_rate": 100,
-        "boil_efficiency": 100
-    },
-    "timestamp": "2026-01-01T11:11:11"
-}
+for i in $(seq 10); do
+    curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15000/advice <<EOF
+        {
+            "reactor_name": "kcza'z diskount reakter",
+            "reactor_state": {
+                "status": "intact",
+                "mode": "active",
+                "temperature": $i,
+                "coolant_filled": 100,
+                "heated_coolant_filled": 100,
+                "fuel_filled": 100,
+                "waste_filled": 100,
+                "actual_burn_rate": 100,
+                "target_burn_rate": 100,
+                "damage_percent": 100,
+                "heating_rate": 100,
+                "boil_efficiency": 100
+            },
+            "timestamp": "2026-01-01T11:11:11"
+        }
 EOF
+end

@@ -7,11 +7,12 @@ use async_openai::types::chat::{
     ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ReasoningEffort,
     ResponseFormat, ResponseFormatJsonSchema, Verbosity,
 };
+use indoc::formatdoc;
 use schemars::schema_for;
 use serde_json::Value;
 
-use crate::advisor::{Advice, Advisor};
-use crate::reactor::{IntactReactorState, ReactorMode};
+use crate::advisor::{Advice, Advisor, ReactorSnapshot};
+use crate::reactor::{IntactReactorState, ReactorMode, ReactorState};
 use crate::{
     ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty, ConfigTemperature,
     ConfigUrl, LlmConfig, Result,
@@ -53,10 +54,10 @@ impl LlmAdvisor {
 }
 
 impl Advisor for LlmAdvisor {
-    async fn advise(&self, reactor_state: IntactReactorState) -> Result<Advice> {
-        // TODO(kcza): store previous messages in sqlite, present a sliding window of at
-        // most N.
-
+    async fn advise(
+        &self,
+        reactor_snapshots: impl IntoIterator<Item = ReactorSnapshot>,
+    ) -> Result<Advice> {
         let Self {
             client,
             schemas,
@@ -66,32 +67,36 @@ impl Advisor for LlmAdvisor {
             max_completion_tokens,
         } = self;
 
-        let messages = vec![
-            ChatCompletionRequestMessage::Developer(
+        let messages = {
+            let mut messages = Vec::new();
+            messages.push(ChatCompletionRequestMessage::Developer(
                 ChatCompletionRequestDeveloperMessageArgs::default()
                     .name("god")
                     .content(ChatCompletionRequestDeveloperMessageContent::Text(
                         include_str!("base_prompt.md").to_owned(),
                     ))
                     .build()?,
-            ),
-            ChatCompletionRequestMessage::User(
-                ChatCompletionRequestUserMessageArgs::default()
-                    .name("reactor-monitor")
-                    .content(ChatCompletionRequestUserMessageContent::Text(
-                        self.summarise_reactor_state(&reactor_state),
-                    ))
-                    .build()?,
-            ),
-            ChatCompletionRequestMessage::User(
+            ));
+            for reactor_snapshot in reactor_snapshots {
+                messages.push(ChatCompletionRequestMessage::User(
+                    ChatCompletionRequestUserMessageArgs::default()
+                        .name("reactor-monitor")
+                        .content(ChatCompletionRequestUserMessageContent::Text(
+                            self.summarise_reactor_snapshot(&reactor_snapshot),
+                        ))
+                        .build()?,
+                ));
+            }
+            messages.push(ChatCompletionRequestMessage::User(
                 ChatCompletionRequestUserMessageArgs::default()
                     .name("boss")
                     .content(ChatCompletionRequestUserMessageContent::Text(
                         "what do you recommend?".to_owned(),
                     ))
                     .build()?,
-            ),
-        ];
+            ));
+            messages
+        };
         let response_format = ResponseFormat::JsonSchema {
             json_schema: ResponseFormatJsonSchema {
                 name: "reactor-control-commands".to_owned(),
@@ -130,39 +135,53 @@ impl Advisor for LlmAdvisor {
 }
 
 impl LlmAdvisor {
-    fn summarise_reactor_state(&self, reactor_state: &IntactReactorState) -> String {
-        let IntactReactorState {
-            mode,
-            temperature,
-            coolant_filled,
-            heated_coolant_filled,
-            fuel_filled,
-            waste_filled,
-            actual_burn_rate,
-            target_burn_rate,
-            damage_percent,
-            heating_rate,
-            boil_efficiency,
-        } = reactor_state;
-        let mode = match mode {
-            ReactorMode::Active => "active",
-            ReactorMode::Inactive => "shut down",
-        };
-        format!(
-            "
-                The reactor is currently {mode}.
-                The reactor's temperature {temperature}.
-                The reactor's coolant_filled {coolant_filled}.
-                The reactor's heated_coolant_filled {heated_coolant_filled}.
-                The reactor's fuel_filled {fuel_filled}.
-                The reactor's waste_filled {waste_filled}.
-                The reactor's actual_burn_rate {actual_burn_rate}.
-                The reactor's target_burn_rate {target_burn_rate}.
-                The reactor's damage_percent {damage_percent}.
-                The reactor's heating_rate {heating_rate}.
-                The reactor's boil_efficiency {boil_efficiency}.
-            "
-        )
+    fn summarise_reactor_snapshot(&self, reactor_snapshot: &ReactorSnapshot) -> String {
+        let ReactorSnapshot { timestamp, state } = reactor_snapshot;
+        match state {
+            ReactorState::Destroyed => formatdoc!(
+                "
+                    ### Reactor state at {timestamp}
+
+                    Reactor sensors malfunctioned; no data available.
+                "
+            ),
+            ReactorState::Intact(intact_state) => {
+                let IntactReactorState {
+                    mode,
+                    temperature,
+                    coolant_filled,
+                    heated_coolant_filled,
+                    fuel_filled,
+                    waste_filled,
+                    actual_burn_rate,
+                    target_burn_rate,
+                    damage_percent,
+                    heating_rate,
+                    boil_efficiency,
+                } = intact_state;
+                let mode = match mode {
+                    ReactorMode::Active => "active",
+                    ReactorMode::Inactive => "shut down",
+                };
+                formatdoc!(
+                    "
+                        ### Reactor state at {timestamp}:
+
+                        - **mode**: {mode}.
+                        - **temperature**: {temperature}.
+                        - **coolant_filled**: {coolant_filled}.
+                        - **heated_coolant_filled**: {heated_coolant_filled}.
+                        - **fuel_filled**: {fuel_filled}.
+                        - **waste_filled**: {waste_filled}.
+                        - **actual_burn_rate**: {actual_burn_rate}.
+                        - **target_burn_rate**: {target_burn_rate}.
+                        - **damage_percent**: {damage_percent}.
+                        - **heating_rate**: {heating_rate}.
+                        - **boil_efficiency**: {boil_efficiency}.
+                    "
+                )
+            }
+        }
     }
 }
 

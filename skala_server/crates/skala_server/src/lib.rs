@@ -2,12 +2,13 @@ pub mod advisor;
 mod app;
 mod reactor;
 mod routes;
+mod time;
 
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
 pub use crate::app::App;
-pub use crate::reactor::{IntactReactorState, ReactorMode};
+pub use crate::reactor::{IntactReactorState, ReactorMode, ReactorState};
 
 pub type Result<T, E = Error> = anyhow::Result<T, E>;
 
@@ -48,6 +49,8 @@ pub struct Config {
 pub struct GeneralConfig {
     #[serde(default)]
     pub port: ConfigPort,
+    #[serde(default)]
+    pub reactor_snapshot_window_limit: ReactorSnapshotWindowLimit,
 }
 
 #[derive(Copy, Clone, Debug, serde::Deserialize)]
@@ -63,6 +66,22 @@ impl ConfigPort {
 impl Default for ConfigPort {
     fn default() -> Self {
         Self(15000)
+    }
+}
+
+#[derive(Copy, Clone, Debug, serde::Deserialize)]
+pub struct ReactorSnapshotWindowLimit(u16);
+
+impl ReactorSnapshotWindowLimit {
+    pub fn into_inner(self) -> u16 {
+        let Self(limit) = self;
+        limit
+    }
+}
+
+impl Default for ReactorSnapshotWindowLimit {
+    fn default() -> Self {
+        Self(100)
     }
 }
 

@@ -5,13 +5,20 @@ pub use self::llm_advisor::LlmAdvisor;
 use std::fmt::Debug;
 
 use crate::Result;
-use crate::reactor::IntactReactorState;
+use crate::reactor::ReactorState;
+use crate::time::IngameDateTime;
 
 pub trait Advisor: Debug + Send + Sync {
     fn advise(
         &self,
-        reactor_state: IntactReactorState,
+        reactor_snapshots: impl IntoIterator<Item = ReactorSnapshot> + Send,
     ) -> impl Future<Output = Result<Advice>> + Send;
+}
+
+#[derive(Clone, Debug)]
+pub struct ReactorSnapshot {
+    pub timestamp: IngameDateTime,
+    pub state: ReactorState,
 }
 
 /// Holds the advice to apply to the reactor.
