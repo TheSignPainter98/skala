@@ -1,6 +1,6 @@
 use std::fmt::{Display, Write};
 
-use proc_macro2::TokenStream;
+use proc_macro2::{LineColumn, TokenStream};
 use quote::{ToTokens, quote};
 use syn::parse::Parse;
 use syn::punctuated::{Pair, Punctuated};
@@ -42,7 +42,7 @@ fn quicktype_impl(item: DeriveInput) -> Result<TokenStream> {
         None => QuicktypeArgs::new(),
     };
     let namespace = match namespace {
-        Some(namespace) => quote! { Some(::quicktype::Namespace::from(#namespace)) },
+        Some(namespace) => quote! { Some(::quicktype::Namespace::new(#namespace)) },
         None => quote!(None),
     };
     let unqualified_name = ident.to_string();
@@ -63,25 +63,45 @@ fn quicktype_impl(item: DeriveInput) -> Result<TokenStream> {
         (spec, required_types)
     };
 
+    let type_name = quote! {
+        ::quicktype::TypeName {
+            namespace: #namespace,
+            unqualified_name: ::quicktype::UnqualifiedTypeName::new(#unqualified_name),
+        }
+    };
+    let type_spec = quote! {
+        ::quicktype::TypeSpec::new(#spec)
+    };
+    let definition_ident = {
+        let ident_span = ident.span();
+        let LineColumn { line, column } = ident_span.start();
+        Ident::new(&format!("_DEFINITION_{line}_{column}"), ident_span)
+    };
     Ok(quote! {
+        impl #ident {
+            const DEFINITION: ::quicktype::QuicktypeDerivedType = ::quicktype::QuicktypeDerivedType {
+                name: #type_name,
+                spec: #type_spec,
+            };
+        }
+
+
+        #[::quicktype::linkme::distributed_slice(::quicktype::DEFINITIONS)]
+        #[linkme(crate = ::quicktype::linkme)]
+        static #definition_ident: ::quicktype::QuicktypeDerivedType = #ident::DEFINITION;
 
         impl ::quicktype::Quicktype for #ident {
             fn type_name() -> ::quicktype::TypeName {
-                ::quicktype::TypeName {
-                    namespace: #namespace,
-                    unqualified_name: ::quicktype::UnqualifiedTypeName::from(#unqualified_name),
-                }
+                #type_name
             }
 
             fn type_spec() -> ::quicktype::TypeSpec {
                 {
-                    fn _assert_implements_quicktype() {
-                        #[allow(unused)]
-                        fn assert_implements_quicktype<T: ::quicktype::Quicktype>() {}
-                        #(assert_implements_quicktype::<#required_types>());*
-                    }
+                    #[allow(unused)]
+                    fn assert_implements_quicktype<T: ::quicktype::Quicktype>() {}
+                    #(assert_implements_quicktype::<#required_types>());*
                 }
-                ::quicktype::TypeSpec::from(#spec)
+                #type_spec
             }
         }
     })
@@ -154,6 +174,17 @@ impl<A> QuicktypeArgs<A> {
             extra: (),
         };
         (args, extra)
+    }
+
+    fn without_extra(self) -> QuicktypeArgs {
+        let Self {
+            namespace,
+            extra: _,
+        } = self;
+        QuicktypeArgs {
+            namespace,
+            extra: (),
+        }
     }
 }
 
@@ -256,7 +287,7 @@ impl<A, T, P> Quicktype for Punctuated<T, P>
 where
     A: Clone,
     T: Quicktype<Args = QuicktypeArgs<A>>,
-    P: Quicktype<Args = QuicktypeArgs<()>>,
+    P: Quicktype<Args = QuicktypeArgs> + std::fmt::Debug,
 {
     type Args = QuicktypeArgs<A>;
 
@@ -266,13 +297,18 @@ where
             match pair {
                 Pair::Punctuated(t, p) => {
                     if let Some(prev_punct) = prev_punct {
-                        let (args, _) = args.clone().split_extra();
-                        prev_punct.fmt_quicktype(f, args)?;
+                        prev_punct.fmt_quicktype(f, args.clone().without_extra())?;
                     }
                     prev_punct = Some(p);
                     t.fmt_quicktype(f, args.clone())?;
                 }
-                Pair::End(t) => t.fmt_quicktype(f, args.clone())?,
+                Pair::End(t) => {
+                    if let Some(prev_punct) = prev_punct {
+                        prev_punct.fmt_quicktype(f, args.clone().without_extra())?;
+                    }
+                    t.fmt_quicktype(f, args)?;
+                    break;
+                }
             }
         }
         Ok(())
@@ -301,7 +337,7 @@ impl Quicktype for Token![|] {
     type Args = QuicktypeArgs;
 
     fn fmt_quicktype(&self, f: &mut QuicktypeBuf, _args: QuicktypeArgs) -> Result<()> {
-        f.write(" | ");
+        f.write("|");
         Ok(())
     }
 }
@@ -314,6 +350,12 @@ impl Quicktype for FieldsUnnamed {
             paren_token: _,
             unnamed,
         } = self;
+        if let Some(sole_elem) = unnamed.get(0)
+            && unnamed.get(1).is_none()
+        {
+            // Newtype, represent transparently.
+            return sole_elem.fmt_quicktype(f, args);
+        }
         f.write('(');
         unnamed.fmt_quicktype(f, args)?;
         f.write(')');
@@ -692,7 +734,7 @@ impl Quicktype for ParenthesizedGenericArguments {
             output,
         } = self;
         f.write('(');
-        inputs.fmt_quicktype(f, args.clone())?;
+        inputs.to_owned().fmt_quicktype(f, args.clone())?;
         f.write(") -> ");
         output.fmt_quicktype(f, args)?;
         Ok(())

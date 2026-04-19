@@ -1,10 +1,27 @@
 use std::fmt::Display;
 
+pub use linkme;
 pub use quicktype_macros::Quicktype;
+
+use linkme::distributed_slice;
 
 pub trait Quicktype {
     fn type_name() -> TypeName;
     fn type_spec() -> TypeSpec;
+}
+
+pub fn derived_type() -> impl Iterator<Item = &'static QuicktypeDerivedType> {
+    DEFINITIONS.into_iter()
+}
+
+#[doc(hidden)]
+#[distributed_slice]
+pub static DEFINITIONS: [QuicktypeDerivedType];
+
+#[derive(Clone, Debug)]
+pub struct QuicktypeDerivedType {
+    pub name: TypeName,
+    pub spec: TypeSpec,
 }
 
 #[derive(Clone, Debug)]
@@ -31,6 +48,10 @@ impl Display for TypeName {
 pub struct Namespace(&'static str);
 
 impl Namespace {
+    pub const fn new(inner: &'static str) -> Self {
+        Self(inner)
+    }
+
     pub fn into_inner(self) -> &'static str {
         let Self(inner) = self;
         inner
@@ -39,7 +60,7 @@ impl Namespace {
 
 impl From<&'static str> for Namespace {
     fn from(inner: &'static str) -> Self {
-        Self(inner)
+        Self::new(inner)
     }
 }
 
@@ -54,6 +75,10 @@ impl Display for Namespace {
 pub struct UnqualifiedTypeName(&'static str);
 
 impl UnqualifiedTypeName {
+    pub const fn new(inner: &'static str) -> Self {
+        Self(inner)
+    }
+
     pub fn into_inner(self) -> &'static str {
         let Self(inner) = self;
         inner
@@ -62,7 +87,7 @@ impl UnqualifiedTypeName {
 
 impl From<&'static str> for UnqualifiedTypeName {
     fn from(inner: &'static str) -> Self {
-        Self(inner)
+        Self::new(inner)
     }
 }
 
@@ -77,6 +102,10 @@ impl Display for UnqualifiedTypeName {
 pub struct TypeSpec(&'static str);
 
 impl TypeSpec {
+    pub const fn new(spec: &'static str) -> Self {
+        Self(spec)
+    }
+
     pub fn into_inner(self) -> &'static str {
         let Self(inner) = self;
         inner
@@ -85,7 +114,7 @@ impl TypeSpec {
 
 impl From<&'static str> for TypeSpec {
     fn from(inner: &'static str) -> Self {
-        Self(inner)
+        Self::new(inner)
     }
 }
 

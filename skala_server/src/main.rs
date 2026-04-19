@@ -7,7 +7,9 @@ use std::str::FromStr;
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
+use indoc::writedoc;
 use log::{error, info};
+use quicktype::QuicktypeDerivedType;
 use skala_server::advisor::LlmAdvisor;
 use skala_server::{App, Config, GeneralConfig, Result};
 use sqlx::SqlitePool;
@@ -26,7 +28,17 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<()> {
     let args = Args::parse();
-    let Args { config, db_path } = args;
+    let Args {
+        config,
+        db_path,
+        quicktype_specs,
+    } = args;
+
+    if quicktype_specs {
+        print_quicktype_specs();
+        return Ok(());
+    }
+
     let config = read_config(config)?.unwrap_or_default();
     let Config {
         general: general_config,
@@ -63,6 +75,31 @@ struct Args {
 
     #[clap(long, default_value = "skala.db")]
     db_path: Utf8PathBuf,
+
+    #[clap(long)]
+    quicktype_specs: bool,
+}
+
+fn print_quicktype_specs() {
+    use std::fmt::Write;
+
+    let mut specs = String::new();
+    writeln!(specs, "import 'quicktype' as :declare_type").expect("internal error: buf unwritable");
+
+    for spec in quicktype::derived_type() {
+        let QuicktypeDerivedType { name, spec } = spec;
+        writeln!(specs).expect("internal error: buf unwritable");
+        writedoc!(
+            specs,
+            "
+                declare_type '{name}', [===========[
+                    {spec}
+                ]==========]
+            ",
+        )
+        .expect("internal error: buf unwritable");
+    }
+    print!("{specs}");
 }
 
 fn read_config(path: impl AsRef<Utf8Path>) -> Result<Option<Config>> {
