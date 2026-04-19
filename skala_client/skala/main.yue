@@ -3,6 +3,9 @@ local *
 -- Changes global state, this must come first
 require 'skala.compat'
 
+-- Import type definitions
+require 'skala.server_types'
+
 import 'skala.clap' as :ArgParser
 import 'skala.quicktype' as :declare_type
 

@@ -3,8 +3,8 @@ local *
 import 'skala.clap' as :Flag, :Param, :Subcommand
 import 'skala.quicktype' as :is, :declare_type, :F
 import 'skala.quicktype_macros' as $
-import 'skala.command.start.control.open_ai_llm' as :Llm
-import 'skala.command.start.control.codec.serious' as :Serious
+-- import 'skala.command.start.control.open_ai_llm' as :Llm
+-- import 'skala.command.start.control.codec.serious' as :Serious
 
 export register_args = (parser) ->
   parser\add with Subcommand 'chat'

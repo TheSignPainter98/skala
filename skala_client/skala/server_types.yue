@@ -2,40 +2,40 @@
 -- not needing to update the build script. This is undesirable, but it is at least
 -- quite simple.
 
-import 'quicktype' as :declare_type
+import 'skala.quicktype' as :declare_type
 
-declare_type 'server.IngameDateTime', [===========[
+declare_type 'server.IngameDateTime', [==========[
     string
 ]==========]
 
-declare_type 'server.Request', [===========[
+declare_type 'server.Request', [==========[
     {reactor_name: server.ReactorName, reactor_state: server.ReactorState, timestamp: server.IngameDateTime}
 ]==========]
 
-declare_type 'server.Response', [===========[
+declare_type 'server.Response', [==========[
     {reactor_name: server.ReactorName, advice: ?server.Advice}
 ]==========]
 
-declare_type 'server.ReactorState', [===========[
+declare_type 'server.ReactorState', [==========[
     server.IntactReactorState|"Destroyed"
 ]==========]
 
-declare_type 'server.ReactorMode', [===========[
+declare_type 'server.ReactorMode', [==========[
     "Inactive"|"Active"
 ]==========]
 
-declare_type 'server.IntactReactorState', [===========[
+declare_type 'server.IntactReactorState', [==========[
     {mode: server.ReactorMode, temperature: number, coolant_filled: number, heated_coolant_filled: number, fuel_filled: number, waste_filled: number, actual_burn_rate: number, target_burn_rate: number, damage_percent: number, heating_rate: number, boil_efficiency: number}
 ]==========]
 
-declare_type 'server.ReactorName', [===========[
+declare_type 'server.ReactorName', [==========[
     string
 ]==========]
 
-declare_type 'AdvisedAction', [===========[
+declare_type 'AdvisedAction', [==========[
     "NoAction"|"Scram"
 ]==========]
 
-declare_type 'server.Advice', [===========[
+declare_type 'server.Advice', [==========[
     {action: server.AdvisedAction, reasoning: string}
 ]==========]

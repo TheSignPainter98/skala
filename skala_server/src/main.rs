@@ -84,7 +84,8 @@ fn print_quicktype_specs() {
     use std::fmt::Write;
 
     let mut specs = String::new();
-    writeln!(specs, "import 'quicktype' as :declare_type").expect("internal error: buf unwritable");
+    writeln!(specs, "import 'skala.quicktype' as :declare_type")
+        .expect("internal error: buf unwritable");
 
     for spec in quicktype::derived_type() {
         let QuicktypeDerivedType { name, spec } = spec;
@@ -92,7 +93,7 @@ fn print_quicktype_specs() {
         writedoc!(
             specs,
             "
-                declare_type '{name}', [===========[
+                declare_type '{name}', [==========[
                     {spec}
                 ]==========]
             ",

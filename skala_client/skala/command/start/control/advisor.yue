@@ -1,0 +1,52 @@
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
+
+declare_type 'control.Advisor', [[{
+  check_health: () => <boolean, ?string>,
+  advice: (server.Request) => <?server.Response, ?string>
+}]]
+declare_type 'control.AdvisorArgs', [[{
+  base_url: string,
+  timeout: ?number
+}]]
+export class Advisor
+  new: $F '(control.AdvisorArgs) => <>', (opts) =>
+    {
+      base_url: @_base_url
+      timeout: @_timeout = 10
+    } = opts
+
+  check_health: $F '() => <boolean, ?string>', =>
+    healthcheck_url = "#{@_base_url}/"
+    response, err, _ = http.get
+      url: healthcheck_url
+      timeout: @_timeout
+    if err?
+      if err_response?
+        lines = err_response.readAll!
+        return false, "#{err}: #{lines}"
+      return false, err
+    return true, nil
+
+  advice: $F '(server.Request) => <?server.Response, ?string>', (req) =>
+    url = "#{@_base_url}/advice"
+    response, err, err_response = http.post
+      :url
+      :body
+      timeout: @_timeout
+    if err?
+      if err_response?
+        lines = err_response.readAll!
+        return false, "#{err}: #{lines}"
+      return false, err
+
+    raw_response = concat_lines with {}
+      while true
+        line = response.readLine!
+        if not line?
+          break
+        [] = line
+    parsed_response, err = textutils.unserialiseJSON raw_response
+    if err?
+      return nil, "cannot deserialise server response: #{err}"
+    parsed_response, nil

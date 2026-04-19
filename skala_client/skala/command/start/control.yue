@@ -1,14 +1,10 @@
 local *
 
--- Ensure type definitions are included.
-require 'skala.command.start.control.codec'
-
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
-import 'skala.command.start.control.codec.serious' as :Serious
-import 'skala.command.start.control.open_ai_llm' as :Llm
+import 'skala.command.start.control.advisor' as :Advisor
 import 'skala.command.start.control.report_printer' as :ReportPrinter
 import 'skala.peripheral.reactor' as :Reactor
 
@@ -26,28 +22,19 @@ declare_type 'control.Heartbeat', [[{
 export register_args = (parser) ->
   parser\add with Subcommand 'control'
     \description 'default reactor control system'
-    \add with Flag 'attitude'
-      \description 'interaction behaviour with LLM'
-      \short nil
-      \default 'serious'
-      \options
-        * 'serious'
-        * 'skittish'
-        * 'saucy'
-    \add with Flag 'llm-timeout'
+    \add with Flag 'server-timeout'
       \description 'complete LLM response max seconds'
       \short nil
       \default 30
+    \add with Flag 'server-url'
+      \description 'URL where the skala server is hosted'
+      \short nil
+      \default 'http://localhost:15000' -- TODO(kcza): https?
 
 declare_type 'control.Args', [[{
-  attitude: control.Attitude,
-  llm_timeout: number,
+  server_timeout: number,
+  server_url: string,
 }]]
-declare_type 'control.Attitude', [[
-  "serious"
-  | "skittish"
-  | "saucy"
-]]
 
 export DEFAULT_CONFIG = do
   lines =
@@ -57,23 +44,17 @@ export DEFAULT_CONFIG = do
 
 export main = $F '(control.Args) -> <>', (args) ->
   {
-    :attitude
-    llm_timeout: timeout
+    :server_timeout
+    :server_url
   } = args
-  codec = switch attitude
-    when 'serious'
-      Serious!
-    when 'skittish'
-      error 'unimplemented'
-    when 'saucy'
-      error 'unimplemented'
-    else
-      error "unrecognised attitude: #{attitude}"
-  ai = Ai
-    base_url: 'http://localhost:8326/v1'
-    model: "qwen-vl"
-    :codec
-    :timeout
+  advisor = Advisor
+    base_url: server_url
+    timeout: server_timeout
+  _, err = advisor\check_health!
+  if err?
+    print "cannot reach server: #{err}"
+    return
+
   report_printer = ReportPrinter!
 
   with Waker!
@@ -96,77 +77,86 @@ export main = $F '(control.Args) -> <>', (args) ->
       print 'Reactor state is...'
       (require 'cc.pretty').pretty_print reactor_state
 
-      print 'Requesting advice from AI...'
-      recommendation, err = ai\recommend reactor_state
+      computer_id = os.getComputerID!
+      -- Assume one reactor has one controller.
+      reactor_name = "reactor_#{computer_id}"
+
+      print 'Requesting advice from...'
+      advice, err = advisor\advice
+        :reactor_name
+        :reactor_state
+        :timestamp
+      response, err = ai\recommend reactor_state
       if err?
         print "cannot get advice from LLM: #{err}"
         return
-      print 'Got recommendation:'
-      (require 'cc.pretty').pretty_print recommendation
 
-      err = report_printer\print reactor_state, recommendation
-      if err?
-        print "cannot print report: #{err}"
+      print 'Got response:'
+      (require 'cc.pretty').pretty_print response
 
-      {
-        :action
-      } = recommendation
-      switch action
-        when 'CONTINUE'
-          print "Taking no action"
-          -- Do nothing.
-        when 'SCRAM'
-          print "Scramming reactor!"
-          err = reactor\scram!
-          if err?
-            print "cannot scram reactor: #{err}"
-        else
-          print "unrecognised action: #{action}"
+      -- err = report_printer\print reactor_state, recommendation
+      -- if err?
+      --   print "cannot print report: #{err}"
+
+      -- {
+      --   :action
+      -- } = recommendation
+      -- switch action
+      --   when 'CONTINUE'
+      --     print "Taking no action"
+      --     -- Do nothing.
+      --   when 'SCRAM'
+      --     print "Scramming reactor!"
+      --     err = reactor\scram!
+      --     if err?
+      --       print "cannot scram reactor: #{err}"
+      --   else
+      --     print "unrecognised action: #{action}"
     \awaken! -- Kick-start
     \run!
 
 fe_to_j = (fe) -> fe * 2.5
 
-declare_type 'control.ReasonedAction', [[
-  control.Action + { reasoning: string }
-]]
-declare_type 'control.Action', [[
-  control.NoAction
-  | control.ScramAction
-]]
-declare_type 'control.NoAction', [[{
-  action: "CONTINUE"
-}]]
-declare_type 'control.ScramAction', [[{
-  action: "SCRAM",
-}]]
-declare_type 'control.AiArgs', [[{
-  base_url: string,
-  model: string,
-  codec: control.LlmCodec,
-  timeout: ?number,
-}]]
-class Ai
-  new: $F '(control.AiArgs) => <>', (opts) =>
-    {
-      :base_url
-      :model
-      codec: @_codec
-      :timeout
-    } = opts
-    init_instruction = @_codec\init_instruction!
-    @_llm = Llm
-      :base_url
-      :init_instruction
-      :model
-      :timeout
-
-  recommend: $F '(peripheral.ReactorState) => <?control.ReasonedAction, ?string>', (state) =>
-    request = @_codec\encode state
-    raw_recommendation, err = @_llm\ask request
-    if err?
-      return nil, err
-    recommendation, err = @_codec\decode raw_recommendation
-    if err?
-      return nil, err
-    recommendation, nil
+-- declare_type 'control.ReasonedAction', [[
+--   control.Action + { reasoning: string }
+-- ]]
+-- declare_type 'control.Action', [[
+--   control.NoAction
+--   | control.ScramAction
+-- ]]
+-- declare_type 'control.NoAction', [[{
+--   action: "CONTINUE"
+-- }]]
+-- declare_type 'control.ScramAction', [[{
+--   action: "SCRAM",
+-- }]]
+-- declare_type 'control.AiArgs', [[{
+--   base_url: string,
+--   model: string,
+--   codec: control.LlmCodec,
+--   timeout: ?number,
+-- }]]
+-- class Ai
+--   new: $F '(control.AiArgs) => <>', (opts) =>
+--     {
+--       :base_url
+--       :model
+--       codec: @_codec
+--       :timeout
+--     } = opts
+--     init_instruction = @_codec\init_instruction!
+--     @_llm = Llm
+--       :base_url
+--       :init_instruction
+--       :model
+--       :timeout
+-- 
+--   recommend: $F '(peripheral.ReactorState) => <?control.ReasonedAction, ?string>', (state) =>
+--     request = @_codec\encode state
+--     raw_recommendation, err = @_llm\ask request
+--     if err?
+--       return nil, err
+--     recommendation, err = @_codec\decode raw_recommendation
+--     if err?
+--       return nil, err
+--     recommendation, nil

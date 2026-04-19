@@ -2,7 +2,7 @@
 
 set -e
 
-spec_file=assets/skala_server_types.yue
+spec_file=../skala_client/skala/server_types.yue
 
 tmp_spec_file=$(mktemp)
 function cleanup() {

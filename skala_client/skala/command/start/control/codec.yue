@@ -1,9 +1,0 @@
-local *
-
-import 'skala.quicktype' as :declare_type
-
-declare_type 'control.LlmCodec', [[{
-  init_instruction: () => string,
-  encode: (peripheral.ReactorState) => <?string, ?string>,
-  decode: (string) => <?control.ReasonedAction, ?string>,
-}]]
