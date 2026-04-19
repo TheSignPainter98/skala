@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -e
+
+spec_file=assets/skala_server_types.yue
+
+tmp_spec_file=$(mktemp)
+function cleanup() {
+    rm $tmp_spec_file
+}
+trap cleanup EXIT
+
+cat >$tmp_spec_file <<EOF
+-- This is a generated file. It is committed to the repo for the conveineice of
+-- not needing to update the build script. This is undesirable, but it is at least
+-- quite simple.
+
+EOF
+cargo run -q -- --quicktype-specs >> $tmp_spec_file
+
+if ! diff -q $tmp_spec_file $spec_file; then
+    echo 'Updating type definitions...' >&2
+    mkdir -p $(dirname $spec_file)
+    cp $tmp_spec_file $spec_file
+    exit 1
+fi

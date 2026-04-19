@@ -76,3 +76,11 @@ repos:
         args:
           - 'test'
           - '--workspace'
+      - id: quicktype-defs
+        name: check quicktype specs
+        types_or:
+          - rust
+          - bash
+        language: system
+        pass_filenames: false
+        entry: ./scripts/check_quicktype_specs
