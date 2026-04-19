@@ -6,8 +6,6 @@ use sqlx::{Encode, Sqlite, Type};
 
 use crate::Error;
 
-// TODO(kcza): communicate the reactor parameter constraints! E.g. critical temperature,
-// ranges of certain values.
 #[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize)]
 #[serde(tag = "status")]
 #[serde(rename_all = "kebab-case")]
