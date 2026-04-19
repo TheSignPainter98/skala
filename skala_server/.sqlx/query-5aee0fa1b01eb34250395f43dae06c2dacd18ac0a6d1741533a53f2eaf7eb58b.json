@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    INSERT INTO reactor_state (\n                        event_id,\n                        intact,\n                        mode,\n                        temperature,\n                        coolant_filled,\n                        heated_coolant_filled,\n                        fuel_filled,\n                        waste_filled,\n                        actual_burn_rate,\n                        target_burn_rate,\n                        damage_percent,\n                        heating_rate,\n                        boil_efficiency\n                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "5aee0fa1b01eb34250395f43dae06c2dacd18ac0a6d1741533a53f2eaf7eb58b"
+}

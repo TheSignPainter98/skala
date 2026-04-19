@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO event (reactor_id, irl_timestamp, ingame_timestamp)\n            VALUES (?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "d53334f9292b3f292afdb90d6dd2a9755db144ffc8ef2f5ebc4286fb5570953d"
+}

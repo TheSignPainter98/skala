@@ -1,0 +1,5 @@
+---
+source: crates/skala_server/src/routes/advice.rs
+expression: "Request::type_spec().to_string()"
+---
+"{reactor_name: server.ReactorName, reactor_state: server.ReactorState, timestamp: server.IngameDateTime}"

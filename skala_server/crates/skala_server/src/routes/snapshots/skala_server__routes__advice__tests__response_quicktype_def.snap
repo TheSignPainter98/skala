@@ -1,0 +1,5 @@
+---
+source: crates/skala_server/src/routes/advice.rs
+expression: "Response::type_spec().to_string()"
+---
+"{reactor_name: server.ReactorName, advice: ?server.Advice}"
