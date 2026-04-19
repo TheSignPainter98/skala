@@ -28,7 +28,12 @@ pub struct ReactorSnapshot {
 #[serde(rename_all = "snake_case")]
 #[quicktype(namespace = "server")]
 pub struct Advice {
+    /// The best course of action.
     pub action: AdvisedAction,
+
+    /// The reasoning behind the best course of action.
+    ///
+    /// Max length is 25 words.
     pub reasoning: String,
 }
 

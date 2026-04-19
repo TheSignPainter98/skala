@@ -1,5 +1,5 @@
 ---
-source: src/advisor/mod.rs
+source: crates/skala_server/src/advisor/mod.rs
 expression: schema_for!(Advice)
 ---
 {
@@ -9,9 +9,11 @@ expression: schema_for!(Advice)
   "type": "object",
   "properties": {
     "action": {
+      "description": "The best course of action.",
       "$ref": "#/$defs/AdvisedAction"
     },
     "reasoning": {
+      "description": "The reasoning behind the best course of action.\n\nMax length is 25 words.",
       "type": "string"
     }
   },
