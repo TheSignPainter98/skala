@@ -1,12 +1,12 @@
 local *
 
-import 'skala.quicktype' as :declare_type, :F
-import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
-import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
 import 'skala.command.start.control.advisor' as :Advisor
 import 'skala.command.start.control.report_printer' as :ReportPrinter
 import 'skala.peripheral.reactor' as :Reactor
+import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype_macros' as $
+import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
 
 declare_type 'control.Heartbeat', [[{
   id: number,
@@ -62,7 +62,14 @@ export main = $F '(control.Args) -> <>', (args) ->
       interval: 60 * 5
     \add_trigger RedstoneTrigger!
     \on_awaken ->
-      { :hour, :min, :sec } = os.date '!*t'
+      {
+        :year
+        :month
+        :day
+        :hour
+        :min
+        :sec
+      } = os.date '!*t'
       print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
 
       reactor, err = Reactor::find!
@@ -72,7 +79,10 @@ export main = $F '(control.Args) -> <>', (args) ->
       reactor_state, err = reactor\state!
       if err?
         print "cannot get reactor state: #{err}"
-        return
+        -- Continue operation regardless.
+        reactor_state = integrity: 'destroyed'
+      else
+        reactor_state.integrity = 'intact'
 
       print 'Reactor state is...'
       (require 'cc.pretty').pretty_print reactor_state
@@ -81,18 +91,18 @@ export main = $F '(control.Args) -> <>', (args) ->
       -- Assume one reactor has one controller.
       reactor_name = "reactor_#{computer_id}"
 
-      print 'Requesting advice from...'
+      print 'Requesting advice...'
+      timestamp = '%d-%d-%dT%d:%d:%d'\format year, month, day, hour, min, sec
       advice, err = advisor\advice
         :reactor_name
         :reactor_state
         :timestamp
-      response, err = ai\recommend reactor_state
       if err?
-        print "cannot get advice from LLM: #{err}"
+        print "Cannot get advice from server: #{err}"
         return
 
-      print 'Got response:'
-      (require 'cc.pretty').pretty_print response
+      print 'Got advice:'
+      (require 'cc.pretty').pretty_print advice
 
       -- err = report_printer\print reactor_state, recommendation
       -- if err?

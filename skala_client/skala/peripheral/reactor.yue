@@ -20,7 +20,7 @@ declare_type 'peripheral.Reactor', [[{
   getBoilEfficiency: () -> number,
 }]]
 declare_type 'peripheral.ReactorState', [[{
-  status: "active"|"inactive",
+  mode: "active"|"inactive",
   temperature: number,
   coolant_filled: number,
   heated_coolant_filled: number,
@@ -57,7 +57,7 @@ export class Reactor
     err = nil
     state = nil
     try
-      status = do
+      mode = do
         switch @reactor.getStatus!
           when true
             'active'
@@ -66,7 +66,7 @@ export class Reactor
           else
             error 'unreachable'
       state = with {}
-        .status = status
+        .mode = mode
         .temperature = @reactor.getTemperature!
         .coolant_filled = @reactor.getCoolantFilledPercentage!
         .heated_coolant_filled = @reactor.getHeatedCoolantFilledPercentage!

@@ -7,7 +7,7 @@ use sqlx::{Encode, Sqlite, Type};
 use crate::Error;
 
 #[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize)]
-#[serde(tag = "status")]
+#[serde(tag = "integrity")]
 #[serde(rename_all = "kebab-case")]
 #[quicktype(namespace = "server")]
 pub enum ReactorState {

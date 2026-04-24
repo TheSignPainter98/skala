@@ -5,7 +5,7 @@ for i in $(seq 10); do
         {
             "reactor_name": "kcza'z diskount reakter",
             "reactor_state": {
-                "status": "intact",
+                "integrity": "intact",
                 "mode": "active",
                 "temperature": $i,
                 "coolant_filled": 100,

@@ -16,7 +16,7 @@ async fn test_destroyed_reactor(db_pool: SqlitePool) {
         .input(json!({
             "reactor_name": REACTOR_NAME,
             "reactor_state": {
-                "status": "destroyed"
+                "integrity": "destroyed"
             },
             "timestamp": "2026-04-15T00:00:00"
         }))
@@ -37,7 +37,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
         .input(json!({
             "reactor_name": REACTOR_NAME,
             "reactor_state": {
-                "status": "intact",
+                "integrity": "intact",
                 "mode": "inactive",
                 "temperature": 111.0,
                 "coolant_filled": 222.0,
@@ -113,7 +113,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
         .input(json!({
             "reactor_name": REACTOR_NAME,
             "reactor_state": {
-                "status": "intact",
+                "integrity": "intact",
                 "mode": "active",
                 "temperature": 0.0,
                 "coolant_filled": 0.0,

@@ -1,5 +1,6 @@
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
+import 'skala.util.text' as :concat_lines
 
 declare_type 'control.Advisor', [[{
   check_health: () => <boolean, ?string>,
@@ -30,15 +31,28 @@ export class Advisor
 
   advice: $F '(server.Request) => <?server.Response, ?string>', (req) =>
     url = "#{@_base_url}/advice"
+
+    local body
+    err = nil
+    try
+      body = textutils.serialiseJSON req
+    catch err2
+      err = err2
+    if err?
+      return nil, err
+
+    headers =
+      'Content-Type': 'application/json'
     response, err, err_response = http.post
+      :headers
       :url
       :body
       timeout: @_timeout
     if err?
       if err_response?
         lines = err_response.readAll!
-        return false, "#{err}: #{lines}"
-      return false, err
+        return nil, "#{err}: #{lines}"
+      return nil, err
 
     raw_response = concat_lines with {}
       while true

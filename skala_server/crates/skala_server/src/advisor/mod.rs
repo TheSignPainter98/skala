@@ -42,6 +42,7 @@ pub struct Advice {
     Clone, Debug, quicktype::Quicktype, schemars::JsonSchema, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename_all = "kebab-case")]
+#[quicktype(namespace = "server")]
 pub enum AdvisedAction {
     /// Represents that the reactor's state is okay and hence that no action is required.
     NoAction,

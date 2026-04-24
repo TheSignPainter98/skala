@@ -7,6 +7,12 @@ use crate::advisor::Advisor;
 use crate::app::AppState;
 
 pub(crate) fn register<A: Advisor + 'static>(app: Router<AppState<A>>) -> Router<AppState<A>> {
-    app.route("/", get(|| async { ">:3" }))
-        .route("/advice", post(self::advice::route))
+    app.route(
+        "/",
+        get(|| async {
+            log::info!("health checked");
+            ">:3"
+        }),
+    )
+    .route("/advice", post(self::advice::route))
 }
