@@ -7,8 +7,8 @@ import 'skala.quicktype_macros' as $
 -- import 'skala.command.start.control.codec.serious' as :Serious
 
 export register_args = (parser) ->
-  parser\add with Subcommand 'chat'
-    \description 'chat with an LLM'
+  -- parser\add with Subcommand 'chat'
+  --   \description 'chat with an LLM'
 
 export main = (_) ->
   init_instruction = Serious!\init_instruction!

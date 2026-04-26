@@ -47,6 +47,7 @@ export main = $F '(control.Args) -> <>', (args) ->
     :server_timeout
     :server_url
   } = args
+  -- advisor = DummyAdvisor!
   advisor = Advisor
     base_url: server_url
     timeout: server_timeout
@@ -93,7 +94,7 @@ export main = $F '(control.Args) -> <>', (args) ->
 
       print 'Requesting advice...'
       timestamp = '%d-%d-%dT%d:%d:%d'\format year, month, day, hour, min, sec
-      advice, err = advisor\advice
+      advisor_response, err = advisor\advice
         :reactor_name
         :reactor_state
         :timestamp
@@ -102,71 +103,42 @@ export main = $F '(control.Args) -> <>', (args) ->
         return
 
       print 'Got advice:'
-      (require 'cc.pretty').pretty_print advice
+      (require 'cc.pretty').pretty_print advisor_response
 
-      -- err = report_printer\print reactor_state, recommendation
-      -- if err?
-      --   print "cannot print report: #{err}"
+      if advisor_response?
+        { :advice } = advisor_response
+        { :action } = advice
+        switch action
+          when 'no-action'
+            print 'Inaction advised'
+          when 'scram'
+            print 'Scramming!'
+            err = reactor\scram!
+            if err?
+              print "cannot scram reactor: #{err}"
+          else
+            print "Unrecognised advised action: #{action}"
 
-      -- {
-      --   :action
-      -- } = recommendation
-      -- switch action
-      --   when 'CONTINUE'
-      --     print "Taking no action"
-      --     -- Do nothing.
-      --   when 'SCRAM'
-      --     print "Scramming reactor!"
-      --     err = reactor\scram!
-      --     if err?
-      --       print "cannot scram reactor: #{err}"
-      --   else
-      --     print "unrecognised action: #{action}"
+        err = report_printer\print reactor_state, advice
+        if err?
+            print "Cannot print report: #{err}"
+
     \awaken! -- Kick-start
     \run!
 
 fe_to_j = (fe) -> fe * 2.5
 
--- declare_type 'control.ReasonedAction', [[
---   control.Action + { reasoning: string }
--- ]]
--- declare_type 'control.Action', [[
---   control.NoAction
---   | control.ScramAction
--- ]]
--- declare_type 'control.NoAction', [[{
---   action: "CONTINUE"
--- }]]
--- declare_type 'control.ScramAction', [[{
---   action: "SCRAM",
--- }]]
--- declare_type 'control.AiArgs', [[{
---   base_url: string,
---   model: string,
---   codec: control.LlmCodec,
---   timeout: ?number,
--- }]]
--- class Ai
---   new: $F '(control.AiArgs) => <>', (opts) =>
---     {
---       :base_url
---       :model
---       codec: @_codec
---       :timeout
---     } = opts
---     init_instruction = @_codec\init_instruction!
---     @_llm = Llm
---       :base_url
---       :init_instruction
---       :model
---       :timeout
--- 
---   recommend: $F '(peripheral.ReactorState) => <?control.ReasonedAction, ?string>', (state) =>
---     request = @_codec\encode state
---     raw_recommendation, err = @_llm\ask request
---     if err?
---       return nil, err
---     recommendation, err = @_codec\decode raw_recommendation
---     if err?
---       return nil, err
---     recommendation, nil
+class DummyAdvisor
+  new: $F '() => <>', =>
+
+  check_health: $F '() => <boolean, ?string>', =>
+    true, nil
+
+  advice: $F '(server.Request) => <?server.Response, ?string>', (req) =>
+    reactor_name = req.reactor_name
+    resp =
+      reactor_name: "kcza'z diskount reakter"
+      advice:
+        action: "scram"
+        reasoning: "The temperature is reaching a critical point and may indicate overheating, which could lead to an explosion. To mitigate this risk and ensure the safety of the sheep herd, I must scram the reactor immediately."
+    resp, nil

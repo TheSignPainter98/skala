@@ -27,6 +27,7 @@ CREATE TABLE reactor_state (
     pretty_intact TEXT AS (CASE
         WHEN intact = 0 THEN 'destroyed'
         WHEN intact = 1 THEN 'intact'
+        ELSE 'unknown'
     END),
 
     mode INTEGER NULL

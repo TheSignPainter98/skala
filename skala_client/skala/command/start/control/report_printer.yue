@@ -1,10 +1,11 @@
 local *
 
-wrap = try
-  import 'cc.strings' as :wrap
-  wrap
+local wrap
+try
+  import 'cc.strings'
+  wrap = strings.wrap
 catch _
-  () -> error 'unavailable'
+  wrap = () -> error 'unavailable'
 
 import 'skala.quicktype' as :F, :T, :declare_type
 import 'skala.quicktype_macros' as $
@@ -13,7 +14,7 @@ import 'skala.peripheral.sole' as :sole
 export class ReportPrinter
   new: $F '() => <>', =>
 
-  print: $F '(peripheral.ReactorState, control.ReasonedAction) => ?string', (state, reasoned_action) =>
+  print: $F '(peripheral.ReactorState, server.Advice) => ?string', (state, reasoned_action) =>
     TICKS_PER_SECOND = 20
     KELVIN_OFFSET = 273.15
 
@@ -22,7 +23,7 @@ export class ReportPrinter
       return err
 
     if not printer.newPage!
-      return 'error: cannot print due to missing paper, ink or output space'
+      return 'cannot print due to missing paper, ink or output space'
 
     print_state = $T '[{name: string, value: string}]', with {}
       {
@@ -92,10 +93,12 @@ export class ReportPrinter
         :reasoning
       } = reasoned_action
       switch action
-        when 'CONTINUE'
+        when 'no-action'
           [] = 'No immediate action required.'
-        when 'SCRAM'
+        when 'scram'
           [] = 'Scram reactor immediately.'
+        when 'set'
+          [] = "Set #{key} to #{value}"
         else
           [] = "!! invalid action: '#{action}'"
       [] = reasoning
