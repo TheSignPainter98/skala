@@ -31,9 +31,7 @@ pub struct Advice {
     /// The best course of action.
     pub action: AdvisedAction,
 
-    /// The reasoning behind the best course of action.
-    ///
-    /// Max length is 25 words.
+    /// A concise description of the reasoning behind the best course of action (at most 25 words).
     pub reasoning: String,
 }
 

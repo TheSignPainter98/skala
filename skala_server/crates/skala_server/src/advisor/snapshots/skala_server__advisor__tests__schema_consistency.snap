@@ -13,7 +13,7 @@ expression: schema_for!(Advice)
       "$ref": "#/$defs/AdvisedAction"
     },
     "reasoning": {
-      "description": "The reasoning behind the best course of action.\n\nMax length is 25 words.",
+      "description": "A concise description of the reasoning behind the best course of action (at most 25 words).",
       "type": "string"
     }
   },
