@@ -16,7 +16,7 @@ cat >$tmp_spec_file <<EOF
 -- quite simple.
 
 EOF
-cargo run -q -- --quicktype-specs >> $tmp_spec_file
+cargo run -q -- print-quicktype-specs >> $tmp_spec_file
 
 if ! diff -q $tmp_spec_file $spec_file; then
     echo 'Updating type definitions...' >&2

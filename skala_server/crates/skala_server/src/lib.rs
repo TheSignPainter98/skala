@@ -29,6 +29,7 @@ impl_from_error!(anyhow::Error);
 impl_from_error!(async_openai::error::OpenAIError);
 impl_from_error!(serde_json::Error);
 impl_from_error!(sqlx::Error);
+impl_from_error!(sqlx::migrate::MigrateError);
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
