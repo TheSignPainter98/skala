@@ -5,20 +5,41 @@ pub use self::llm_advisor::LlmAdvisor;
 use std::fmt::Debug;
 
 use crate::Result;
-use crate::reactor::ReactorState;
+use crate::reactor::{ReactorState, TargetBurnRate};
 use crate::time::IngameDateTime;
 
 pub trait Advisor: Debug + Send + Sync {
     fn advise(
         &self,
-        reactor_snapshots: impl IntoIterator<Item = ReactorSnapshot> + Send,
+        past_events: impl IntoIterator<Item = PastEvent> + Send,
     ) -> impl Future<Output = Result<Advice>> + Send;
+}
+
+#[derive(Clone, Debug)]
+pub enum PastEvent {
+    ReactorSnapshot(ReactorSnapshot),
+    Action(PastAction),
+}
+
+impl PastEvent {
+    pub(crate) fn timestamp(&self) -> &IngameDateTime {
+        match self {
+            Self::ReactorSnapshot(snapshot) => &snapshot.timestamp,
+            Self::Action(action) => &action.timestamp,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct ReactorSnapshot {
     pub timestamp: IngameDateTime,
     pub state: ReactorState,
+}
+
+#[derive(Clone, Debug)]
+pub struct PastAction {
+    pub timestamp: IngameDateTime,
+    pub action: AdvisedAction,
 }
 
 /// Holds the advice to apply to the reactor.
@@ -29,7 +50,6 @@ pub struct ReactorSnapshot {
 #[quicktype(namespace = "server")]
 pub struct Advice {
     /// The best course of action.
-    #[serde(flatten)]
     pub action: AdvisedAction,
 
     /// A concise description of the reasoning behind the best course of action (at most 25 words).
@@ -41,7 +61,7 @@ pub struct Advice {
     Clone, Debug, quicktype::Quicktype, schemars::JsonSchema, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename_all = "kebab-case")]
-#[serde(tag = "action")]
+#[serde(tag = "kind")]
 #[quicktype(namespace = "server")]
 pub enum AdvisedAction {
     /// Represents that the reactor's state is okay and hence that no action is required.
@@ -54,8 +74,8 @@ pub enum AdvisedAction {
     /// Represents that the burn rate needs to be changed to the given value.
     #[serde(rename_all = "kebab-case")]
     SetBurnRate {
-        /// The value of the new burn rate.
-        new_burn_rate: f64,
+        /// The value of the new target burn rate.
+        new_target_burn_rate: TargetBurnRate,
     },
 }
 

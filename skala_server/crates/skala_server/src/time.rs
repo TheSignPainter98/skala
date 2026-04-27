@@ -2,7 +2,17 @@ use std::fmt::Display;
 
 use time::UtcDateTime;
 
-#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize, sqlx::Type)]
+#[derive(
+    Clone,
+    Debug,
+    Eq,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    quicktype::Quicktype,
+    serde::Deserialize,
+    sqlx::Type,
+)]
 #[sqlx(transparent)]
 #[quicktype(namespace = "server")]
 pub struct IngameDateTime(String);

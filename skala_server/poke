@@ -1,7 +1,8 @@
 #!/bin/bash
 
 for i in $(seq 10); do
-    curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15000/advice <<EOF
+    timestamp=$(date --iso-8601=seconds)
+    curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15000/advice <<-EOF
         {
             "reactor_name": "kcza'z diskount reakter",
             "reactor_state": {
@@ -18,7 +19,8 @@ for i in $(seq 10); do
                 "heating_rate": 100,
                 "boil_efficiency": 100
             },
-            "timestamp": "2026-01-01T11:11:11"
+            "timestamp": "$timestamp"
         }
 EOF
+    echo # Add missing newline
 done

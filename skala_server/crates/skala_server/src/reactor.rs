@@ -6,7 +6,7 @@ use sqlx::{Encode, Sqlite, Type};
 
 use crate::Error;
 
-#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize)]
+#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize, serde::Serialize)]
 #[serde(tag = "integrity")]
 #[serde(rename_all = "kebab-case")]
 #[quicktype(namespace = "server")]
@@ -15,7 +15,7 @@ pub enum ReactorState {
     Destroyed,
 }
 
-#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize)]
+#[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[quicktype(namespace = "server")]
 pub struct IntactReactorState {
@@ -25,14 +25,16 @@ pub struct IntactReactorState {
     pub heated_coolant_filled: f64,
     pub fuel_filled: f64,
     pub waste_filled: f64,
-    pub actual_burn_rate: f64,
-    pub target_burn_rate: f64,
+    pub actual_burn_rate: ActualBurnRate,
+    pub target_burn_rate: TargetBurnRate,
     pub damage_percent: f64,
     pub heating_rate: f64,
     pub boil_efficiency: f64,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, quicktype::Quicktype, serde::Deserialize)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, quicktype::Quicktype, serde::Deserialize, serde::Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 #[quicktype(namespace = "server")]
 pub enum ReactorMode {
@@ -81,6 +83,60 @@ impl<'q> Encode<'q, Sqlite> for ReactorMode {
             Self::Active => 1,
         };
         <i64 as Encode<Sqlite>>::encode(value, buf)
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    quicktype::Quicktype,
+    schemars::JsonSchema,
+    serde::Deserialize,
+    serde::Serialize,
+    sqlx::Type,
+)]
+#[serde(transparent)]
+#[sqlx(transparent)]
+pub struct TargetBurnRate(i64);
+
+impl From<i64> for TargetBurnRate {
+    fn from(rate: i64) -> Self {
+        Self(rate)
+    }
+}
+
+impl Display for TargetBurnRate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(rate) = self;
+        write!(f, "{rate}mL/s")
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    quicktype::Quicktype,
+    schemars::JsonSchema,
+    serde::Deserialize,
+    serde::Serialize,
+    sqlx::Type,
+)]
+#[serde(transparent)]
+#[sqlx(transparent)]
+pub struct ActualBurnRate(f64);
+
+impl From<f64> for ActualBurnRate {
+    fn from(rate: f64) -> Self {
+        Self(rate.round())
+    }
+}
+
+impl Display for ActualBurnRate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(rate) = self;
+        write!(f, "{rate}mL/s")
     }
 }
 

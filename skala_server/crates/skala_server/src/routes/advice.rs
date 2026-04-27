@@ -6,7 +6,7 @@ use log::{info, warn};
 use sqlx::{SqliteTransaction, query, query_as};
 
 use crate::ReactorMode;
-use crate::advisor::{Advice, AdvisedAction, Advisor, ReactorSnapshot};
+use crate::advisor::{Advice, AdvisedAction, Advisor, PastAction, PastEvent, ReactorSnapshot};
 use crate::reactor::{IntactReactorState, ReactorId, ReactorName, ReactorState};
 use crate::time::{IngameDateTime, IrlDateTime};
 use crate::{Result, app::AppState};
@@ -61,116 +61,26 @@ pub(crate) async fn route(
         ReactorState::Destroyed => None,
         ReactorState::Intact(_) => {
             info!("collecting reactor states");
-            struct Row {
-                id: EventId,
-                mode: Option<i64>,
-                temperature: Option<f64>,
-                coolant_filled: Option<f64>,
-                heated_coolant_filled: Option<f64>,
-                fuel_filled: Option<f64>,
-                waste_filled: Option<f64>,
-                actual_burn_rate: Option<f64>,
-                target_burn_rate: Option<f64>,
-                damage_percent: Option<f64>,
-                heating_rate: Option<f64>,
-                boil_efficiency: Option<f64>,
-                ingame_timestamp: IngameDateTime,
-            }
-            let reactor_snapshots_query = query_as!(
-                Row,
-                "
-                    SELECT
-                        event.id,
-                        reactor_state.mode,
-                        reactor_state.temperature,
-                        reactor_state.coolant_filled,
-                        reactor_state.heated_coolant_filled,
-                        reactor_state.fuel_filled,
-                        reactor_state.waste_filled,
-                        reactor_state.actual_burn_rate,
-                        reactor_state.target_burn_rate,
-                        reactor_state.damage_percent,
-                        reactor_state.heating_rate,
-                        reactor_state.boil_efficiency,
-                        event.ingame_timestamp
-                    FROM reactor_state
-                    JOIN event
-                    ON reactor_state.event_id = event.id
-                    WHERE event.reactor_id = ?
-                    ORDER BY event.irl_timestamp DESC
-                    LIMIT ?
-                ",
+            let reactor_snapshots = get_reactor_snapshots(
+                &mut txn,
                 reactor_id,
                 app_state.reactor_snapshot_window_limit,
-            );
-            let reactor_snapshots = {
-                let mut reactor_snapshots = Vec::new();
-                let mut snapshot_rows = reactor_snapshots_query.fetch(&mut *txn);
-                while let Some(row) = snapshot_rows.next().await {
-                    let snapshot = match row? {
-                        Row {
-                            id: _,
-                            mode: Some(mode),
-                            temperature: Some(temperature),
-                            coolant_filled: Some(coolant_filled),
-                            heated_coolant_filled: Some(heated_coolant_filled),
-                            fuel_filled: Some(fuel_filled),
-                            waste_filled: Some(waste_filled),
-                            actual_burn_rate: Some(actual_burn_rate),
-                            target_burn_rate: Some(target_burn_rate),
-                            damage_percent: Some(damage_percent),
-                            heating_rate: Some(heating_rate),
-                            boil_efficiency: Some(boil_efficiency),
-                            ingame_timestamp,
-                        } => {
-                            let mode = ReactorMode::try_from(mode)?;
-                            ReactorSnapshot {
-                                timestamp: ingame_timestamp,
-                                state: ReactorState::Intact(IntactReactorState {
-                                    mode,
-                                    temperature,
-                                    coolant_filled,
-                                    heated_coolant_filled,
-                                    fuel_filled,
-                                    waste_filled,
-                                    actual_burn_rate,
-                                    target_burn_rate,
-                                    damage_percent,
-                                    heating_rate,
-                                    boil_efficiency,
-                                }),
-                            }
-                        }
-                        Row {
-                            id: _,
-                            mode: None,
-                            temperature: None,
-                            coolant_filled: None,
-                            heated_coolant_filled: None,
-                            fuel_filled: None,
-                            waste_filled: None,
-                            actual_burn_rate: None,
-                            target_burn_rate: None,
-                            damage_percent: None,
-                            heating_rate: None,
-                            boil_efficiency: None,
-                            ingame_timestamp: timestamp,
-                        } => ReactorSnapshot {
-                            timestamp,
-                            state: ReactorState::Destroyed,
-                        },
-                        Row { id, .. } => {
-                            warn!("event {id} has an invalid associated reactor state");
-                            continue;
-                        }
-                    };
-                    reactor_snapshots.push(snapshot);
-                }
-                reactor_snapshots
-            };
+            )
+            .await?;
+
+            info!("getting past actions...");
+            let past_actions = get_past_actions(
+                &mut txn,
+                reactor_id,
+                app_state.reactor_snapshot_window_limit,
+            )
+            .await?;
+
+            info!("collating history data...");
+            let history = collate_history(reactor_snapshots, past_actions);
 
             info!("getting advice...");
-            let advice = app_state.advisor.advise(reactor_snapshots).await?;
+            let advice = app_state.advisor.advise(history).await?;
 
             info!("recording advice...");
             record_advice(&mut txn, event_id, &advice).await?;
@@ -214,6 +124,210 @@ async fn get_reactor_id(txn: &mut SqliteTransaction<'_>, name: &ReactorName) -> 
     );
     let info = name_insertion_query.execute(&mut **txn).await?;
     Ok(ReactorId::from(info.last_insert_rowid()))
+}
+
+async fn get_reactor_snapshots(
+    txn: &mut SqliteTransaction<'_>,
+    reactor_id: ReactorId,
+    reactor_snapshot_window_limit: u16,
+) -> Result<Vec<ReactorSnapshot>> {
+    struct Row {
+        id: EventId,
+        mode: Option<i64>,
+        temperature: Option<f64>,
+        coolant_filled: Option<f64>,
+        heated_coolant_filled: Option<f64>,
+        fuel_filled: Option<f64>,
+        waste_filled: Option<f64>,
+        actual_burn_rate: Option<f64>,
+        target_burn_rate: Option<i64>,
+        damage_percent: Option<f64>,
+        heating_rate: Option<f64>,
+        boil_efficiency: Option<f64>,
+        ingame_timestamp: IngameDateTime,
+    }
+    let reactor_snapshots_query = query_as!(
+        Row,
+        "
+            SELECT
+                event.id,
+                reactor_state.mode,
+                reactor_state.temperature,
+                reactor_state.coolant_filled,
+                reactor_state.heated_coolant_filled,
+                reactor_state.fuel_filled,
+                reactor_state.waste_filled,
+                reactor_state.actual_burn_rate,
+                reactor_state.target_burn_rate,
+                reactor_state.damage_percent,
+                reactor_state.heating_rate,
+                reactor_state.boil_efficiency,
+                event.ingame_timestamp
+            FROM reactor_state
+            JOIN event
+            ON reactor_state.event_id = event.id
+            WHERE event.reactor_id = ?
+            ORDER BY event.irl_timestamp DESC
+            LIMIT ?
+        ",
+        reactor_id,
+        reactor_snapshot_window_limit,
+    );
+
+    let mut ret = Vec::new();
+    let mut snapshot_rows = reactor_snapshots_query.fetch(&mut **txn);
+    while let Some(row) = snapshot_rows.next().await {
+        let snapshot = match row? {
+            Row {
+                id: _,
+                mode: Some(mode),
+                temperature: Some(temperature),
+                coolant_filled: Some(coolant_filled),
+                heated_coolant_filled: Some(heated_coolant_filled),
+                fuel_filled: Some(fuel_filled),
+                waste_filled: Some(waste_filled),
+                actual_burn_rate: Some(actual_burn_rate),
+                target_burn_rate: Some(target_burn_rate),
+                damage_percent: Some(damage_percent),
+                heating_rate: Some(heating_rate),
+                boil_efficiency: Some(boil_efficiency),
+                ingame_timestamp,
+            } => {
+                let mode = ReactorMode::try_from(mode)?;
+                let actual_burn_rate = actual_burn_rate.into();
+                let target_burn_rate = target_burn_rate.into();
+                ReactorSnapshot {
+                    timestamp: ingame_timestamp,
+                    state: ReactorState::Intact(IntactReactorState {
+                        mode,
+                        temperature,
+                        coolant_filled,
+                        heated_coolant_filled,
+                        fuel_filled,
+                        waste_filled,
+                        actual_burn_rate,
+                        target_burn_rate,
+                        damage_percent,
+                        heating_rate,
+                        boil_efficiency,
+                    }),
+                }
+            }
+            Row {
+                id: _,
+                mode: None,
+                temperature: None,
+                coolant_filled: None,
+                heated_coolant_filled: None,
+                fuel_filled: None,
+                waste_filled: None,
+                actual_burn_rate: None,
+                target_burn_rate: None,
+                damage_percent: None,
+                heating_rate: None,
+                boil_efficiency: None,
+                ingame_timestamp: timestamp,
+            } => ReactorSnapshot {
+                timestamp,
+                state: ReactorState::Destroyed,
+            },
+            Row { id, .. } => {
+                warn!("event {id} has an invalid associated reactor state");
+                continue;
+            }
+        };
+        ret.push(snapshot);
+    }
+    Ok(ret)
+}
+
+async fn get_past_actions(
+    txn: &mut SqliteTransaction<'_>,
+    reactor_id: ReactorId,
+    reactor_snapshot_window_limit: u16,
+) -> Result<Vec<PastAction>> {
+    struct Row {
+        id: i64,
+        timestamp: IngameDateTime,
+        action: i64,
+        new_target_burn_rate: Option<i64>,
+    }
+    let past_actions_query = query_as!(
+        Row,
+        "
+            SELECT
+                event.id,
+                event.ingame_timestamp AS timestamp,
+                advice.action,
+                advice.new_target_burn_rate
+            FROM advice
+            JOIN event
+            ON advice.event_id = event.id
+            WHERE event.reactor_id = ?
+            ORDER BY event.irl_timestamp DESC
+            LIMIT ?
+        ",
+        reactor_id,
+        reactor_snapshot_window_limit,
+    );
+
+    let mut ret = Vec::with_capacity(reactor_snapshot_window_limit.into());
+    let mut rows = past_actions_query.fetch(&mut **txn);
+    while let Some(row) = rows.next().await {
+        let past_action = match row? {
+            Row {
+                id: _,
+                timestamp,
+                action: 0,
+                new_target_burn_rate: None,
+            } => PastAction {
+                timestamp,
+                action: AdvisedAction::NoAction,
+            },
+            Row {
+                id: _,
+                timestamp,
+                action: 1,
+                new_target_burn_rate: None,
+            } => PastAction {
+                timestamp,
+                action: AdvisedAction::Scram,
+            },
+            Row {
+                id: _,
+                timestamp,
+                action: 2,
+                new_target_burn_rate: Some(new_target_burn_rate),
+            } => {
+                let new_target_burn_rate = new_target_burn_rate.into();
+                PastAction {
+                    timestamp,
+                    action: AdvisedAction::SetBurnRate {
+                        new_target_burn_rate,
+                    },
+                }
+            }
+            Row { id, .. } => {
+                warn!("event {id} has invalid associated advice");
+                continue;
+            }
+        };
+        ret.push(past_action);
+    }
+    Ok(ret)
+}
+
+fn collate_history(
+    reactor_snapshots: Vec<ReactorSnapshot>,
+    past_actions: Vec<PastAction>,
+) -> Vec<PastEvent> {
+    let mut ret: Vec<_> = reactor_snapshots
+        .into_iter()
+        .map(PastEvent::ReactorSnapshot)
+        .chain(past_actions.into_iter().map(PastEvent::Action))
+        .collect();
+    ret.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
+    ret
 }
 
 #[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize, sqlx::Type)]
@@ -331,20 +445,22 @@ async fn record_advice(
     advice: &Advice,
 ) -> Result<()> {
     let Advice { action, reasoning } = &advice;
-    let (advised_action_repr, new_burn_rate) = match action {
+    let (advised_action_repr, new_target_burn_rate) = match action {
         AdvisedAction::NoAction => (0, None),
         AdvisedAction::Scram => (1, None),
-        AdvisedAction::SetBurnRate { new_burn_rate } => (2, Some(new_burn_rate)),
+        AdvisedAction::SetBurnRate {
+            new_target_burn_rate,
+        } => (2, Some(new_target_burn_rate)),
     };
     let advice_insertion_query = query!(
         "
-            INSERT INTO advice (event_id, action, reasoning, new_burn_rate)
+            INSERT INTO advice (event_id, action, reasoning, new_target_burn_rate)
             VALUES (?, ?, ?, ?)
         ",
         event_id,
         advised_action_repr,
         reasoning,
-        new_burn_rate,
+        new_target_burn_rate,
     );
     advice_insertion_query.execute(&mut **txn).await?;
     Ok(())

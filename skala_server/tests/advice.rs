@@ -1,8 +1,8 @@
 mod common;
 
 use serde_json::{Value, json};
-use skala_server::advisor::{Advice, AdvisedAction, ReactorSnapshot};
-use skala_server::{IntactReactorState, ReactorMode, ReactorState};
+use skala_server::advisor::{Advice, AdvisedAction, PastEvent, ReactorSnapshot};
+use skala_server::{ActualBurnRate, IntactReactorState, ReactorMode, ReactorState, TargetBurnRate};
 use sqlx::SqlitePool;
 
 use crate::common::MockAdvisor;
@@ -45,7 +45,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 "fuel_filled": 444.0,
                 "waste_filled": 555.0,
                 "actual_burn_rate": 666.0,
-                "target_burn_rate": 777.0,
+                "target_burn_rate": 777,
                 "damage_percent": 888.0,
                 "heating_rate": 999.0,
                 "boil_efficiency": 1234.0,
@@ -59,15 +59,21 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
             "advice": {
-                "action": "no-action",
+                "action": {
+                    "kind": "no-action",
+                },
                 "reasoning": "all good",
             },
         }))
-        .check_reactor_snapshots(|snapshots| {
-            let snapshot = match snapshots.as_slice() {
+        .check_past_events(|past_events| {
+            let past_event = match past_events.as_slice() {
                 [] => panic!("too few snapshots"),
-                [snapshot] => snapshot.to_owned(),
+                [past_event] => past_event.to_owned(),
                 _ => panic!("too many snapshots"),
+            };
+            let snapshot = match past_event {
+                PastEvent::ReactorSnapshot(snapshot) => snapshot,
+                _ => panic!("incorrect past event"),
             };
             let ReactorSnapshot { timestamp, state } = snapshot;
             assert_eq!(timestamp.into_inner(), TIMESTAMP);
@@ -94,8 +100,8 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
             assert_eq!(heated_coolant_filled, 333.0);
             assert_eq!(fuel_filled, 444.0);
             assert_eq!(waste_filled, 555.0);
-            assert_eq!(actual_burn_rate, 666.0);
-            assert_eq!(target_burn_rate, 777.0);
+            assert_eq!(actual_burn_rate, ActualBurnRate::from(666.0));
+            assert_eq!(target_burn_rate, TargetBurnRate::from(777));
             assert_eq!(damage_percent, 888.0);
             assert_eq!(heating_rate, 999.0);
             assert_eq!(boil_efficiency, 1234.0);
@@ -121,7 +127,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 "fuel_filled": 0.0,
                 "waste_filled": 0.0,
                 "actual_burn_rate": 0.0,
-                "target_burn_rate": 0.0,
+                "target_burn_rate": 0,
                 "damage_percent": 0.0,
                 "heating_rate": 0.0,
                 "boil_efficiency": 0.0,
@@ -130,28 +136,30 @@ async fn test_active_reactor(db_pool: SqlitePool) {
         }))
         .advice(Advice {
             action: AdvisedAction::SetBurnRate {
-                new_burn_rate: 1000.0,
+                new_target_burn_rate: 1000.into(),
             },
             reasoning: "let's see what happens".into(),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
             "advice": {
-                "action": "set-burn-rate",
-                "new-burn-rate": 1000.0,
+                "action": {
+                    "kind": "set-burn-rate",
+                    "new-target-burn-rate": 1000,
+                },
                 "reasoning": "let's see what happens",
             },
         }))
-        .check_reactor_snapshots(|snapshots| {
+        .check_past_events(|events| {
             assert!(matches!(
-                snapshots.as_slice(),
-                [ReactorSnapshot {
+                events.as_slice(),
+                [PastEvent::ReactorSnapshot(ReactorSnapshot {
                     state: ReactorState::Intact(IntactReactorState {
                         mode: ReactorMode::Active,
                         ..
                     }),
                     ..
-                }],
+                })],
             ));
         })
         .run(db_pool)
@@ -162,7 +170,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
 struct Test {
     reactor_name: Option<&'static str>,
     input: Option<Value>,
-    check_reactor_snapshots: Option<Box<dyn Fn(Vec<ReactorSnapshot>) + Send>>,
+    check_past_events: Option<Box<dyn Fn(Vec<PastEvent>) + Send>>,
     advice: Option<Advice>,
     expected_response: Option<Value>,
 }
@@ -172,7 +180,7 @@ impl Test {
         Self {
             reactor_name: None,
             input: None,
-            check_reactor_snapshots: None,
+            check_past_events: None,
             advice: None,
             expected_response: None,
         }
@@ -188,11 +196,8 @@ impl Test {
         self
     }
 
-    fn check_reactor_snapshots(
-        mut self,
-        f: impl Fn(Vec<ReactorSnapshot>) + Send + 'static,
-    ) -> Self {
-        self.check_reactor_snapshots = Some(Box::new(f));
+    fn check_past_events(mut self, f: impl Fn(Vec<PastEvent>) + Send + 'static) -> Self {
+        self.check_past_events = Some(Box::new(f));
         self
     }
 
@@ -210,7 +215,7 @@ impl Test {
         let Self {
             reactor_name,
             input,
-            check_reactor_snapshots: check_reactor_states,
+            check_past_events,
             advice,
             expected_response,
         } = self;
@@ -221,10 +226,8 @@ impl Test {
         let advisor = {
             MockAdvisor::new(move |reactor_states| {
                 let advice = advice.clone().expect("no advice");
-                let check_reactor_states = check_reactor_states
-                    .as_ref()
-                    .expect("no reactor state check");
-                check_reactor_states(reactor_states);
+                let check_past_events = check_past_events.as_ref().expect("no reactor state check");
+                check_past_events(reactor_states);
                 Ok(advice)
             })
         };

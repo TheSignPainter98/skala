@@ -2,17 +2,19 @@ use anyhow::Context;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
 use async_openai::types::chat::{
-    ChatCompletionRequestDeveloperMessageArgs, ChatCompletionRequestDeveloperMessageContent,
-    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageArgs,
-    ChatCompletionRequestUserMessageContent, CreateChatCompletionRequestArgs, ReasoningEffort,
-    ResponseFormat, ResponseFormatJsonSchema, Verbosity,
+    ChatCompletionRequestAssistantMessageArgs, ChatCompletionRequestDeveloperMessageArgs,
+    ChatCompletionRequestDeveloperMessageContent, ChatCompletionRequestMessage,
+    ChatCompletionRequestUserMessageArgs, ChatCompletionRequestUserMessageContent,
+    CreateChatCompletionRequestArgs, ReasoningEffort, ResponseFormat, ResponseFormatJsonSchema,
+    Verbosity,
 };
 use indoc::formatdoc;
+use log::info;
 use schemars::schema_for;
 use serde_json::Value;
 
-use crate::advisor::{Advice, Advisor, ReactorSnapshot};
-use crate::reactor::{IntactReactorState, ReactorMode, ReactorState};
+use crate::advisor::{Advice, Advisor, PastAction, PastEvent, ReactorSnapshot};
+use crate::reactor::ReactorState;
 use crate::{
     ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty, ConfigTemperature,
     ConfigUrl, LlmConfig, Result,
@@ -54,10 +56,7 @@ impl LlmAdvisor {
 }
 
 impl Advisor for LlmAdvisor {
-    async fn advise(
-        &self,
-        reactor_snapshots: impl IntoIterator<Item = ReactorSnapshot>,
-    ) -> Result<Advice> {
+    async fn advise(&self, past_events: impl IntoIterator<Item = PastEvent>) -> Result<Advice> {
         let Self {
             client,
             schemas,
@@ -67,6 +66,7 @@ impl Advisor for LlmAdvisor {
             max_completion_tokens,
         } = self;
 
+        info!("creating message");
         let messages = {
             let mut messages = Vec::new();
             messages.push(ChatCompletionRequestMessage::Developer(
@@ -77,15 +77,24 @@ impl Advisor for LlmAdvisor {
                     ))
                     .build()?,
             ));
-            for reactor_snapshot in reactor_snapshots {
-                messages.push(ChatCompletionRequestMessage::User(
-                    ChatCompletionRequestUserMessageArgs::default()
-                        .name("reactor-monitor")
-                        .content(ChatCompletionRequestUserMessageContent::Text(
-                            self.summarise_reactor_snapshot(&reactor_snapshot),
-                        ))
-                        .build()?,
-                ));
+            for past_event in past_events {
+                match past_event {
+                    PastEvent::ReactorSnapshot(snapshot) => {
+                        let content = self.summarise_reactor_snapshot(&snapshot);
+                        let message = ChatCompletionRequestUserMessageArgs::default()
+                            .name("reactor-monitor")
+                            .content(content)
+                            .build()?;
+                        messages.push(message.into());
+                    }
+                    PastEvent::Action(action) => {
+                        let content = self.summarise_action(&action);
+                        let message = ChatCompletionRequestAssistantMessageArgs::default()
+                            .content(content)
+                            .build()?;
+                        messages.push(message.into());
+                    }
+                }
             }
             messages.push(ChatCompletionRequestMessage::User(
                 ChatCompletionRequestUserMessageArgs::default()
@@ -97,6 +106,11 @@ impl Advisor for LlmAdvisor {
             ));
             messages
         };
+
+        for message in &messages {
+            log::info!("{}", serde_json::to_string(message).unwrap());
+        }
+
         let response_format = ResponseFormat::JsonSchema {
             json_schema: ResponseFormatJsonSchema {
                 name: "reactor-control-commands".to_owned(),
@@ -120,7 +134,10 @@ impl Advisor for LlmAdvisor {
             .temperature(*temperature)
             .safety_identifier("skala")
             .build()?;
+
+        info!("awaiting llm response");
         let response = client.chat().create(req).await?;
+        info!("got llm response");
         let raw_advice = response
             .choices
             .into_iter()
@@ -129,6 +146,8 @@ impl Advisor for LlmAdvisor {
             .message
             .content
             .context("llm choice returned no content")?;
+
+        info!("parsing advice '{raw_advice}'");
         let ret = serde_json::from_str(&raw_advice)?;
         Ok(ret)
     }
@@ -137,51 +156,34 @@ impl Advisor for LlmAdvisor {
 impl LlmAdvisor {
     fn summarise_reactor_snapshot(&self, reactor_snapshot: &ReactorSnapshot) -> String {
         let ReactorSnapshot { timestamp, state } = reactor_snapshot;
-        match state {
-            ReactorState::Destroyed => formatdoc!(
+        if matches!(state, ReactorState::Destroyed) {
+            return formatdoc!(
                 "
                     ### Reactor state at {timestamp}
 
                     Reactor sensors malfunctioned; no data available.
                 "
-            ),
-            ReactorState::Intact(intact_state) => {
-                let IntactReactorState {
-                    mode,
-                    temperature,
-                    coolant_filled,
-                    heated_coolant_filled,
-                    fuel_filled,
-                    waste_filled,
-                    actual_burn_rate,
-                    target_burn_rate,
-                    damage_percent,
-                    heating_rate,
-                    boil_efficiency,
-                } = intact_state;
-                let mode = match mode {
-                    ReactorMode::Active => "active",
-                    ReactorMode::Inactive => "shut down",
-                };
-                formatdoc!(
-                    "
-                        ### Reactor state at {timestamp}:
-
-                        - **mode**: {mode}.
-                        - **temperature**: {temperature}.
-                        - **coolant_filled**: {coolant_filled}.
-                        - **heated_coolant_filled**: {heated_coolant_filled}.
-                        - **fuel_filled**: {fuel_filled}.
-                        - **waste_filled**: {waste_filled}.
-                        - **actual_burn_rate**: {actual_burn_rate}.
-                        - **target_burn_rate**: {target_burn_rate}.
-                        - **damage_percent**: {damage_percent}.
-                        - **heating_rate**: {heating_rate}.
-                        - **boil_efficiency**: {boil_efficiency}.
-                    "
-                )
-            }
+            );
         }
+
+        let state_json = serde_json::to_string(state).unwrap();
+        formatdoc!(
+            "
+                ### Reactor state at {timestamp}
+
+                ```json
+                {state_json}
+                ```
+            "
+        )
+    }
+
+    fn summarise_action(&self, action: &PastAction) -> String {
+        let PastAction {
+            timestamp: _,
+            action,
+        } = action;
+        serde_json::to_string(action).unwrap()
     }
 }
 

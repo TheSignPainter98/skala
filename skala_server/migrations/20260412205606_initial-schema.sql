@@ -52,7 +52,7 @@ CREATE TABLE reactor_state (
         DEFAULT NULL,
     actual_burn_rate REAL NULL
         DEFAULT NULL,
-    target_burn_rate REAL NULL
+    target_burn_rate INTEGER NULL
         DEFAULT NULL,
     damage_percent REAL NULL
         DEFAULT NULL,
@@ -78,9 +78,9 @@ CREATE TABLE advice (
         ELSE 'unknown'
     END),
 
-    new_burn_rate INTEGER NULL
+    new_target_burn_rate INTEGER NULL
         DEFAULT NULL
-        CHECK (new_burn_rate IS NULL OR action = 2),
+        CHECK (new_target_burn_rate IS NULL OR action = 2),
 
     reasoning TEXT NOT NULL
 ) STRICT;

@@ -6,9 +6,12 @@ mod time;
 
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use log::error;
 
 pub use crate::app::App;
-pub use crate::reactor::{IntactReactorState, ReactorMode, ReactorState};
+pub use crate::reactor::{
+    ActualBurnRate, IntactReactorState, ReactorMode, ReactorState, TargetBurnRate,
+};
 
 pub type Result<T, E = Error> = anyhow::Result<T, E>;
 
@@ -33,7 +36,10 @@ impl_from_error!(sqlx::migrate::MigrateError);
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
+        // This is NOT the place for this, however it's easy to set up and I'm in a rush.
+        let repr = self.to_string();
+        error!("{repr}");
+        (StatusCode::INTERNAL_SERVER_ERROR, repr).into_response()
     }
 }
 
