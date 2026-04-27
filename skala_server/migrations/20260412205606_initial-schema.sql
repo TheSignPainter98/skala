@@ -70,12 +70,17 @@ CREATE TABLE advice (
         ON UPDATE CASCADE,
 
     action INTEGER NOT NULL
-        CHECK (action IN (0, 1)),
+        CHECK (action IN (0, 1, 2)),
     pretty_action TEXT AS (CASE
         WHEN action = 0 THEN 'no-action'
         WHEN action = 1 THEN 'scram'
+        WHEN action = 2 THEN 'set-burn-rate'
         ELSE 'unknown'
     END),
+
+    new_burn_rate INTEGER NULL
+        DEFAULT NULL
+        CHECK (new_burn_rate IS NULL OR action = 2),
 
     reasoning TEXT NOT NULL
 ) STRICT;

@@ -29,6 +29,7 @@ pub struct ReactorSnapshot {
 #[quicktype(namespace = "server")]
 pub struct Advice {
     /// The best course of action.
+    #[serde(flatten)]
     pub action: AdvisedAction,
 
     /// A concise description of the reasoning behind the best course of action (at most 25 words).
@@ -40,12 +41,22 @@ pub struct Advice {
     Clone, Debug, quicktype::Quicktype, schemars::JsonSchema, serde::Deserialize, serde::Serialize,
 )]
 #[serde(rename_all = "kebab-case")]
+#[serde(tag = "action")]
 #[quicktype(namespace = "server")]
 pub enum AdvisedAction {
     /// Represents that the reactor's state is okay and hence that no action is required.
     NoAction,
+
     /// Represents that the reactor is either critical or will soon go critical, hence the reaction must be stopped immediately.
+    #[serde(skip)]
     Scram,
+
+    /// Represents that the burn rate needs to be changed to the given value.
+    #[serde(rename_all = "kebab-case")]
+    SetBurnRate {
+        /// The value of the new burn rate.
+        new_burn_rate: f64,
+    },
 }
 
 #[cfg(test)]

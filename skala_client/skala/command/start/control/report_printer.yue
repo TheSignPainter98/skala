@@ -88,8 +88,7 @@ export class ReportPrinter
       [] = ''
       {
         :action
-        :key
-        :value
+        :burn_rate
         :reasoning
       } = reasoned_action
       switch action
@@ -97,8 +96,8 @@ export class ReportPrinter
           [] = 'No immediate action required.'
         when 'scram'
           [] = 'Scram reactor immediately.'
-        when 'set'
-          [] = "Set #{key} to #{value}"
+        when 'set-burn-rate'
+          [] = "Set burn rate to #{burn_rate}"
         else
           [] = "!! invalid action: '#{action}'"
       [] = reasoning

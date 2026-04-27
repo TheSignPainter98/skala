@@ -50,6 +50,17 @@ export class Reactor
       err = err2
     err
 
+  set_burn_rate: $F '(number) => ?string', (burn_rate) =>
+    err = nil
+    try
+      @reactor\setBurnRate burn_rate
+    catch err2
+      err = err2
+    err
+
+  limits: $F '() => reactor.Limits', =>
+    error 'todo'
+
   state: $F '() => <?peripheral.ReactorState, ?string>', =>
     if not @reactor.isFormed!
       return nil, 'reactor not formed'

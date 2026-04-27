@@ -41,11 +41,10 @@ declare_type 'server.IntactReactorState', [[{
 
 declare_type 'server.ReactorName', 'string'
 
-declare_type 'server.AdvisedAction', '"no-action"|"scram"'
+declare_type 'server.AdvisedAction', '"no-action"|"scram"|"set-burn-rate"'
 
 declare_type 'server.Advice', [[{
   action: server.AdvisedAction,
-  key: ?string,
-  value: ?number,
+  burn_rate: ?number,
   reasoning: string,
 }]]

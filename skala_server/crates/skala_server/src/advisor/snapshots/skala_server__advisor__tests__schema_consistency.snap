@@ -8,34 +8,46 @@ expression: schema_for!(Advice)
   "description": "Holds the advice to apply to the reactor.",
   "type": "object",
   "properties": {
-    "action": {
-      "description": "The best course of action.",
-      "$ref": "#/$defs/AdvisedAction"
-    },
     "reasoning": {
       "description": "A concise description of the reasoning behind the best course of action (at most 25 words).",
       "type": "string"
     }
   },
-  "required": [
-    "action",
-    "reasoning"
-  ],
-  "$defs": {
-    "AdvisedAction": {
-      "description": "Holds the action to apply to the reactor.",
-      "oneOf": [
-        {
-          "description": "Represents that the reactor's state is okay and hence that no action is required.",
+  "oneOf": [
+    {
+      "description": "Represents that the reactor's state is okay and hence that no action is required.",
+      "type": "object",
+      "properties": {
+        "action": {
           "type": "string",
           "const": "no-action"
-        },
-        {
-          "description": "Represents that the reactor is either critical or will soon go critical, hence the reaction must be stopped immediately.",
-          "type": "string",
-          "const": "scram"
         }
+      },
+      "required": [
+        "action"
+      ]
+    },
+    {
+      "description": "Represents that the burn rate needs to be changed to the given value.",
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "set-burn-rate"
+        },
+        "new-burn-rate": {
+          "description": "The value of the new burn rate.",
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "action",
+        "new-burn-rate"
       ]
     }
-  }
+  ],
+  "required": [
+    "reasoning"
+  ]
 }

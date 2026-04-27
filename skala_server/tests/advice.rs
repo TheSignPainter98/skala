@@ -129,13 +129,16 @@ async fn test_active_reactor(db_pool: SqlitePool) {
             "timestamp": "2026-04-15T00:00:00"
         }))
         .advice(Advice {
-            action: AdvisedAction::Scram,
+            action: AdvisedAction::SetBurnRate {
+                new_burn_rate: 1000.0,
+            },
             reasoning: "let's see what happens".into(),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
             "advice": {
-                "action": "scram",
+                "action": "set-burn-rate",
+                "new-burn-rate": 1000.0,
                 "reasoning": "let's see what happens",
             },
         }))

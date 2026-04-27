@@ -116,6 +116,11 @@ export main = $F '(control.Args) -> <>', (args) ->
             err = reactor\scram!
             if err?
               print "cannot scram reactor: #{err}"
+          when 'set-burn-rate'
+            { :burn_rate } = advice
+            err = reactor\set_burn_rate burn_rate
+            if err?
+              print "cannot set burn rate reactor: #{err}"
           else
             print "Unrecognised advised action: #{action}"
 

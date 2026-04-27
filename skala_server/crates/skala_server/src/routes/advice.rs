@@ -331,18 +331,20 @@ async fn record_advice(
     advice: &Advice,
 ) -> Result<()> {
     let Advice { action, reasoning } = &advice;
-    let advised_action_repr = match action {
-        AdvisedAction::NoAction => 0,
-        AdvisedAction::Scram => 1,
+    let (advised_action_repr, new_burn_rate) = match action {
+        AdvisedAction::NoAction => (0, None),
+        AdvisedAction::Scram => (1, None),
+        AdvisedAction::SetBurnRate { new_burn_rate } => (2, Some(new_burn_rate)),
     };
     let advice_insertion_query = query!(
         "
-            INSERT INTO advice (event_id, action, reasoning)
-            VALUES (?, ?, ?)
+            INSERT INTO advice (event_id, action, reasoning, new_burn_rate)
+            VALUES (?, ?, ?, ?)
         ",
         event_id,
         advised_action_repr,
         reasoning,
+        new_burn_rate,
     );
     advice_insertion_query.execute(&mut **txn).await?;
     Ok(())
