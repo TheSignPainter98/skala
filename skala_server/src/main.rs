@@ -53,7 +53,7 @@ async fn run_init(dir: Utf8PathBuf) -> Result<()> {
         const MANIFEST_CONTENT: &str = indoc! {r#"
             [skala]
             port = 15000
-            reactor-snapshot-window-limit = 25
+            reactor-snapshot-window-limit = 10
 
             [llm]
             url = "http://localhost:8326"

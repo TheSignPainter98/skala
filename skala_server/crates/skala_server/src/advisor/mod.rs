@@ -52,7 +52,8 @@ pub struct Advice {
     /// The best course of action.
     pub action: AdvisedAction,
 
-    /// A concise description of the reasoning behind the best course of action (at most 25 words).
+    /// A very concise description of the reasoning behind the best course of action. The reasoning description must contain at most 16 words.
+    #[schemars(length(max = 120))]
     pub reasoning: String,
 }
 

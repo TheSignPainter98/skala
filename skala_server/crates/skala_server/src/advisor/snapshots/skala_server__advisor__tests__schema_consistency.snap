@@ -13,8 +13,9 @@ expression: schema_for!(Advice)
       "$ref": "#/$defs/AdvisedAction"
     },
     "reasoning": {
-      "description": "A concise description of the reasoning behind the best course of action (at most 25 words).",
-      "type": "string"
+      "description": "A very concise description of the reasoning behind the best course of action. The reasoning description must contain at most 16 words.",
+      "type": "string",
+      "maxLength": 120
     }
   },
   "required": [
