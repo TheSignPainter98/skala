@@ -73,7 +73,7 @@ pub enum AdvisedAction {
     Scram,
 
     /// Represents that the burn rate needs to be changed to the given value.
-    #[serde(rename_all = "kebab-case")]
+    #[serde(rename = "set-burn-rate")]
     SetBurnRate {
         /// The value of the new target burn rate.
         new_target_burn_rate: TargetBurnRate,

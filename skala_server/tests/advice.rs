@@ -145,7 +145,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
             "advice": {
                 "action": {
                     "kind": "set-burn-rate",
-                    "new-target-burn-rate": 1000,
+                    "new_target_burn_rate": 1000,
                 },
                 "reasoning": "let's see what happens",
             },

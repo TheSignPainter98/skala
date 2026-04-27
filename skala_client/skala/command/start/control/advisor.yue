@@ -1,6 +1,7 @@
-import 'skala.quicktype' as :declare_type, :F
+import 'skala.quicktype' as :declare_type, :is, :F
 import 'skala.quicktype_macros' as $
 import 'skala.util.text' as :concat_lines
+import 'cc.pretty' as :pretty_print
 
 declare_type 'control.Advisor', [[{
   check_health: () => <boolean, ?string>,
@@ -60,7 +61,16 @@ export class Advisor
         if not line?
           break
         [] = line
+
     parsed_response, err = textutils.unserialiseJSON raw_response
     if err?
       return nil, "cannot deserialise server response: #{err}"
+
+    print "got advice:"
+    pretty_print parsed_response
+
+    _, err = is 'server.Response', parsed_response
+    if err?
+      return "cannot use returned advice: #{err}"
+
     parsed_response, nil

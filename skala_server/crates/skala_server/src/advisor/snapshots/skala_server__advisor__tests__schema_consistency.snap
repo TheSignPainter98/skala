@@ -47,7 +47,7 @@ expression: schema_for!(Advice)
               "type": "string",
               "const": "set-burn-rate"
             },
-            "new-target-burn-rate": {
+            "new_target_burn_rate": {
               "description": "The value of the new target burn rate.",
               "type": "integer",
               "format": "int64"
@@ -55,7 +55,7 @@ expression: schema_for!(Advice)
           },
           "required": [
             "kind",
-            "new-target-burn-rate"
+            "new_target_burn_rate"
           ]
         }
       ]

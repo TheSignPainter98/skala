@@ -53,7 +53,7 @@ export class Reactor
   set_burn_rate: $F '(number) => ?string', (burn_rate) =>
     err = nil
     try
-      @reactor\setBurnRate burn_rate
+      @reactor.setBurnRate burn_rate
     catch err2
       err = err2
     err
