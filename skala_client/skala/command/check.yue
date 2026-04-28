@@ -6,7 +6,6 @@ import 'skala.peripheral.sole' as :sole
 import 'skala.quicktype' as :declare_type, :is, :F
 import 'skala.quicktype_macros' as $
 import 'skala.util.text' as :concat_lines
-import 'skala.version' as :VERSION
 
 SERVER_TIMEOUT = 10
 
@@ -28,34 +27,60 @@ export register_args = (parser) ->
 export main = $F '(check.Args) -> <>', (args) ->
   { :server_url } = args
 
-  errors_present = 0
-
+  local server_status
   server_info, err = get_server_info server_url
-  server_status = server_info?.version ?? err
   if err?
-    errors_present += 1
+    server_status = "error (#{err})"
+  else
+    server_status = "ok"
 
+  local reactor_status
   _, err = Reactor::find!
-  reactor_status = err ?? 'present'
   if err?
-    errors_present += 1
+    reactor_status = "error (#{err})"
+  else
+    reactor_status = 'ok'
 
-  _, err = sole 'printer'
-  printer_status = err ?? 'present'
+  local printer_status
+  printer, err = sole 'printer'
   if err?
-    errors_present += 1
+    printer_status = "error (#{err})"
+  else
+    printer_status = 'ok'
+
+  printer_ink_status = '-'
+  printer_paper_status = '-'
+  if printer?
+    ink_level = printer.getInkLevel!
+    if ink_level == 0
+      printer_ink_status = 'empty'
+    else if ink_level < 10
+      printer_ink_status = 'low'
+    else
+      printer_ink_status = 'ok'
+
+    paper_level = printer.getPaperLevel!
+    if paper_level == 0
+      printer_paper_status = 'empty'
+    else if paper_level < 10
+      printer_paper_status = 'low'
+    else
+      printer_paper_status = 'ok'
+
+  local monitor_status
+  monitor, err = sole 'monitor'
+  if err?
+    monitor_status = "error (#{err})"
+  else
+    monitor_status = 'ok'
 
   print concat_lines with {}
-    [] = "Skala:   #{VERSION}"
-    [] = "Server:  #{server_status}"
-    [] = "Reactor: #{reactor_status}"
-    [] = "Printer: #{printer_status}"
-    [] = ""
-    if errors_present == 0
-      [] = "Skala is ready for use."
-    else
-      [] = "Skala NOT ready!"
-      [] = "Please resolve #{errors_present} issues"
+    [] = "Server:        #{server_status}"
+    [] = "Reactor:       #{reactor_status}"
+    [] = "Printer:       #{printer_status}"
+    [] = "Printer ink:   #{printer_ink_status}"
+    [] = "Printer paper: #{printer_paper_status}"
+    [] = "Monitor:       #{monitor_status}"
   return
 
 get_server_info = $F '(string) -> <?check.ServerInfo, ?string>', (server_url) ->
