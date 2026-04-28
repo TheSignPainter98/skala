@@ -31,7 +31,7 @@ async fn run() -> Result<()> {
     let Args { command } = Args::parse();
     match command {
         Command::Init { dir } => run_init(dir).await,
-        Command::Run { config, db_path } => run_run(config, db_path).await,
+        Command::Serve { config, db_path } => run_serve(config, db_path).await,
         Command::PrintQuicktypeSpecs => {
             run_print_quicktype_specs();
             Ok(())
@@ -161,7 +161,7 @@ impl Drop for FsTransaction {
     }
 }
 
-async fn run_run(config: Utf8PathBuf, db_path: Utf8PathBuf) -> Result<()> {
+async fn run_serve(config: Utf8PathBuf, db_path: Utf8PathBuf) -> Result<()> {
     let config = read_config(config)?.unwrap_or_default();
     let Config {
         general: general_config,
@@ -207,7 +207,7 @@ enum Command {
     },
 
     /// Run the server
-    Run {
+    Serve {
         #[clap(long, default_value = "skala.toml")]
         config: Utf8PathBuf,
 
