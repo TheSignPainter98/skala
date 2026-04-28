@@ -51,6 +51,11 @@ export class Reactor
     err
 
   set_burn_rate: $F '(number) => ?string', (burn_rate) =>
+    if burn_rate < 0
+      burn_rate = 0
+    else if burn_rate > 1920
+      burn_rate = 1920
+
     err = nil
     try
       @reactor.setBurnRate burn_rate
