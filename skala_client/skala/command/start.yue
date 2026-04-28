@@ -1,5 +1,6 @@
 local *
 
+import 'skala.peripheral.monitor' as :Monitor
 import 'skala.quicktype' as :declare_type, :F, :T
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Flag, :Param, :Subcommand
@@ -51,4 +52,13 @@ export main = $F '({}) -> <>', (args) ->
   if #applicable_mains != 1
     error "internal error #{#applicable_mains} applicable main functions detected"
   { :main, :kind_args } = applicable_mains[1]
+
+  monitor, _ = Monitor::find!
+  if monitor?
+    monitor\clear!
+    monitor\set_text_scale 0.9
+    monitor\set_cursor_pos 1, 1
+    print 'See monitor.'
+    monitor\apply_redirection!
+
   main kind_args

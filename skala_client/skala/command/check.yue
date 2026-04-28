@@ -74,7 +74,6 @@ export main = $F '(check.Args) -> <>', (args) ->
     monitor_status = "error (#{err})"
   else
     width, height = monitor\size!
-    print width, height, monitor.monitor.getTextScale!
     if width < 50
       monitor_status = 'too narrow!'
     else if height < 19

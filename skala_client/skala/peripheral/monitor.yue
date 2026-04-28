@@ -34,3 +34,4 @@ export class Monitor
 
   apply_redirection: $F '() => <>', () =>
     term.redirect @monitor
+    return
