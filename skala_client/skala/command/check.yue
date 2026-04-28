@@ -46,7 +46,6 @@ export main = $F '(check.Args) -> <>', (args) ->
     errors_present += 1
 
   print concat_lines with {}
-    [] = "--- System health ---"
     [] = "Skala:   #{VERSION}"
     [] = "Server:  #{server_status}"
     [] = "Reactor: #{reactor_status}"
