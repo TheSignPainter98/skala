@@ -1,0 +1,86 @@
+local *
+
+import 'skala.clap' as :Flag, :Subcommand
+import 'skala.peripheral.reactor' as :Reactor
+import 'skala.peripheral.sole' as :sole
+import 'skala.quicktype' as :declare_type, :is, :F
+import 'skala.quicktype_macros' as $
+import 'skala.util.text' as :concat_lines
+import 'skala.version' as :VERSION
+
+SERVER_TIMEOUT = 10
+
+declare_type 'check.Args', [[{
+  server_url: string,
+}]]
+declare_type 'check.ServerInfo', [[{
+  version: string,
+}]]
+
+export register_args = (parser) ->
+  parser\add with Subcommand 'check'
+    \description 'check system health'
+    \add with Flag 'server-url'
+      \description 'URL where the skala server is hosted'
+      \short nil
+      \default 'http://localhost:15000' -- TODO(kcza): https?
+
+export main = $F '(check.Args) -> <>', (args) ->
+  { :server_url } = args
+
+  errors_present = 0
+
+  server_info, err = get_server_info server_url
+  server_status = server_info?.version ?? err
+  if err?
+    errors_present += 1
+
+  _, err = Reactor::find!
+  reactor_status = err ?? 'present'
+  if err?
+    errors_present += 1
+
+  _, err = sole 'printer'
+  printer_status = err ?? 'present'
+  if err?
+    errors_present += 1
+
+  print concat_lines with {}
+    [] = "--- System health ---"
+    [] = "Skala:   #{VERSION}"
+    [] = "Server:  #{server_status}"
+    [] = "Reactor: #{reactor_status}"
+    [] = "Printer: #{printer_status}"
+    [] = ""
+    if errors_present == 0
+      [] = "Skala is ready for use."
+    else
+      [] = "Skala NOT ready!"
+      [] = "Please resolve #{errors_present} issues"
+  return
+
+get_server_info = $F '(string) -> <?check.ServerInfo, ?string>', (server_url) ->
+  response, err, err_response = http.get
+    url: "#{server_url}/info"
+    timeout: SERVER_TIMEOUT
+  if err?
+    if err_response?
+      lines = err_response.readAll!
+      return nil, "#{err}: #{lines}"
+    return nil, err
+
+  raw_response = concat_lines with {}
+    while true
+      line = response.readLine!
+      if not line?
+        break
+      [] = line
+
+  parsed_response, err = textutils.unserialiseJSON raw_response
+  if err?
+    return nil, "cannot deserialise server response: #{err}"
+
+  _, err = is 'check.ServerInfo', parsed_response
+  if err?
+    return nil, "cannot use returned server info: #{err}"
+  parsed_response, nil

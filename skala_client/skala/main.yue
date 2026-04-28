@@ -11,10 +11,12 @@ import 'skala.quicktype' as :declare_type
 
 import 'skala.command.autostart'
 import 'skala.command.chat'
+import 'skala.command.check'
 import 'skala.command.flash'
 import 'skala.command.install'
 import 'skala.command.start'
 import 'skala.command.uninstall'
+import 'skala.version' as :VERSION
 
 declare_type 'skala.Reactor', [[{
   activate: () -> <>,
@@ -49,6 +51,8 @@ main = (raw_args) ->
     start.main a
   else if a = args.chat
     chat.main a
+  else if a = args.check
+    check.main a
   else if a = args.flash
     flash.main a
   else if a = args.install
@@ -60,11 +64,12 @@ main = (raw_args) ->
 
 parse_args = (args) ->
   parser = with ArgParser 'skala'
-    \version '1.0'
+    \version VERSION
     \description 'reactor control system'
 
   autostart.register_args parser
   chat.register_args parser
+  check.register_args parser
   flash.register_args parser
   install.register_args parser
   start.register_args parser

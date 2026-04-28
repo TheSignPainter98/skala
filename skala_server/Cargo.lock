@@ -1866,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "quicktype"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "linkme",
  "quicktype_macros",
@@ -1874,7 +1874,7 @@ dependencies = [
 
 [[package]]
 name = "quicktype_macros"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2505,7 +2505,7 @@ checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
 
 [[package]]
 name = "skala"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2526,7 +2526,7 @@ dependencies = [
 
 [[package]]
 name = "skala_server"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "async-openai",

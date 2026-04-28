@@ -204,6 +204,7 @@ async fn run_run(config: Utf8PathBuf, db_path: Utf8PathBuf) -> Result<()> {
 }
 
 #[derive(Debug, clap::Parser)]
+#[clap(version)]
 struct Args {
     #[clap(subcommand)]
     command: Command,
