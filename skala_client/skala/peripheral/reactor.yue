@@ -34,6 +34,7 @@ declare_type 'peripheral.ReactorState', [[{
 }]]
 export class Reactor
   new: (@reactor) =>
+    @max_burn_rate = @reactor.getMaxBurnRate!
 
   @find: $F '() => <?Self, ?string>', =>
     reactor, err = sole 'fissionReactorLogicAdapter'
@@ -53,8 +54,8 @@ export class Reactor
   set_burn_rate: $F '(number) => ?string', (burn_rate) =>
     if burn_rate < 0
       burn_rate = 0
-    else if burn_rate > 1920
-      burn_rate = 1920
+    if burn_rate > @max_burn_rate
+      burn_rate = @max_burn_rate
 
     err = nil
     try
