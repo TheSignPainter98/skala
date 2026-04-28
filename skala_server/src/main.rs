@@ -8,7 +8,6 @@ use std::str::FromStr;
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
-use indoc::indoc;
 use indoc::writedoc;
 use log::{error, info};
 use quicktype::QuicktypeDerivedType;
@@ -50,18 +49,7 @@ async fn run_init(dir: Utf8PathBuf) -> Result<()> {
     }
 
     {
-        const MANIFEST_CONTENT: &str = indoc! {r#"
-            [skala]
-            port = 15000
-            reactor-snapshot-window-limit = 10
-
-            [llm]
-            url = "http://localhost:8326"
-            temperature = 1.5
-            frequency-penalty = 1.0
-            presence-penalty = 1.0
-            max-completion-tokens = 512
-        "#};
+        const MANIFEST_CONTENT: &str = include_str!("./default_manifest_content.toml");
         let mut writer = BufWriter::new(txn.create(&manifest_path, false)?);
         writer
             .write_all(MANIFEST_CONTENT.as_bytes())
@@ -81,7 +69,7 @@ async fn run_init(dir: Utf8PathBuf) -> Result<()> {
     txn.commit();
     Ok(())
 }
-///
+
 /// A best-effort handler for writing multiple files atomically.
 struct FsTransaction {
     committed: bool,
@@ -243,9 +231,7 @@ fn run_print_quicktype_specs() {
         writedoc!(
             specs,
             "
-                declare_type '{name}', [==========[
-                    {spec}
-                ]==========]
+                declare_type '{name}', [=[{spec}]=]
             ",
         )
         .expect("internal error: buf unwritable");

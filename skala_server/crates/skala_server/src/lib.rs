@@ -8,6 +8,7 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use log::error;
 
+pub use crate::advisor::feedback::Feedback;
 pub use crate::app::App;
 pub use crate::reactor::{
     ActualBurnRate, IntactReactorState, ReactorMode, ReactorState, TargetBurnRate,
@@ -108,6 +109,11 @@ pub struct LlmConfig {
     presence_penalty: ConfigPresencePenalty,
     #[serde(default)]
     max_completion_tokens: ConfigMaxCompletionTokens,
+
+    #[serde(default)]
+    feedback_regime: FeedbackRegime,
+    #[serde(default)]
+    feedback: FeedbackConfig,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -153,4 +159,21 @@ impl Default for ConfigMaxCompletionTokens {
     fn default() -> Self {
         Self(512)
     }
+}
+
+#[derive(Copy, Clone, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum FeedbackRegime {
+    #[default]
+    Absent,
+    Positive,
+    Negative,
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+struct FeedbackConfig {
+    #[serde(default)]
+    positive: Vec<Feedback>,
+    #[serde(default)]
+    negative: Vec<Feedback>,
 }
