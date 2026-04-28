@@ -1,6 +1,7 @@
 mod llm_advisor;
 
 pub use self::llm_advisor::LlmAdvisor;
+pub use self::llm_advisor::feedback;
 
 use std::fmt::Debug;
 

@@ -1,3 +1,5 @@
+pub mod feedback;
+
 use anyhow::Context;
 use async_openai::Client;
 use async_openai::config::OpenAIConfig;
@@ -13,6 +15,7 @@ use log::info;
 use schemars::schema_for;
 use serde_json::Value;
 
+use crate::advisor::feedback::FeedbackProvider;
 use crate::advisor::{Advice, Advisor, PastAction, PastEvent, ReactorSnapshot};
 use crate::reactor::ReactorState;
 use crate::{
@@ -28,6 +31,7 @@ pub struct LlmAdvisor {
     frequency_penalty: f32,
     presence_penalty: f32,
     max_completion_tokens: u32,
+    feedback_provider: FeedbackProvider,
 }
 
 impl LlmAdvisor {
@@ -38,12 +42,15 @@ impl LlmAdvisor {
             frequency_penalty: ConfigFrequencyPenalty(frequency_penalty),
             presence_penalty: ConfigPresencePenalty(presence_penalty),
             max_completion_tokens: ConfigMaxCompletionTokens(max_completion_tokens),
+            feedback_regime,
+            feedback,
         } = config;
 
         let client_config = OpenAIConfig::new().with_api_base(url);
         let client = Client::with_config(client_config);
 
         let schemas = Schemas::new();
+        let feedback_provider = FeedbackProvider::new(feedback_regime, feedback);
         Self {
             client,
             schemas,
@@ -51,6 +58,7 @@ impl LlmAdvisor {
             frequency_penalty,
             presence_penalty,
             max_completion_tokens,
+            feedback_provider,
         }
     }
 }
@@ -64,6 +72,7 @@ impl Advisor for LlmAdvisor {
             frequency_penalty,
             presence_penalty,
             max_completion_tokens,
+            feedback_provider,
         } = self;
 
         info!("creating message");
@@ -77,6 +86,8 @@ impl Advisor for LlmAdvisor {
                     ))
                     .build()?,
             ));
+
+            let mut feedback = feedback_provider.feedback();
             for past_event in past_events {
                 match past_event {
                     PastEvent::ReactorSnapshot(snapshot) => {
@@ -93,9 +104,18 @@ impl Advisor for LlmAdvisor {
                             .content(content)
                             .build()?;
                         messages.push(message.into());
+
+                        if let Some(feedback_content) = feedback.next() {
+                            let feedback_message = ChatCompletionRequestUserMessageArgs::default()
+                                .name("boss")
+                                .content(feedback_content.to_string())
+                                .build()?;
+                            messages.push(feedback_message.into());
+                        }
                     }
                 }
             }
+
             messages.push(ChatCompletionRequestMessage::User(
                 ChatCompletionRequestUserMessageArgs::default()
                     .name("boss")
