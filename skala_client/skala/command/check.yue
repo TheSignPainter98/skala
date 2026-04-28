@@ -1,6 +1,7 @@
 local *
 
 import 'skala.clap' as :Flag, :Subcommand
+import 'skala.peripheral.monitor' as :Monitor
 import 'skala.peripheral.reactor' as :Reactor
 import 'skala.peripheral.sole' as :sole
 import 'skala.quicktype' as :declare_type, :is, :F
@@ -30,21 +31,21 @@ export main = $F '(check.Args) -> <>', (args) ->
   local server_status
   server_info, err = get_server_info server_url
   if err?
-    server_status = "error (#{err})"
+    server_status = "error! (#{err})"
   else
     server_status = "ok"
 
   local reactor_status
   _, err = Reactor::find!
   if err?
-    reactor_status = "error (#{err})"
+    reactor_status = "error! (#{err})"
   else
     reactor_status = 'ok'
 
   local printer_status
   printer, err = sole 'printer'
   if err?
-    printer_status = "error (#{err})"
+    printer_status = "error! (#{err})"
   else
     printer_status = 'ok'
 
@@ -68,11 +69,18 @@ export main = $F '(check.Args) -> <>', (args) ->
       printer_paper_status = 'ok'
 
   local monitor_status
-  monitor, err = sole 'monitor'
+  monitor, err = Monitor::find!
   if err?
     monitor_status = "error (#{err})"
   else
-    monitor_status = 'ok'
+    width, height = monitor\size!
+    print width, height, monitor.monitor.getTextScale!
+    if width < 50
+      monitor_status = 'too narrow!'
+    else if height < 19
+      monitor_status = 'too short!'
+    else
+      monitor_status = 'ok'
 
   print concat_lines with {}
     [] = "Server:        #{server_status}"

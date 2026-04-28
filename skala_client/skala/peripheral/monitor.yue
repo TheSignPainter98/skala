@@ -1,0 +1,36 @@
+local *
+
+import 'skala.quicktype' as :F, :declare_type
+import 'skala.quicktype_macros' as $
+import 'skala.peripheral.sole' as :sole
+
+declare_type 'peripheral.Monitor', [[{
+  clear: () => <>,
+  setTextScale: (number) => <>,
+  setCursorPos: (number, number) => <>,
+}]]
+
+export class Monitor
+  new: (@monitor) =>
+
+  @find: $F '() => <?Self, ?string>', =>
+    monitor, err = sole 'monitor'
+    if err?
+      return nil, err
+    ret = @@ monitor
+    ret, nil
+
+  size: $F '() => <number, number>', =>
+    @monitor.getSize!
+
+  clear: $F '() => <>', =>
+    @monitor.clear!
+
+  set_text_scale: $F '(number) => <>', (scale) =>
+    @monitor.setTextScale scale
+
+  set_cursor_pos: $F '(number, number) => <>', (x, y) =>
+    @monitor.setCursorPos x, y
+
+  apply_redirection: $F '() => <>', () =>
+    term.redirect @monitor
