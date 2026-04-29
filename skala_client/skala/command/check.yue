@@ -3,6 +3,7 @@ local *
 import 'skala.clap' as :Flag, :Subcommand
 import 'skala.peripheral.monitor' as :Monitor
 import 'skala.peripheral.reactor' as :Reactor
+import 'skala.peripheral.turbine' as :Turbine
 import 'skala.peripheral.sole' as :sole
 import 'skala.quicktype' as :declare_type, :is, :F
 import 'skala.quicktype_macros' as $
@@ -41,6 +42,13 @@ export main = $F '(check.Args) -> <>', (args) ->
     reactor_status = "error! (#{err})"
   else
     reactor_status = 'ok'
+
+  local turbine_status
+  _, err = Turbine::find!
+  if err?
+    turbine_status = "error! {#{err}}"
+  else
+    turbine_status = 'ok'
 
   local printer_status
   printer, err = sole 'printer'
@@ -84,10 +92,11 @@ export main = $F '(check.Args) -> <>', (args) ->
   print concat_lines with {}
     [] = "Server:        #{server_status}"
     [] = "Reactor:       #{reactor_status}"
+    [] = "Turbine:       #{turbine_status}"
+    [] = "Monitor:       #{monitor_status}"
     [] = "Printer:       #{printer_status}"
     [] = "Printer ink:   #{printer_ink_status}"
     [] = "Printer paper: #{printer_paper_status}"
-    [] = "Monitor:       #{monitor_status}"
   return
 
 get_server_info = $F '(string) -> <?check.ServerInfo, ?string>', (server_url) ->

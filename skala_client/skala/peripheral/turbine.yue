@@ -1,0 +1,34 @@
+local *
+
+import 'skala.quicktype' as :F, :declare_type
+import 'skala.quicktype_macros' as $
+import 'skala.peripheral.sole' as :sole
+
+declare_type 'peripheral.Turbine', [[{
+  clear: () => <>,
+  setTextScale: (number) => <>,
+  setCursorPos: (number, number) => <>,
+}]]
+
+export class Turbine
+  new: (@turbine) =>
+
+  @find: $F '() => <?Self, ?string>', =>
+    turbine, err = sole 'turbineValve'
+    if err?
+      return nil, err
+    ret = @@ turbine
+    ret, nil
+
+  get_production_rate: $F '() => number', =>
+    @turbine.getProductionRate!
+    
+  get_energy_filled_percentage: $F '() => number', =>
+    @turbine.getEnergyFilledPercentage!
+
+-- get_energy
+-- get_flow_rate
+-- get_energy_needed
+-- get_dumping_mode
+-- get_energy_filled_percentage
+-- get_production_rate
