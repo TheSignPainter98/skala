@@ -17,6 +17,7 @@ use crate::{Result, app::AppState};
 #[quicktype(namespace = "server")]
 pub(crate) struct Request {
     reactor_name: ReactorName,
+    target_energy_production_rate: f64,
     reactor_state: ReactorSnapshot,
     turbine_state: TurbineSnapshot,
     timestamp: IngameDateTime,
@@ -38,6 +39,7 @@ pub(crate) async fn route(
     let State(app_state) = app_state;
     let Json(Request {
         reactor_name,
+        target_energy_production_rate,
         reactor_state,
         timestamp: ingame_timestamp,
         turbine_state,
@@ -75,7 +77,10 @@ pub(crate) async fn route(
             let history = collate_history(snapshots, past_actions);
 
             info!("getting advice...");
-            let advice = app_state.advisor.advise(history).await?;
+            let advice = app_state
+                .advisor
+                .advise(history, target_energy_production_rate)
+                .await?;
 
             info!("recording advice...");
             record_advice(&mut txn, event_id, &advice).await?;

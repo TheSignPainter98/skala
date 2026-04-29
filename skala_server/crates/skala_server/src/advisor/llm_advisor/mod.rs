@@ -65,7 +65,11 @@ impl LlmAdvisor {
 }
 
 impl Advisor for LlmAdvisor {
-    async fn advise(&self, past_events: impl IntoIterator<Item = PastEvent>) -> Result<Advice> {
+    async fn advise(
+        &self,
+        past_events: impl IntoIterator<Item = PastEvent>,
+        target_energy_production_rate: f64,
+    ) -> Result<Advice> {
         let Self {
             client,
             schemas,
@@ -121,7 +125,7 @@ impl Advisor for LlmAdvisor {
                 ChatCompletionRequestUserMessageArgs::default()
                     .name("boss")
                     .content(ChatCompletionRequestUserMessageContent::Text(
-                        "what do you recommend?".to_owned(),
+                        format!("We have to get the turbine's energy production rate to {target_energy_production_rate}. What do you recommend?"),
                     ))
                     .build()?,
             ));

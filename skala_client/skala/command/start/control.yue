@@ -74,6 +74,12 @@ export main = $F '(control.Args) -> <>', (args) ->
       } = os.date '!*t'
       print "[%02d:%02d:%02d]: checking reactor"\format hour, min, sec
 
+      -- For a real system, we need some way to determine energy
+      -- demand. For now, a constant will do. Perhaps the reactor
+      -- should aim to keep connected energy stores at 80%? (or some
+      -- configurable ratio)
+      target_energy_production_rate = 1000.0
+
       reactor, err = Reactor::find!
       if err?
         print "cannot find reactor: #{err}"
@@ -112,6 +118,7 @@ export main = $F '(control.Args) -> <>', (args) ->
       timestamp = '%04d-%02d-%02dT%02d:%02d:%02d'\format year, month, day, hour, min, sec
       advisor_response, err = advisor\advice
         :reactor_name
+        :target_energy_production_rate
         :reactor_state
         :turbine_state
         :timestamp

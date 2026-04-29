@@ -14,6 +14,7 @@ pub trait Advisor: Debug + Send + Sync {
     fn advise(
         &self,
         past_events: impl IntoIterator<Item = PastEvent> + Send,
+        target_energy_production_rate: f64,
     ) -> impl Future<Output = Result<Advice>> + Send;
 }
 

@@ -18,6 +18,7 @@ async fn test_destroyed_reactor(db_pool: SqlitePool) {
         .reactor_name(REACTOR_NAME)
         .input(json!({
             "reactor_name": REACTOR_NAME,
+            "target_energy_production_rate": 1000.0,
             "reactor_state": {
                 "integrity": "destroyed"
             },
@@ -37,11 +38,13 @@ async fn test_destroyed_reactor(db_pool: SqlitePool) {
 async fn test_inactive_reactor(db_pool: SqlitePool) {
     const REACTOR_NAME: &str = "pop";
     const TIMESTAMP: &str = "2026-04-15T00:00:00";
+    const TARGET_ENERGY_PRODUCTION_RATE: f64 = 1234.5;
 
     Test::new()
         .reactor_name(REACTOR_NAME)
         .input(json!({
             "reactor_name": REACTOR_NAME,
+            "target_energy_production_rate": TARGET_ENERGY_PRODUCTION_RATE,
             "reactor_state": {
                 "integrity": "intact",
                 "mode": "inactive",
@@ -133,6 +136,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
             assert_eq!(stored_kinetic_energy, 789.0);
             assert_eq!(energy_production_rate, 456.0);
         })
+        .check_target_burn_rate(|rate| assert_eq!(rate, TARGET_ENERGY_PRODUCTION_RATE))
         .run(db_pool)
         .await;
 }
@@ -140,11 +144,13 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn test_active_reactor(db_pool: SqlitePool) {
     const REACTOR_NAME: &str = "pop";
+    const TARGET_ENERGY_PRODUCTION_RATE: f64 = 1234.5;
 
     Test::new()
         .reactor_name(REACTOR_NAME)
         .input(json!({
             "reactor_name": REACTOR_NAME,
+            "target_energy_production_rate": TARGET_ENERGY_PRODUCTION_RATE,
             "reactor_state": {
                 "integrity": "intact",
                 "mode": "active",
@@ -194,6 +200,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 })],
             ));
         })
+        .check_target_burn_rate(|rate| assert_eq!(rate, TARGET_ENERGY_PRODUCTION_RATE))
         .run(db_pool)
         .await;
 }
@@ -203,6 +210,7 @@ struct Test {
     reactor_name: Option<&'static str>,
     input: Option<Value>,
     check_past_events: Option<Box<dyn Fn(Vec<PastEvent>) + Send>>,
+    check_target_burn_rate: Option<Box<dyn Fn(f64) + Send>>,
     advice: Option<Advice>,
     expected_response: Option<Value>,
 }
@@ -213,6 +221,7 @@ impl Test {
             reactor_name: None,
             input: None,
             check_past_events: None,
+            check_target_burn_rate: None,
             advice: None,
             expected_response: None,
         }
@@ -233,6 +242,11 @@ impl Test {
         self
     }
 
+    fn check_target_burn_rate(mut self, f: impl Fn(f64) + Send + 'static) -> Self {
+        self.check_target_burn_rate = Some(Box::new(f));
+        self
+    }
+
     fn advice(mut self, advice: Advice) -> Self {
         self.advice = Some(advice);
         self
@@ -248,6 +262,7 @@ impl Test {
             reactor_name,
             input,
             check_past_events,
+            check_target_burn_rate,
             advice,
             expected_response,
         } = self;
@@ -256,10 +271,14 @@ impl Test {
         let expected_response = expected_response.expect("no expected response");
 
         let advisor = {
-            MockAdvisor::new(move |reactor_states| {
+            MockAdvisor::new(move |reactor_states, target_burn_rate| {
                 let advice = advice.clone().expect("no advice");
                 let check_past_events = check_past_events.as_ref().expect("no reactor state check");
                 check_past_events(reactor_states);
+
+                if let Some(check_target_burn_rate) = &check_target_burn_rate {
+                    check_target_burn_rate(target_burn_rate);
+                }
                 Ok(advice)
             })
         };

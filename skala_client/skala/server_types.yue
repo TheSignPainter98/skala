@@ -8,6 +8,7 @@ declare_type 'server.IngameDateTime', 'string'
 
 declare_type 'server.Request', [[{
   reactor_name: server.ReactorName,
+  target_energy_production_rate: number,
   reactor_state: server.ReactorState,
   turbine_state: server.TurbineState,
   timestamp: server.IngameDateTime,

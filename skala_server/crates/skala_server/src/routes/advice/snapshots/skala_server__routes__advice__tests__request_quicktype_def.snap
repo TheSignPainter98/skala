@@ -2,4 +2,4 @@
 source: crates/skala_server/src/routes/advice/mod.rs
 expression: "Request::type_spec().to_string()"
 ---
-"{reactor_name: server.ReactorName, reactor_state: server.ReactorSnapshot, turbine_state: server.TurbineSnapshot, timestamp: server.IngameDateTime}"
+"{reactor_name: server.ReactorName, target_energy_production_rate: number, reactor_state: server.ReactorSnapshot, turbine_state: server.TurbineSnapshot, timestamp: server.IngameDateTime}"
