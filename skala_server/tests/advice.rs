@@ -1,8 +1,11 @@
 mod common;
 
 use serde_json::{Value, json};
-use skala_server::advisor::{Advice, AdvisedAction, PastEvent, ReactorSnapshot};
-use skala_server::{ActualBurnRate, IntactReactorState, ReactorMode, ReactorState, TargetBurnRate};
+use skala_server::advisor::{Advice, AdvisedAction, PastEvent, Snapshot};
+use skala_server::{
+    ActualBurnRate, IntactReactorSnapshot, IntactTurbineSnapshot, ReactorMode, ReactorSnapshot,
+    TargetBurnRate, TurbineSnapshot,
+};
 use sqlx::SqlitePool;
 
 use crate::common::MockAdvisor;
@@ -17,6 +20,9 @@ async fn test_destroyed_reactor(db_pool: SqlitePool) {
             "reactor_name": REACTOR_NAME,
             "reactor_state": {
                 "integrity": "destroyed"
+            },
+            "turbine_state": {
+                "integrity": "destroyed",
             },
             "timestamp": "2026-04-15T00:00:00"
         }))
@@ -50,6 +56,11 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 "heating_rate": 999.0,
                 "boil_efficiency": 1234.0,
             },
+            "turbine_state": {
+                "integrity": "intact",
+                "stored_kinetic_energy": 789.0,
+                "energy_production_rate": 456.0,
+            },
             "timestamp": TIMESTAMP,
         }))
         .advice(Advice {
@@ -72,16 +83,21 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 _ => panic!("too many snapshots"),
             };
             let snapshot = match past_event {
-                PastEvent::ReactorSnapshot(snapshot) => snapshot,
+                PastEvent::Snapshot(snapshot) => snapshot,
                 _ => panic!("incorrect past event"),
             };
-            let ReactorSnapshot { timestamp, state } = snapshot;
+            let Snapshot {
+                timestamp,
+                reactor,
+                turbine,
+            } = snapshot;
             assert_eq!(timestamp.into_inner(), TIMESTAMP);
-            let intact_reactor_state = match state {
-                ReactorState::Intact(intact_reactor_state) => intact_reactor_state,
+
+            let intact_reactor_snapshot = match reactor {
+                ReactorSnapshot::Intact(intact_reactor_state) => intact_reactor_state,
                 _ => panic!("unexpected reactor state"),
             };
-            let IntactReactorState {
+            let IntactReactorSnapshot {
                 mode,
                 temperature,
                 coolant_filled,
@@ -93,7 +109,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 damage_percent,
                 heating_rate,
                 boil_efficiency,
-            } = intact_reactor_state;
+            } = intact_reactor_snapshot;
             assert!(matches!(mode, ReactorMode::Inactive));
             assert_eq!(temperature, 111.0);
             assert_eq!(coolant_filled, 222.0);
@@ -105,6 +121,17 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
             assert_eq!(damage_percent, 888.0);
             assert_eq!(heating_rate, 999.0);
             assert_eq!(boil_efficiency, 1234.0);
+
+            let intact_turbine_snapshot = match turbine {
+                TurbineSnapshot::Intact(intact_turbine_snapshot) => intact_turbine_snapshot,
+                _ => panic!("unexpected reactor state"),
+            };
+            let IntactTurbineSnapshot {
+                stored_kinetic_energy,
+                energy_production_rate,
+            } = intact_turbine_snapshot;
+            assert_eq!(stored_kinetic_energy, 789.0);
+            assert_eq!(energy_production_rate, 456.0);
         })
         .run(db_pool)
         .await;
@@ -132,6 +159,11 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 "heating_rate": 0.0,
                 "boil_efficiency": 0.0,
             },
+            "turbine_state": {
+                "integrity": "intact",
+                "stored_kinetic_energy": 789.0,
+                "energy_production_rate": 456.0,
+            },
             "timestamp": "2026-04-15T00:00:00"
         }))
         .advice(Advice {
@@ -153,8 +185,8 @@ async fn test_active_reactor(db_pool: SqlitePool) {
         .check_past_events(|events| {
             assert!(matches!(
                 events.as_slice(),
-                [PastEvent::ReactorSnapshot(ReactorSnapshot {
-                    state: ReactorState::Intact(IntactReactorState {
+                [PastEvent::Snapshot(Snapshot {
+                    reactor: ReactorSnapshot::Intact(IntactReactorSnapshot {
                         mode: ReactorMode::Active,
                         ..
                     }),

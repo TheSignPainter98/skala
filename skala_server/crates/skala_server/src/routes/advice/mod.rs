@@ -6,8 +6,9 @@ use log::{info, warn};
 use sqlx::{SqliteTransaction, query, query_as};
 
 use crate::ReactorMode;
-use crate::advisor::{Advice, AdvisedAction, Advisor, PastAction, PastEvent, ReactorSnapshot};
-use crate::reactor::{IntactReactorState, ReactorId, ReactorName, ReactorState};
+use crate::advisor::{Advice, AdvisedAction, Advisor, PastAction, PastEvent, Snapshot};
+use crate::components::reactor::{IntactReactorSnapshot, ReactorId, ReactorName, ReactorSnapshot};
+use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
 use crate::time::{IngameDateTime, IrlDateTime};
 use crate::{Result, app::AppState};
 
@@ -16,7 +17,8 @@ use crate::{Result, app::AppState};
 #[quicktype(namespace = "server")]
 pub(crate) struct Request {
     reactor_name: ReactorName,
-    reactor_state: ReactorState,
+    reactor_state: ReactorSnapshot,
+    turbine_state: TurbineSnapshot,
     timestamp: IngameDateTime,
 }
 
@@ -38,6 +40,7 @@ pub(crate) async fn route(
         reactor_name,
         reactor_state,
         timestamp: ingame_timestamp,
+        turbine_state,
     }) = req;
     let irl_timestamp = IrlDateTime::now();
 
@@ -51,33 +54,25 @@ pub(crate) async fn route(
     info!("recording request event");
     let event_id = register_event(&mut txn, reactor_id, irl_timestamp, ingame_timestamp).await?;
 
-    info!("recording reactor state");
-    store_reactor_state(&mut txn, event_id, &reactor_state).await?;
+    info!("recording system state");
+    store_system_state(&mut txn, event_id, &reactor_state, &turbine_state).await?;
 
     txn.commit().await?;
     let mut txn = app_state.db_pool.begin_with("BEGIN IMMEDIATE").await?;
 
     let advice = match reactor_state {
-        ReactorState::Destroyed => None,
-        ReactorState::Intact(_) => {
+        ReactorSnapshot::Destroyed => None,
+        ReactorSnapshot::Intact(_) => {
             info!("collecting reactor states");
-            let reactor_snapshots = get_reactor_snapshots(
-                &mut txn,
-                reactor_id,
-                app_state.reactor_snapshot_window_limit,
-            )
-            .await?;
+            let snapshots =
+                get_system_snapshots(&mut txn, reactor_id, app_state.snapshot_window_limit).await?;
 
             info!("getting past actions...");
-            let past_actions = get_past_actions(
-                &mut txn,
-                reactor_id,
-                app_state.reactor_snapshot_window_limit,
-            )
-            .await?;
+            let past_actions =
+                get_past_actions(&mut txn, reactor_id, app_state.snapshot_window_limit).await?;
 
             info!("collating history data...");
-            let history = collate_history(reactor_snapshots, past_actions);
+            let history = collate_history(snapshots, past_actions);
 
             info!("getting advice...");
             let advice = app_state.advisor.advise(history).await?;
@@ -126,11 +121,11 @@ async fn get_reactor_id(txn: &mut SqliteTransaction<'_>, name: &ReactorName) -> 
     Ok(ReactorId::from(info.last_insert_rowid()))
 }
 
-async fn get_reactor_snapshots(
+async fn get_system_snapshots(
     txn: &mut SqliteTransaction<'_>,
     reactor_id: ReactorId,
-    reactor_snapshot_window_limit: u16,
-) -> Result<Vec<ReactorSnapshot>> {
+    snapshot_window_limit: u16,
+) -> Result<Vec<Snapshot>> {
     struct Row {
         id: EventId,
         mode: Option<i64>,
@@ -145,37 +140,41 @@ async fn get_reactor_snapshots(
         heating_rate: Option<f64>,
         boil_efficiency: Option<f64>,
         ingame_timestamp: IngameDateTime,
+        stored_kinetic_energy: Option<f64>,
+        energy_production_rate: Option<f64>,
     }
-    let reactor_snapshots_query = query_as!(
+    let snapshots_query = query_as!(
         Row,
         "
             SELECT
                 event.id,
-                reactor_state.mode,
-                reactor_state.temperature,
-                reactor_state.coolant_filled,
-                reactor_state.heated_coolant_filled,
-                reactor_state.fuel_filled,
-                reactor_state.waste_filled,
-                reactor_state.actual_burn_rate,
-                reactor_state.target_burn_rate,
-                reactor_state.damage_percent,
-                reactor_state.heating_rate,
-                reactor_state.boil_efficiency,
+                snapshot.mode,
+                snapshot.temperature,
+                snapshot.coolant_filled,
+                snapshot.heated_coolant_filled,
+                snapshot.fuel_filled,
+                snapshot.waste_filled,
+                snapshot.actual_burn_rate,
+                snapshot.target_burn_rate,
+                snapshot.damage_percent,
+                snapshot.heating_rate,
+                snapshot.boil_efficiency,
+                snapshot.stored_kinetic_energy,
+                snapshot.energy_production_rate,
                 event.ingame_timestamp
-            FROM reactor_state
+            FROM snapshot
             JOIN event
-            ON reactor_state.event_id = event.id
+            ON snapshot.event_id = event.id
             WHERE event.reactor_id = ?
             ORDER BY event.irl_timestamp DESC
             LIMIT ?
         ",
         reactor_id,
-        reactor_snapshot_window_limit,
+        snapshot_window_limit,
     );
 
     let mut ret = Vec::new();
-    let mut snapshot_rows = reactor_snapshots_query.fetch(&mut **txn);
+    let mut snapshot_rows = snapshots_query.fetch(&mut **txn);
     while let Some(row) = snapshot_rows.next().await {
         let snapshot = match row? {
             Row {
@@ -191,14 +190,16 @@ async fn get_reactor_snapshots(
                 damage_percent: Some(damage_percent),
                 heating_rate: Some(heating_rate),
                 boil_efficiency: Some(boil_efficiency),
+                stored_kinetic_energy: Some(stored_kinetic_energy),
+                energy_production_rate: Some(energy_production_rate),
                 ingame_timestamp,
             } => {
                 let mode = ReactorMode::try_from(mode)?;
                 let actual_burn_rate = actual_burn_rate.into();
                 let target_burn_rate = target_burn_rate.into();
-                ReactorSnapshot {
+                Snapshot {
                     timestamp: ingame_timestamp,
-                    state: ReactorState::Intact(IntactReactorState {
+                    reactor: ReactorSnapshot::Intact(IntactReactorSnapshot {
                         mode,
                         temperature,
                         coolant_filled,
@@ -210,6 +211,10 @@ async fn get_reactor_snapshots(
                         damage_percent,
                         heating_rate,
                         boil_efficiency,
+                    }),
+                    turbine: TurbineSnapshot::Intact(IntactTurbineSnapshot {
+                        stored_kinetic_energy,
+                        energy_production_rate,
                     }),
                 }
             }
@@ -226,10 +231,13 @@ async fn get_reactor_snapshots(
                 damage_percent: None,
                 heating_rate: None,
                 boil_efficiency: None,
+                stored_kinetic_energy: None,
+                energy_production_rate: None,
                 ingame_timestamp: timestamp,
-            } => ReactorSnapshot {
+            } => Snapshot {
                 timestamp,
-                state: ReactorState::Destroyed,
+                reactor: ReactorSnapshot::Destroyed,
+                turbine: TurbineSnapshot::Destroyed,
             },
             Row { id, .. } => {
                 warn!("event {id} has an invalid associated reactor state");
@@ -244,7 +252,7 @@ async fn get_reactor_snapshots(
 async fn get_past_actions(
     txn: &mut SqliteTransaction<'_>,
     reactor_id: ReactorId,
-    reactor_snapshot_window_limit: u16,
+    snapshot_window_limit: u16,
 ) -> Result<Vec<PastAction>> {
     struct Row {
         id: i64,
@@ -268,10 +276,10 @@ async fn get_past_actions(
             LIMIT ?
         ",
         reactor_id,
-        reactor_snapshot_window_limit,
+        snapshot_window_limit,
     );
 
-    let mut ret = Vec::with_capacity(reactor_snapshot_window_limit.into());
+    let mut ret = Vec::with_capacity(snapshot_window_limit.into());
     let mut rows = past_actions_query.fetch(&mut **txn);
     while let Some(row) = rows.next().await {
         let past_action = match row? {
@@ -317,13 +325,10 @@ async fn get_past_actions(
     Ok(ret)
 }
 
-fn collate_history(
-    reactor_snapshots: Vec<ReactorSnapshot>,
-    past_actions: Vec<PastAction>,
-) -> Vec<PastEvent> {
-    let mut ret: Vec<_> = reactor_snapshots
+fn collate_history(snapshots: Vec<Snapshot>, past_actions: Vec<PastAction>) -> Vec<PastEvent> {
+    let mut ret: Vec<_> = snapshots
         .into_iter()
-        .map(PastEvent::ReactorSnapshot)
+        .map(PastEvent::Snapshot)
         .chain(past_actions.into_iter().map(PastEvent::Action))
         .collect();
     ret.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
@@ -370,25 +375,32 @@ async fn register_event(
     Ok(EventId(id))
 }
 
-async fn store_reactor_state(
+async fn store_system_state(
     txn: &mut SqliteTransaction<'_>,
     event_id: EventId,
-    reactor_state: &ReactorState,
+    reactor_snapshot: &ReactorSnapshot,
+    turbine_snapshot: &TurbineSnapshot,
 ) -> Result<()> {
-    let intact = matches!(reactor_state, ReactorState::Intact(_));
-    match reactor_state {
-        ReactorState::Destroyed => {
+    let intact = matches!(
+        (reactor_snapshot, turbine_snapshot),
+        (ReactorSnapshot::Intact(_), TurbineSnapshot::Intact(_))
+    );
+    match (reactor_snapshot, turbine_snapshot) {
+        (ReactorSnapshot::Destroyed, _) | (_, TurbineSnapshot::Destroyed) => {
             let state_insertion_query = query!(
                 "
-                    INSERT INTO reactor_state (event_id, intact) VALUES (?, ?)
+                    INSERT INTO snapshot (event_id, intact) VALUES (?, ?)
                 ",
                 event_id,
                 intact,
             );
             state_insertion_query.execute(&mut **txn).await?;
         }
-        ReactorState::Intact(intact_reactor_state) => {
-            let IntactReactorState {
+        (
+            ReactorSnapshot::Intact(intact_reactor_state),
+            TurbineSnapshot::Intact(intact_turbine_state),
+        ) => {
+            let IntactReactorSnapshot {
                 mode,
                 temperature,
                 coolant_filled,
@@ -401,9 +413,13 @@ async fn store_reactor_state(
                 heating_rate,
                 boil_efficiency,
             } = intact_reactor_state;
+            let IntactTurbineSnapshot {
+                stored_kinetic_energy,
+                energy_production_rate,
+            } = intact_turbine_state;
             let state_insertion_query = query!(
                 "
-                    INSERT INTO reactor_state (
+                    INSERT INTO snapshot (
                         event_id,
                         intact,
                         mode,
@@ -416,8 +432,10 @@ async fn store_reactor_state(
                         target_burn_rate,
                         damage_percent,
                         heating_rate,
-                        boil_efficiency
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        boil_efficiency,
+                        stored_kinetic_energy,
+                        energy_production_rate
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ",
                 event_id,
                 intact,
@@ -432,6 +450,8 @@ async fn store_reactor_state(
                 damage_percent,
                 heating_rate,
                 boil_efficiency,
+                stored_kinetic_energy,
+                energy_production_rate,
             );
             state_insertion_query.execute(&mut **txn).await?;
         }

@@ -15,7 +15,7 @@ CREATE TABLE reactor (
 
 CREATE INDEX reactor__name_index ON reactor(name);
 
-CREATE TABLE reactor_state (
+CREATE TABLE snapshot (
     event_id INTEGER NOT NULL
         PRIMARY KEY
         REFERENCES event(id)
@@ -59,6 +59,10 @@ CREATE TABLE reactor_state (
     heating_rate REAL NULL
         DEFAULT NULL,
     boil_efficiency REAL NULL
+        DEFAULT NULL,
+    stored_kinetic_energy REAL NULL
+        DEFAULT NULL,
+    energy_production_rate REAL NULL
         DEFAULT NULL
 ) STRICT;
 

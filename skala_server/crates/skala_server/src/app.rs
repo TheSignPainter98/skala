@@ -11,11 +11,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new<A>(db_pool: SqlitePool, reactor_snapshot_window_limit: u16, advisor: A) -> Self
+    pub fn new<A>(db_pool: SqlitePool, snapshot_window_limit: u16, advisor: A) -> Self
     where
         A: Advisor + 'static,
     {
-        let app_state = AppState::new(db_pool, reactor_snapshot_window_limit, advisor);
+        let app_state = AppState::new(db_pool, snapshot_window_limit, advisor);
         let router = routes::register(Router::new()).with_state(app_state);
         Self { router }
     }
@@ -36,10 +36,10 @@ impl<A> Clone for AppState<A> {
 }
 
 impl<A: Advisor> AppState<A> {
-    fn new(db_pool: SqlitePool, reactor_snapshot_window_limit: u16, advisor: A) -> Self {
+    fn new(db_pool: SqlitePool, snapshot_window_limit: u16, advisor: A) -> Self {
         Self(Arc::new(AppStateInner {
             db_pool,
-            reactor_snapshot_window_limit,
+            snapshot_window_limit,
             advisor,
         }))
     }
@@ -56,7 +56,7 @@ impl<A> Deref for AppState<A> {
 #[derive(Debug)]
 pub(crate) struct AppStateInner<A> {
     pub(crate) db_pool: SqlitePool,
-    pub(crate) reactor_snapshot_window_limit: u16,
+    pub(crate) snapshot_window_limit: u16,
     #[allow(unused)]
     pub(crate) advisor: A,
 }

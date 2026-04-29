@@ -17,6 +17,8 @@ use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use tokio::net::TcpListener;
 
+const INITIAL_MANIFEST_CONTENT: &str = include_str!("./default_manifest_content.toml");
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     colog::init();
@@ -49,10 +51,9 @@ async fn run_init(dir: Utf8PathBuf) -> Result<()> {
     }
 
     {
-        const MANIFEST_CONTENT: &str = include_str!("./default_manifest_content.toml");
         let mut writer = BufWriter::new(txn.create(&manifest_path, false)?);
         writer
-            .write_all(MANIFEST_CONTENT.as_bytes())
+            .write_all(INITIAL_MANIFEST_CONTENT.as_bytes())
             .context("cannot write manifest")?;
         info!("created {manifest_path}");
     }
@@ -169,13 +170,13 @@ async fn run_serve(config: Utf8PathBuf, db_path: Utf8PathBuf) -> Result<()> {
     } = config;
     let GeneralConfig {
         port,
-        reactor_snapshot_window_limit,
+        snapshot_window_limit,
     } = general_config;
 
     let db_pool = load_db_pool(db_path).await?;
     let advisor = LlmAdvisor::new(llm_config);
-    let reactor_snapshot_window_limit = reactor_snapshot_window_limit.into_inner();
-    let app = App::new(db_pool.clone(), reactor_snapshot_window_limit, advisor);
+    let snapshot_window_limit = snapshot_window_limit.into_inner();
+    let app = App::new(db_pool.clone(), snapshot_window_limit, advisor);
 
     let port = port.into_inner();
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
@@ -267,4 +268,14 @@ async fn load_db_pool(path: impl Into<Utf8PathBuf>) -> Result<SqlitePool> {
         .connect_with(opts)
         .await?;
     Ok(ret)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_initial_manifest_content() {
+        toml::from_str::<Config>(INITIAL_MANIFEST_CONTENT).unwrap();
+    }
 }

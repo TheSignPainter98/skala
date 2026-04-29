@@ -6,7 +6,8 @@ pub use self::llm_advisor::feedback;
 use std::fmt::Debug;
 
 use crate::Result;
-use crate::reactor::{ReactorState, TargetBurnRate};
+use crate::components::reactor::{ReactorSnapshot, TargetBurnRate};
+use crate::components::turbine::TurbineSnapshot;
 use crate::time::IngameDateTime;
 
 pub trait Advisor: Debug + Send + Sync {
@@ -18,23 +19,24 @@ pub trait Advisor: Debug + Send + Sync {
 
 #[derive(Clone, Debug)]
 pub enum PastEvent {
-    ReactorSnapshot(ReactorSnapshot),
+    Snapshot(Snapshot),
     Action(PastAction),
 }
 
 impl PastEvent {
     pub(crate) fn timestamp(&self) -> &IngameDateTime {
         match self {
-            Self::ReactorSnapshot(snapshot) => &snapshot.timestamp,
+            Self::Snapshot(snapshot) => &snapshot.timestamp,
             Self::Action(action) => &action.timestamp,
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct ReactorSnapshot {
+pub struct Snapshot {
     pub timestamp: IngameDateTime,
-    pub state: ReactorState,
+    pub reactor: ReactorSnapshot,
+    pub turbine: TurbineSnapshot,
 }
 
 #[derive(Clone, Debug)]

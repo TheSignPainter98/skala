@@ -1,6 +1,6 @@
 pub mod advisor;
 mod app;
-mod reactor;
+mod components;
 mod routes;
 mod time;
 
@@ -10,9 +10,10 @@ use log::error;
 
 pub use crate::advisor::feedback::Feedback;
 pub use crate::app::App;
-pub use crate::reactor::{
-    ActualBurnRate, IntactReactorState, ReactorMode, ReactorState, TargetBurnRate,
+pub use crate::components::reactor::{
+    ActualBurnRate, IntactReactorSnapshot, ReactorMode, ReactorSnapshot, TargetBurnRate,
 };
+pub use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
 
 pub type Result<T, E = Error> = anyhow::Result<T, E>;
 
@@ -60,7 +61,7 @@ pub struct GeneralConfig {
     #[serde(default)]
     pub port: ConfigPort,
     #[serde(default)]
-    pub reactor_snapshot_window_limit: ReactorSnapshotWindowLimit,
+    pub snapshot_window_limit: ReactorSnapshotWindowLimit,
 }
 
 #[derive(Copy, Clone, Debug, serde::Deserialize)]

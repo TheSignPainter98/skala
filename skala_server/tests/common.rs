@@ -36,8 +36,8 @@ impl Debug for MockAdvisor {
 impl Advisor for MockAdvisor {
     async fn advise(
         &self,
-        reactor_snapshots: impl IntoIterator<Item = PastEvent> + Send,
+        past_events: impl IntoIterator<Item = PastEvent> + Send,
     ) -> Result<Advice> {
-        self.advice_fn.lock().await(reactor_snapshots.into_iter().collect())
+        self.advice_fn.lock().await(past_events.into_iter().collect())
     }
 }

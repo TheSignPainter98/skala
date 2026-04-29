@@ -16,8 +16,9 @@ use schemars::schema_for;
 use serde_json::Value;
 
 use crate::advisor::feedback::FeedbackProvider;
-use crate::advisor::{Advice, Advisor, PastAction, PastEvent, ReactorSnapshot};
-use crate::reactor::ReactorState;
+use crate::advisor::{Advice, Advisor, PastAction, PastEvent, Snapshot};
+use crate::components::reactor::ReactorSnapshot;
+use crate::components::turbine::TurbineSnapshot;
 use crate::{
     ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty, ConfigTemperature,
     ConfigUrl, LlmConfig, Result,
@@ -90,8 +91,8 @@ impl Advisor for LlmAdvisor {
             let mut feedback = feedback_provider.feedback();
             for past_event in past_events {
                 match past_event {
-                    PastEvent::ReactorSnapshot(snapshot) => {
-                        let content = self.summarise_reactor_snapshot(&snapshot);
+                    PastEvent::Snapshot(snapshot) => {
+                        let content = self.summarise_snapshot(&snapshot);
                         let message = ChatCompletionRequestUserMessageArgs::default()
                             .name("reactor-monitor")
                             .content(content)
@@ -174,9 +175,13 @@ impl Advisor for LlmAdvisor {
 }
 
 impl LlmAdvisor {
-    fn summarise_reactor_snapshot(&self, reactor_snapshot: &ReactorSnapshot) -> String {
-        let ReactorSnapshot { timestamp, state } = reactor_snapshot;
-        if matches!(state, ReactorState::Destroyed) {
+    fn summarise_snapshot(&self, snapshot: &Snapshot) -> String {
+        let Snapshot {
+            timestamp,
+            reactor,
+            turbine,
+        } = snapshot;
+        if matches!(reactor, ReactorSnapshot::Destroyed) {
             return formatdoc!(
                 "
                     ### Reactor state at {timestamp}
@@ -186,16 +191,24 @@ impl LlmAdvisor {
             );
         }
 
-        let state_json = serde_json::to_string(state).unwrap();
-        formatdoc!(
+        let snapshot_body = SnapshotBody { reactor, turbine };
+        let state_json = serde_json::to_string(&snapshot_body).unwrap();
+        return formatdoc!(
             "
-                ### Reactor state at {timestamp}
+                ### System state at {timestamp}
 
                 ```json
                 {state_json}
                 ```
             "
-        )
+        );
+
+        // Serde types
+        #[derive(serde::Serialize)]
+        struct SnapshotBody<'body> {
+            reactor: &'body ReactorSnapshot,
+            turbine: &'body TurbineSnapshot,
+        }
     }
 
     fn summarise_action(&self, action: &PastAction) -> String {

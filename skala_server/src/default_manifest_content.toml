@@ -1,6 +1,6 @@
 [skala]
 port = 15000
-reactor-snapshot-window-limit = 10
+snapshot-window-limit = 10
 
 [llm]
 url = "http://localhost:8326"

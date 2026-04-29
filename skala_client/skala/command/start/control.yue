@@ -4,6 +4,7 @@ import 'skala.clap' as :Subcommand, :Flag
 import 'skala.command.start.control.advisor' as :Advisor
 import 'skala.command.start.control.report_printer' as :ReportPrinter
 import 'skala.peripheral.reactor' as :Reactor
+import 'skala.peripheral.turbine' as :Turbine
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
@@ -85,8 +86,23 @@ export main = $F '(control.Args) -> <>', (args) ->
       else
         reactor_state.integrity = 'intact'
 
-      print 'Reactor state is...'
+      print 'Reactor state is:'
       (require 'cc.pretty').pretty_print reactor_state
+
+      turbine, err = Turbine::find!
+      if err?
+        print "cannot find turbine: #{err}"
+        return
+      turbine_state, err = turbine\state!
+      if err?
+        print "cannot get turbine state: #{err}"
+        -- Continue operation regardless.
+        turbine_state = integrity: 'destroyed'
+      else
+        turbine_state.integrity = 'intact'
+
+      print 'Turbine state is:'
+      (require 'cc.pretty').pretty_print turbine_state
 
       computer_id = os.getComputerID!
       -- Assume one reactor has one controller.
@@ -97,6 +113,7 @@ export main = $F '(control.Args) -> <>', (args) ->
       advisor_response, err = advisor\advice
         :reactor_name
         :reactor_state
+        :turbine_state
         :timestamp
       if err?
         print "Cannot get advice from server: #{err}"

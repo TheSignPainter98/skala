@@ -20,15 +20,31 @@ export class Turbine
     ret = @@ turbine
     ret, nil
 
-  get_production_rate: $F '() => number', =>
+  intact: $F '() => boolean', =>
+    @turbine.isFormed!
+
+  production_rate: $F '() => number', =>
     @turbine.getProductionRate!
     
-  get_energy_filled_percentage: $F '() => number', =>
+  energy_filled_percentage: $F '() => number', =>
     @turbine.getEnergyFilledPercentage!
+    
+  energy: $F '() => number', =>
+    @turbine.getEnergy!
 
--- get_energy
--- get_flow_rate
--- get_energy_needed
--- get_dumping_mode
--- get_energy_filled_percentage
--- get_production_rate
+  state: $F '() => <?server.TurbineState, ?string>', =>
+    ret = nil
+    err = nil
+    try
+      ret = with {}
+        if @intact
+          .integrity = 'intact'
+          .stored_kinetic_energy = @energy!
+          .energy_production_rate = @production_rate!
+        else
+          .integrity = 'destroyed'
+    catch err2
+      err = err2
+    if err?
+      return nil, err
+    ret, nil

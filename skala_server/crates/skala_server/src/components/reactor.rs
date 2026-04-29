@@ -10,15 +10,15 @@ use crate::Error;
 #[serde(tag = "integrity")]
 #[serde(rename_all = "kebab-case")]
 #[quicktype(namespace = "server")]
-pub enum ReactorState {
-    Intact(IntactReactorState),
+pub enum ReactorSnapshot {
+    Intact(IntactReactorSnapshot),
     Destroyed,
 }
 
 #[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 #[quicktype(namespace = "server")]
-pub struct IntactReactorState {
+pub struct IntactReactorSnapshot {
     pub mode: ReactorMode,
     pub temperature: f64,
     pub coolant_filled: f64,
