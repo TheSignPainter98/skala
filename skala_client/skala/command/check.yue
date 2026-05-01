@@ -9,6 +9,13 @@ import 'skala.quicktype' as :declare_type, :is, :F
 import 'skala.quicktype_macros' as $
 import 'skala.util.text' as :concat_lines
 
+local wrap
+try
+  import 'cc.strings'
+  wrap = strings.wrap
+catch _
+  wrap = () -> error 'unavailable'
+
 SERVER_TIMEOUT = 10
 
 declare_type 'check.Args', [[{
@@ -18,25 +25,49 @@ declare_type 'check.ServerInfo', [[{
   version: string,
 }]]
 
-pad_right = (text, width) ->
-  text .. (' '\rep width - #text)
+pad_right = $F '(string, number, ?string) -> string', (text, width, pad_char=' ', first_pad_char = ' ') ->
+  if #pad_char != 1
+    error "cannot use '#{pad_char}' as pad char: expected length 1 but got #{#pad_char}"
+  if #first_pad_char != 1
+    error "cannot use '#{first_pad_char}' as first pad char: expected length 1 but got #{#first_pad_char}"
+  if #text >= width
+    return text
+  text .. first_pad_char .. (pad_char\rep width - #text - 1)
 
-render_status_table = (rows) ->
+render_status_table = $F '([{name: string, status: string}]) -> string', (rows) ->
   name_width = 0
   status_width = 0
-
   for row in *rows
     if #row.name > name_width
       name_width = #row.name
     if #row.status > status_width
       status_width = #row.status
+  name_width += 1
+  status_width -= 1
 
-  render_row = $F '(string, string) -> string', (name, status) ->
-    "#{pad_right name, name_width}  #{pad_right status, status_width}"
+  terminal_width = term.getSize!
+  status_width = math.max 1,
+    math.min status_width,
+      terminal_width - name_width - 2
+
+  render_row = $F '(string, string) -> [string]', (name, status) ->
+    status_lines = wrap status, status_width
+    if #status_lines == 0
+      status_lines[] = ''
+
+    with {}
+      for i = 1, #status_lines
+        status_line = status_lines[i]
+        if i == 1
+          [] = "#{pad_right name, name_width, '.'}. #{pad_right status_line, status_width}"
+        else
+          [] = "#{pad_right '', name_width}  #{pad_right status_line, status_width}"
 
   concat_lines with {}
     for row in *rows
-      [] = render_row row.name, row.status
+      row_lines = render_row row.name, row.status
+      for line in *row_lines
+        [] = line
 
 export register_args = (parser) ->
   parser\add with Subcommand 'check'
@@ -52,7 +83,7 @@ export main = $F '(check.Args) -> <>', (args) ->
   local server_status
   server_info, err = get_server_info server_url
   if err?
-    server_status = "error! (#{err})"
+    server_status = "error! (#{err}) oh dear god, the humanity! How could this happen?"
   else
     server_status = "ok"
 
