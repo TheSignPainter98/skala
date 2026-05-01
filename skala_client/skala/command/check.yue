@@ -18,6 +18,26 @@ declare_type 'check.ServerInfo', [[{
   version: string,
 }]]
 
+pad_right = (text, width) ->
+  text .. (' '\rep width - #text)
+
+render_status_table = (rows) ->
+  name_width = 0
+  status_width = 0
+
+  for row in *rows
+    if #row.name > name_width
+      name_width = #row.name
+    if #row.status > status_width
+      status_width = #row.status
+
+  render_row = $F '(string, string) -> string', (name, status) ->
+    "#{pad_right name, name_width}  #{pad_right status, status_width}"
+
+  concat_lines with {}
+    for row in *rows
+      [] = render_row row.name, row.status
+
 export register_args = (parser) ->
   parser\add with Subcommand 'check'
     \description 'check system health'
@@ -89,14 +109,28 @@ export main = $F '(check.Args) -> <>', (args) ->
     else
       monitor_status = 'ok'
 
-  print concat_lines with {}
-    [] = "Server:        #{server_status}"
-    [] = "Reactor:       #{reactor_status}"
-    [] = "Turbine:       #{turbine_status}"
-    [] = "Monitor:       #{monitor_status}"
-    [] = "Printer:       #{printer_status}"
-    [] = "Printer ink:   #{printer_ink_status}"
-    [] = "Printer paper: #{printer_paper_status}"
+  print render_status_table with {}
+    [] =
+      name: 'Server'
+      status: server_status
+    [] =
+      name: 'Reactor'
+      status: reactor_status
+    [] =
+      name: 'Turbine'
+      status: turbine_status
+    [] =
+      name: 'Monitor'
+      status: monitor_status
+    [] =
+      name: 'Printer'
+      status: printer_status
+    [] =
+      name: 'Printer ink'
+      status: printer_ink_status
+    [] =
+      name: 'Printer paper'
+      status: printer_paper_status
   return
 
 get_server_info = $F '(string) -> <?check.ServerInfo, ?string>', (server_url) ->
