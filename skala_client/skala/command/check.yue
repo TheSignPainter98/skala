@@ -39,7 +39,7 @@ export main = $F '(check.Args) -> <>', (args) ->
   local server_status
   server_info, err = get_server_info server_url
   if err?
-    server_status = "error! (#{err}) oh dear god, the humanity! How could this happen?"
+    server_status = "error! (#{err})"
   else
     server_status = "ok"
 
