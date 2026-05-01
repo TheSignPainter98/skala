@@ -155,9 +155,11 @@ render_status_table = $F '([{name: string, status: string}]) -> string', (rows) 
     if #row.status > status_width
       status_width = #row.status
   name_width += 1
-  status_width -= 1
 
-  terminal_width = term.getSize!
+  terminal_width, _ = term.getSize!
+
+  if name_width + status_width - 2 > terminal_width
+    status_width -= 1
   status_width = math.max 1,
     math.min status_width,
       terminal_width - name_width - 2
