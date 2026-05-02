@@ -71,6 +71,7 @@ check_reactor = $F '(autorestarter.Args) -> <?autorestarter.Action, ?string>', (
   reactor, err = Reactor::find!
   if err?
     return nil, err
+  reactor = reactor.reactor -- TODO(kcza): remove this fix by adding appropriate methods to the `Reactor` class.
 
   active, err = reactor.getStatus!
   if err?
