@@ -71,6 +71,6 @@ export class Advisor
 
     _, err = is 'server.Response', parsed_response
     if err?
-      return "cannot use returned advice: #{err}"
+      return nil, "cannot use returned advice: #{err}"
 
     parsed_response, nil

@@ -37,7 +37,7 @@ export class Turbine
     err = nil
     try
       ret = with {}
-        if @intact
+        if @intact!
           .integrity = 'intact'
           .stored_kinetic_energy = @energy!
           .energy_production_rate = @production_rate!

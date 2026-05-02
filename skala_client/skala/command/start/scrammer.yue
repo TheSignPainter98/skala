@@ -1,6 +1,7 @@
 local *
 
 import 'skala.clap' as :Subcommand
+import 'skala.peripheral.reactor' as :Reactor
 import 'skala.quicktype' as :declare_type, :F
 import 'skala.quicktype_macros' as $
 import 'skala.util.waker' as :Waker, :RedstoneTrigger

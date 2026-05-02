@@ -128,6 +128,9 @@ export main = $F '(control.Args) -> <>', (args) ->
 
       if advisor_response?
         { :advice } = advisor_response
+        if not advice?
+            print "Server returned no advice."
+            return
         { :action } = advice
         { :kind } = action
         switch kind

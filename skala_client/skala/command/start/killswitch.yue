@@ -3,6 +3,7 @@ local *
 import 'skala.quicktype' as :declare_type, :F, :T
 import 'skala.quicktype_macros' as $
 import 'skala.clap' as :Subcommand, :Flag
+import 'skala.peripheral.reactor' as :Reactor
 import 'skala.util.waker' as :Waker, :PeriodicTrigger, :RedstoneTrigger
 
 import 'skala.command.start.killswitch.reactor_temp'
