@@ -47,7 +47,9 @@ export main = $F '(autorestarter.Args) -> !', (args) ->
         print err
       switch action
         when 'RESTART'
-         reactor.activate!
+          err = reactor\activate!
+          if err?
+            print err
         when nil
           -- Do nothing
         else
@@ -70,7 +72,10 @@ check_reactor = $F '(autorestarter.Args) -> <?autorestarter.Action, ?string>', (
   if err?
     return nil, err
 
-  if reactor.getStatus!
+  active, err = reactor.getStatus!
+  if err?
+    return nil, err
+  if active
     return nil, nil -- Already active.
 
   high = false

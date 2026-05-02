@@ -64,8 +64,27 @@ export class Reactor
       err = err2
     err
 
+  activate: $F '() => ?string', =>
+    local err
+    try
+      @reactor.activate!
+    catch err2
+      err = err2
+    err
+
   limits: $F '() => reactor.Limits', =>
     error 'todo'
+
+  status: $F '() => <?boolean, ?string>', =>
+    ret = nil
+    err = nil
+    try
+      @reactor.getStatus!
+    catch err2
+      err = err2
+    if err?
+      return nil, err
+    ret, nil
 
   state: $F '() => <?peripheral.ReactorState, ?string>', =>
     if not @reactor.isFormed!

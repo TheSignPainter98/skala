@@ -100,8 +100,8 @@ export main = $F '(killswitch.Args) -> <>', (args) ->
       if err?
         print "cannot get reactor state: #{err}"
         return
-      if state.active != 'active'
-        print "skipping killswitch, reactor status is #{state.active}"
+      if state.mode != 'active'
+        print "skipping killswitch, reactor status is #{state.mode}"
         return
 
       action, err = check_reactor state

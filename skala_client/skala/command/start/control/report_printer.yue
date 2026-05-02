@@ -69,7 +69,6 @@ export class ReportPrinter
       [] =
         name: 'boil effncy'
         value: '%.2f%%'\format 100 * boil_efficiency
-    table.sort print_state, (a, b) -> a.name, b.name
 
     time = os.time 'ingame'
     hour, hour_frac = math.modf time
@@ -97,7 +96,7 @@ export class ReportPrinter
         when 'scram'
           [] = 'Scram reactor immediately.'
         when 'set-burn-rate'
-          { :new_target_burn_rate } = :action
+          { :new_target_burn_rate } = action
           [] = "Set burn rate to #{new_target_burn_rate}"
         else
           [] = "!! invalid action: '#{action}'"
