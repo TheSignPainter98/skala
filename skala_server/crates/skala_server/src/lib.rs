@@ -35,6 +35,7 @@ impl_from_error!(async_openai::error::OpenAIError);
 impl_from_error!(serde_json::Error);
 impl_from_error!(sqlx::Error);
 impl_from_error!(sqlx::migrate::MigrateError);
+impl_from_error!(arboard::Error);
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -50,6 +51,7 @@ impl IntoResponse for Error {
 pub struct Config {
     #[serde(rename = "skala", default)]
     pub general: GeneralConfig,
+
     #[serde(default)]
     pub llm: LlmConfig,
 }
@@ -60,6 +62,10 @@ pub struct Config {
 pub struct GeneralConfig {
     #[serde(default)]
     pub port: ConfigPort,
+
+    #[serde(default)]
+    pub advisor_kind: AdvisorKind,
+
     #[serde(default)]
     pub snapshot_window_limit: ReactorSnapshotWindowLimit,
 }
@@ -78,6 +84,14 @@ impl Default for ConfigPort {
     fn default() -> Self {
         Self(15000)
     }
+}
+
+#[derive(Copy, Clone, Debug, Default, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AdvisorKind {
+    CopyPaste,
+    #[default]
+    Llm,
 }
 
 #[derive(Copy, Clone, Debug, serde::Deserialize)]

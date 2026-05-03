@@ -1,6 +1,7 @@
 [skala]
 port = 15000
 snapshot-window-limit = 10
+advisor-kind = 'copy-paste'
 
 [llm]
 url = "http://localhost:8326"

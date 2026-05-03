@@ -1,6 +1,7 @@
 mod llm_advisor;
 
 pub use self::llm_advisor::LlmAdvisor;
+pub use self::llm_advisor::backend::{Backend, CopyPasteBackend, OpenAiBackend};
 pub use self::llm_advisor::feedback;
 
 use std::fmt::Debug;
@@ -11,24 +12,27 @@ use crate::components::turbine::TurbineSnapshot;
 use crate::time::IngameDateTime;
 
 pub trait Advisor: Debug + Send + Sync {
-    fn advise(
+    fn advise<'event, I>(
         &self,
-        past_events: impl IntoIterator<Item = PastEvent> + Send,
+        past_events: I,
         target_energy_production_rate: f64,
-    ) -> impl Future<Output = Result<Advice>> + Send;
+    ) -> impl Future<Output = Result<Advice>> + Send
+    where
+        I: IntoIterator<Item = &'event PastEvent> + Send,
+        I::IntoIter: Send;
 }
 
 #[derive(Clone, Debug)]
 pub enum PastEvent {
     Snapshot(Snapshot),
-    Action(PastAction),
+    PastAction(PastAction),
 }
 
 impl PastEvent {
     pub(crate) fn timestamp(&self) -> &IngameDateTime {
         match self {
             Self::Snapshot(snapshot) => &snapshot.timestamp,
-            Self::Action(action) => &action.timestamp,
+            Self::PastAction(action) => &action.timestamp,
         }
     }
 }

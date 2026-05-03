@@ -79,7 +79,7 @@ pub(crate) async fn route(
             info!("getting advice...");
             let advice = app_state
                 .advisor
-                .advise(history, target_energy_production_rate)
+                .advise(&history, target_energy_production_rate)
                 .await?;
 
             info!("recording advice...");
@@ -334,7 +334,7 @@ fn collate_history(snapshots: Vec<Snapshot>, past_actions: Vec<PastAction>) -> V
     let mut ret: Vec<_> = snapshots
         .into_iter()
         .map(PastEvent::Snapshot)
-        .chain(past_actions.into_iter().map(PastEvent::Action))
+        .chain(past_actions.into_iter().map(PastEvent::PastAction))
         .collect();
     ret.sort_by(|a, b| a.timestamp().cmp(b.timestamp()));
     ret

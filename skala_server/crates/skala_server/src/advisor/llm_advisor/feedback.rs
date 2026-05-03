@@ -34,7 +34,7 @@ impl FeedbackProvider {
         }
     }
 
-    pub(crate) fn feedback(&self) -> impl Iterator<Item = &Feedback> {
+    pub(crate) fn feedback(&self) -> impl Iterator<Item = &Feedback> + Send {
         let pool = match self.feedback_regime {
             FeedbackRegime::Absent => &[],
             FeedbackRegime::Positive => self.positive_feedback_pool.as_slice(),

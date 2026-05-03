@@ -16,14 +16,14 @@ pub fn setup(db_pool: SqlitePool, advisor: MockAdvisor) -> TestServer {
 
 pub struct MockAdvisor {
     #[allow(clippy::type_complexity)]
-    advice_fn: Mutex<Box<dyn FnMut(Vec<PastEvent>, f64) -> Result<Advice> + Send + 'static>>,
+    advice_fn: Mutex<Box<dyn FnMut(Vec<&PastEvent>, f64) -> Result<Advice> + Send + 'static>>,
 }
 
 impl MockAdvisor {
     pub fn new(
-        advice_fn: impl FnMut(Vec<PastEvent>, f64) -> Result<Advice> + Send + 'static,
+        advice_fn: impl FnMut(Vec<&PastEvent>, f64) -> Result<Advice> + Send + 'static,
     ) -> Self {
-        let advice_fn: Box<dyn FnMut(_, _) -> _ + Send> = Box::new(advice_fn);
+        let advice_fn: Box<dyn FnMut(Vec<&_>, _) -> _ + Send> = Box::new(advice_fn);
         let advice_fn = Mutex::new(advice_fn);
         Self { advice_fn }
     }
@@ -36,11 +36,15 @@ impl Debug for MockAdvisor {
 }
 
 impl Advisor for MockAdvisor {
-    async fn advise(
+    async fn advise<'event, I>(
         &self,
-        past_events: impl IntoIterator<Item = PastEvent> + Send,
+        past_events: I,
         target_energy_production_rate: f64,
-    ) -> Result<Advice> {
+    ) -> Result<Advice>
+    where
+        I: IntoIterator<Item = &'event PastEvent> + Send,
+        I::IntoIter: Send,
+    {
         self.advice_fn.lock().await(
             past_events.into_iter().collect(),
             target_energy_production_rate,

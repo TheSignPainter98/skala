@@ -94,7 +94,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 reactor,
                 turbine,
             } = snapshot;
-            assert_eq!(timestamp.into_inner(), TIMESTAMP);
+            assert_eq!(timestamp.clone().into_inner(), TIMESTAMP);
 
             let intact_reactor_snapshot = match reactor {
                 ReactorSnapshot::Intact(intact_reactor_state) => intact_reactor_state,
@@ -113,17 +113,17 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 heating_rate,
                 boil_efficiency,
             } = intact_reactor_snapshot;
-            assert!(matches!(mode, ReactorMode::Inactive));
-            assert_eq!(temperature, 111.0);
-            assert_eq!(coolant_filled, 222.0);
-            assert_eq!(heated_coolant_filled, 333.0);
-            assert_eq!(fuel_filled, 444.0);
-            assert_eq!(waste_filled, 555.0);
-            assert_eq!(actual_burn_rate, ActualBurnRate::from(666.0));
-            assert_eq!(target_burn_rate, TargetBurnRate::from(777));
-            assert_eq!(damage_percent, 888.0);
-            assert_eq!(heating_rate, 999.0);
-            assert_eq!(boil_efficiency, 1234.0);
+            assert!(matches!(*mode, ReactorMode::Inactive));
+            assert_eq!(*temperature, 111.0);
+            assert_eq!(*coolant_filled, 222.0);
+            assert_eq!(*heated_coolant_filled, 333.0);
+            assert_eq!(*fuel_filled, 444.0);
+            assert_eq!(*waste_filled, 555.0);
+            assert_eq!(*actual_burn_rate, ActualBurnRate::from(666.0));
+            assert_eq!(*target_burn_rate, TargetBurnRate::from(777));
+            assert_eq!(*damage_percent, 888.0);
+            assert_eq!(*heating_rate, 999.0);
+            assert_eq!(*boil_efficiency, 1234.0);
 
             let intact_turbine_snapshot = match turbine {
                 TurbineSnapshot::Intact(intact_turbine_snapshot) => intact_turbine_snapshot,
@@ -133,8 +133,8 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 stored_kinetic_energy,
                 energy_production_rate,
             } = intact_turbine_snapshot;
-            assert_eq!(stored_kinetic_energy, 789.0);
-            assert_eq!(energy_production_rate, 456.0);
+            assert_eq!(*stored_kinetic_energy, 789.0);
+            assert_eq!(*energy_production_rate, 456.0);
         })
         .check_target_burn_rate(|rate| assert_eq!(rate, TARGET_ENERGY_PRODUCTION_RATE))
         .run(db_pool)
@@ -209,7 +209,8 @@ async fn test_active_reactor(db_pool: SqlitePool) {
 struct Test {
     reactor_name: Option<&'static str>,
     input: Option<Value>,
-    check_past_events: Option<Box<dyn Fn(Vec<PastEvent>) + Send>>,
+    #[allow(clippy::type_complexity)]
+    check_past_events: Option<Box<dyn Fn(Vec<&PastEvent>) + Send>>,
     check_target_burn_rate: Option<Box<dyn Fn(f64) + Send>>,
     advice: Option<Advice>,
     expected_response: Option<Value>,
@@ -237,7 +238,7 @@ impl Test {
         self
     }
 
-    fn check_past_events(mut self, f: impl Fn(Vec<PastEvent>) + Send + 'static) -> Self {
+    fn check_past_events(mut self, f: impl Fn(Vec<&PastEvent>) + Send + 'static) -> Self {
         self.check_past_events = Some(Box::new(f));
         self
     }

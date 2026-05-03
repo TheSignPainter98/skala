@@ -11,8 +11,8 @@ use clap::Parser;
 use indoc::writedoc;
 use log::{error, info};
 use quicktype::QuicktypeDerivedType;
-use skala_server::advisor::LlmAdvisor;
-use skala_server::{App, Config, GeneralConfig, Result};
+use skala_server::advisor::{Backend, CopyPasteBackend, LlmAdvisor, OpenAiBackend};
+use skala_server::{AdvisorKind, App, Config, GeneralConfig, Result};
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use tokio::net::TcpListener;
@@ -170,11 +170,16 @@ async fn run_serve(config: Utf8PathBuf, db_path: Utf8PathBuf) -> Result<()> {
     } = config;
     let GeneralConfig {
         port,
+        advisor_kind,
         snapshot_window_limit,
     } = general_config;
 
     let db_pool = load_db_pool(db_path).await?;
-    let advisor = LlmAdvisor::new(llm_config);
+    let backend = match advisor_kind {
+        AdvisorKind::CopyPaste => Backend::from(CopyPasteBackend::new()?),
+        AdvisorKind::Llm => Backend::from(OpenAiBackend::new(&llm_config)),
+    };
+    let advisor = LlmAdvisor::new(llm_config, backend);
     let snapshot_window_limit = snapshot_window_limit.into_inner();
     let app = App::new(db_pool.clone(), snapshot_window_limit, advisor);
 

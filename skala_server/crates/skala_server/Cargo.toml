@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 anyhow = "1.0.102"
+arboard = "3.6.1"
 async-openai = { version = "0.34.0", features = ["chat-completion", "completions"] }
 axum = { version = "0.8.8", features = ["json"] }
 futures-util = "0.3.32"
