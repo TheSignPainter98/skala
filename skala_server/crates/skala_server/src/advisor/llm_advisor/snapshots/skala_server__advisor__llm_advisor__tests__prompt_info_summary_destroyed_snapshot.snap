@@ -1,0 +1,7 @@
+---
+source: crates/skala_server/src/advisor/llm_advisor/mod.rs
+expression: "PromptInfo::Snapshot(&snapshot).summary()"
+---
+### Reactor state at 2026-05-03T16:24:11
+
+Reactor sensors malfunctioned; no data available.

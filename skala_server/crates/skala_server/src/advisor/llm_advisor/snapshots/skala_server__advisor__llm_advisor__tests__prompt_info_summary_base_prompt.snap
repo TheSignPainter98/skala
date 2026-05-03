@@ -1,0 +1,5 @@
+---
+source: crates/skala_server/src/advisor/llm_advisor/mod.rs
+expression: summary
+---
+# Keep the reactor stable.
