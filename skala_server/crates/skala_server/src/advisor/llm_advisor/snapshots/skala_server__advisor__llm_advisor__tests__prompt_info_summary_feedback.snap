@@ -2,4 +2,6 @@
 source: crates/skala_server/src/advisor/llm_advisor/mod.rs
 expression: summary
 ---
-# Burn rate corrections stabilized output.
+# Feedback
+
+yer doin' good, lad

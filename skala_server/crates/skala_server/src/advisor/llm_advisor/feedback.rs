@@ -7,6 +7,12 @@ pub struct Feedback {
     content: String,
 }
 
+impl Feedback {
+    pub fn new(content: String) -> Self {
+        Self { content }
+    }
+}
+
 impl Display for Feedback {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self { content } = self;

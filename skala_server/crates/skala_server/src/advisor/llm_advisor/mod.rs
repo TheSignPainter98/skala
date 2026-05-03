@@ -72,6 +72,7 @@ impl Advisor for LlmAdvisor {
 
         info!("awaiting llm response");
         let ret = backend.fetch(prompt_info).await?;
+        info!("returning llm response");
         Ok(ret)
     }
 }
@@ -139,7 +140,13 @@ impl PromptInfo<'_> {
                     "
                 )
             }
-            Self::Feedback(feedback) => feedback.to_string(),
+            Self::Feedback(feedback) => formatdoc! {
+                "
+                    # Feedback
+
+                    {feedback}
+                "
+            },
             Self::TargetEnergyProductionRate(target) => formatdoc!(
                 "
                     # Your current goal
@@ -251,9 +258,7 @@ mod tests {
 
     #[test]
     fn test_prompt_info_summary_feedback() {
-        let feedback: Feedback =
-            serde_json::from_str(r##"{"content":"# Burn rate corrections stabilized output."}"##)
-                .unwrap();
+        let feedback = Feedback::new("yer doin' good, lad".to_owned());
         let summary = PromptInfo::Feedback(&feedback).summary();
 
         assert!(summary.starts_with('#'));
