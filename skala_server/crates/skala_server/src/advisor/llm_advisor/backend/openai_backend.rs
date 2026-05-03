@@ -1,9 +1,4 @@
-use std::fmt::Debug;
-use std::io::{self, BufRead};
-use std::sync::Arc;
-
-use anyhow::{Context, anyhow};
-use arboard::Clipboard;
+use anyhow::Context;
 use async_openai::{
     Client,
     config::OpenAIConfig,
@@ -14,104 +9,14 @@ use async_openai::{
         Verbosity,
     },
 };
-use futures_util::lock::Mutex;
-use log::{info, warn};
+use log::info;
 use serde::Deserialize;
 
+use crate::advisor::llm_advisor::{PromptInfo, Schemas};
 use crate::{
     ConfigFrequencyPenalty, ConfigMaxCompletionTokens, ConfigPresencePenalty, ConfigTemperature,
     ConfigUrl, Error, LlmConfig, Result,
-    advisor::llm_advisor::{PromptInfo, Schemas},
 };
-
-#[derive(Clone, Debug)]
-pub enum Backend {
-    CopyPaste(CopyPasteBackend),
-    OpenAi(Box<OpenAiBackend>),
-}
-
-impl Backend {
-    pub(crate) async fn fetch<T: for<'de> Deserialize<'de>>(
-        &self,
-        prompt_info: impl IntoIterator<Item = PromptInfo<'_>> + Send,
-    ) -> Result<T> {
-        match self {
-            Self::CopyPaste(inner) => inner.fetch(prompt_info).await,
-            Self::OpenAi(inner) => inner.fetch(prompt_info).await,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct CopyPasteBackend {
-    // NOTE: This really shouldn't be an Arc-Mutex, but cloning is required elsewhere
-    // and this works well enough.
-    // TODO(kcza): fis this.
-    clipboard: Arc<Mutex<Clipboard>>,
-}
-
-impl CopyPasteBackend {
-    pub fn new() -> Result<Self> {
-        let clipboard = Arc::new(Mutex::new(Clipboard::new()?));
-        Ok(Self { clipboard })
-    }
-
-    pub(crate) async fn fetch<T: for<'de> Deserialize<'de>>(
-        &self,
-        prompt_info: impl IntoIterator<Item = PromptInfo<'_>> + Send,
-    ) -> Result<T> {
-        let prompt = prompt_info
-            .into_iter()
-            .map(|info| info.summary())
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        self.clipboard.lock().await.set_text(prompt)?;
-        let response = {
-            let mut stdin = io::stdin().lock();
-            let mut buf = String::new();
-            let mut remaining_attempts = 10;
-            loop {
-                if remaining_attempts == 0 {
-                    return Err(anyhow!("too many attempts").into());
-                }
-
-                buf.clear();
-                eprint!("Prompt copied to clipboard, please paste 1-line response> ");
-                stdin
-                    .read_line(&mut buf)
-                    .with_context(|| anyhow!("cannot read line to buffer"))?;
-                eprintln!();
-
-                match serde_json::from_str(&buf) {
-                    Ok(response) => break response,
-                    Err(err) => {
-                        warn!("{err}");
-                        warn!(
-                            "prompt ignored, please re-enter (attempts remaining {remaining_attempts})"
-                        );
-                        remaining_attempts -= 1;
-                    }
-                }
-            }
-        };
-        Ok(response)
-    }
-}
-
-impl From<CopyPasteBackend> for Backend {
-    fn from(inner: CopyPasteBackend) -> Self {
-        Self::CopyPaste(inner)
-    }
-}
-
-impl Debug for CopyPasteBackend {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CopyPasteBackend")
-            .field("clipboard", &"_")
-            .finish()
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct OpenAiBackend {
@@ -256,11 +161,5 @@ impl TryFrom<PromptInfo<'_>> for ChatCompletionRequestMessage {
                 Ok(ret)
             }
         }
-    }
-}
-
-impl From<OpenAiBackend> for Backend {
-    fn from(inner: OpenAiBackend) -> Self {
-        Self::OpenAi(Box::new(inner))
     }
 }
