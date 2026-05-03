@@ -1,4 +1,5 @@
 mod copy_paste_backend;
+mod editor;
 mod openai_backend;
 
 pub use self::copy_paste_backend::CopyPasteBackend;
