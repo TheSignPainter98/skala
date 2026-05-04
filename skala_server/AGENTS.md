@@ -13,8 +13,9 @@ under `skala_server/vendor/**`.
   SQLx, and quicktype conventions.
 - When database schema or query shapes change, keep migrations and tracked
   `.sqlx/` query metadata in sync.
-- Snapshot files under Rust test `snapshots/` are fixtures. Update them only
-  when the behaviour change is intentional.
+- Snapshot files under Rust test `snapshots/` are fixtures. Do not change these directly. If a snapshot test fails and the snapshot needs updating, run the `cargo insta review` command.
+- Never create a new snapshot file manually, instead, let a snapshot test fail and review it through `cargo insta review`.
+- Never use `INSTA_UPDATE=always`, always review snapshot changes manually, do not skip the review process.
 
 ## Client Contract
 

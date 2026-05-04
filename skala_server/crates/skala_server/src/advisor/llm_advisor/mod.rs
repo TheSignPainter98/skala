@@ -40,11 +40,34 @@ impl LlmAdvisor {
             feedback_provider,
         }
     }
+
+    // TODO(kcza): make `TargetEnergyProductionRate` type
+    fn prompt_info<'info>(
+        &'info self,
+        past_events: impl IntoIterator<Item = &'info PastEvent>,
+        target_energy_production_rate: f64,
+    ) -> impl Iterator<Item = PromptInfo<'info>> {
+        let past_events = past_events.into_iter().map(|event| match event {
+            PastEvent::Snapshot(snapshot) => PromptInfo::Snapshot(snapshot),
+            PastEvent::PastAction(action) => PromptInfo::PastAction(action),
+        });
+        let feedback = self.feedback_provider.feedback().map(PromptInfo::Feedback);
+        let target = iter::once(PromptInfo::TargetEnergyProductionRate(
+            target_energy_production_rate,
+        ));
+        iter::once(PromptInfo::BasePrompt(include_str!("base_prompt.md")))
+            .chain(
+                past_events
+                    .biased_alternate_with(feedback)
+                    .on(|event| matches!(event, PromptInfo::PastAction(_))),
+            )
+            .chain(target)
+    }
 }
 
 impl Advisor for LlmAdvisor {
     async fn advise<'event, I>(
-        &self,
+        &'event self,
         past_events: I,
         target_energy_production_rate: f64,
     ) -> Result<Advice>
@@ -52,26 +75,11 @@ impl Advisor for LlmAdvisor {
         I: IntoIterator<Item = &'event PastEvent> + Send,
         I::IntoIter: Send,
     {
-        let Self {
-            backend,
-            feedback_provider,
-        } = self;
-
         info!("creating message");
-        let past_events = past_events.into_iter().map(|event| match event {
-            PastEvent::Snapshot(snapshot) => PromptInfo::Snapshot(snapshot),
-            PastEvent::PastAction(action) => PromptInfo::PastAction(action),
-        });
-        let feedback = feedback_provider.feedback().map(PromptInfo::Feedback);
-        let target = iter::once(PromptInfo::TargetEnergyProductionRate(
-            target_energy_production_rate,
-        ));
-        let prompt_info = iter::once(PromptInfo::BasePrompt(include_str!("base_prompt.md")))
-            .chain(past_events.biased_alternate_with(feedback))
-            .chain(target);
+        let prompt_info = self.prompt_info(past_events, target_energy_production_rate);
 
         info!("awaiting llm response");
-        let ret = backend.fetch(prompt_info).await?;
+        let ret = self.backend.fetch(prompt_info).await?;
         info!("returning llm response");
         Ok(ret)
     }
@@ -176,14 +184,17 @@ impl Schemas {
 
 #[cfg(test)]
 mod tests {
+    use insta::assert_json_snapshot;
     use insta::assert_snapshot;
 
+    use crate::advisor::llm_advisor::backend::OpenAiBackend;
     use crate::advisor::{AdvisedAction, PastAction, Snapshot};
     use crate::components::reactor::{
         ActualBurnRate, IntactReactorSnapshot, ReactorMode, ReactorSnapshot, TargetBurnRate,
     };
     use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
     use crate::time::IngameDateTime;
+    use crate::{FeedbackConfig, FeedbackRegime, LlmConfig};
 
     use super::*;
 
@@ -199,6 +210,65 @@ mod tests {
 
         assert!(summary.starts_with('#'));
         assert_snapshot!(summary);
+    }
+
+    #[test]
+    fn test_llm_advisor_prompt_info_sequence() {
+        let config = LlmConfig {
+            feedback_regime: FeedbackRegime::Positive,
+            feedback: FeedbackConfig {
+                positive: vec![Feedback::new("Good job lad".to_owned())],
+                negative: vec![Feedback::new("Och, no!".to_owned())],
+            },
+            ..Default::default()
+        };
+        let backend = OpenAiBackend::new(&config);
+        let advisor = LlmAdvisor::new(config, backend);
+        let past_events = vec![
+            PastEvent::Snapshot(Snapshot {
+                timestamp: IngameDateTime::from("2026-05-03T16:24:11".to_owned()),
+                reactor: ReactorSnapshot::Intact(IntactReactorSnapshot {
+                    mode: ReactorMode::Active,
+                    temperature: 742.5,
+                    coolant_filled: 0.82,
+                    heated_coolant_filled: 0.34,
+                    fuel_filled: 0.76,
+                    waste_filled: 0.12,
+                    actual_burn_rate: ActualBurnRate::from(503.2),
+                    target_burn_rate: TargetBurnRate::from(500),
+                    damage_percent: 0.0,
+                    heating_rate: 18.25,
+                    boil_efficiency: 0.91,
+                }),
+                turbine: TurbineSnapshot::Intact(IntactTurbineSnapshot {
+                    stored_kinetic_energy: 12_345.0,
+                    energy_production_rate: 987.6,
+                }),
+            }),
+            PastEvent::PastAction(PastAction {
+                timestamp: IngameDateTime::from("2026-05-03T16:24:12".to_owned()),
+                action: AdvisedAction::SetBurnRate {
+                    new_target_burn_rate: TargetBurnRate::from(650),
+                },
+            }),
+            PastEvent::Snapshot(Snapshot {
+                timestamp: IngameDateTime::from("2026-05-03T16:24:13".to_owned()),
+                reactor: ReactorSnapshot::Destroyed,
+                turbine: TurbineSnapshot::Destroyed,
+            }),
+            PastEvent::PastAction(PastAction {
+                timestamp: IngameDateTime::from("2026-05-03T16:24:14".to_owned()),
+                action: AdvisedAction::SetBurnRate {
+                    new_target_burn_rate: TargetBurnRate::from(300),
+                },
+            }),
+        ];
+        let prompt_info = advisor
+            .prompt_info(&past_events, 1_250.0)
+            .map(|info| info.summary())
+            .collect::<Vec<_>>();
+
+        assert_json_snapshot!(prompt_info);
     }
 
     #[test]

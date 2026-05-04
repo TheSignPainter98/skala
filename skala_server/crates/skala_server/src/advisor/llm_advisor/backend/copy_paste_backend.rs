@@ -40,6 +40,7 @@ impl CopyPasteBackend {
             .collect::<Vec<_>>()
             .join("\n");
         prompt.push('\n');
+        let schema_json = serde_json::to_string(self.schemas.advice_response()).unwrap();
         writedoc!(
             &mut prompt,
             "
@@ -47,20 +48,22 @@ impl CopyPasteBackend {
 
                 You MUST reply using the following schema:
                 ```json
-                {}
+                {schema_json}
                 ```
             ",
-            serde_json::to_string(self.schemas.advice_response()).unwrap(),
         )
         .unwrap();
 
         self.clipboard.lock().await.set_text(prompt)?;
         let response = {
-            Notification::new()
+            let notification_result = Notification::new()
                 .summary("Reactor advice required")
                 .body("Paste prompt into LLM and report back")
                 .icon("gnome-terminal")
-                .show()?;
+                .show();
+            if let Err(err) = notification_result {
+                warn!("cannot display notification: {err}");
+            }
 
             let mut stdin = BufReader::new(io::stdin());
             let mut editor = Editor::new("nvim")?;

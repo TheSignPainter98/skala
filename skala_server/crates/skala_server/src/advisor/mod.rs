@@ -13,7 +13,7 @@ use crate::time::IngameDateTime;
 
 pub trait Advisor: Debug + Send + Sync {
     fn advise<'event, I>(
-        &self,
+        &'event self,
         past_events: I,
         target_energy_production_rate: f64,
     ) -> impl Future<Output = Result<Advice>> + Send

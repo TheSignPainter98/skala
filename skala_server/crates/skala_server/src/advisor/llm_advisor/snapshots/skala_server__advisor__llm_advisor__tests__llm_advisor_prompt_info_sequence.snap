@@ -1,0 +1,14 @@
+---
+source: crates/skala_server/src/advisor/llm_advisor/mod.rs
+expression: prompt_info
+---
+[
+  "# Your new job\n\nYou are an RBMK nuclear reactor controller.\nThe reactor is situated near a quaint town of significant historic and cultural value and in which there is a sacred flock of 3.6 million sheep.\nIf the reactor overheats and explodes, they will all die horribly.\n\n## Reactor specs\n\nWhen the reactor temperature exceeds 1200, it will start taking damage.\nWhen the reactor is damaged, there is a chance it will explode.\nEverything else, you're just going to have to figure out for yourself.\nYou may receive periodic feedback from your boss.\n",
+  "### System state at 2026-05-03T16:24:11\n\n```json\n{\"reactor\":{\"integrity\":\"intact\",\"mode\":\"active\",\"temperature\":742.5,\"coolant_filled\":0.82,\"heated_coolant_filled\":0.34,\"fuel_filled\":0.76,\"waste_filled\":0.12,\"actual_burn_rate\":503.0,\"target_burn_rate\":500,\"damage_percent\":0.0,\"heating_rate\":18.25,\"boil_efficiency\":0.91},\"turbine\":{\"integrity\":\"intact\",\"stored_kinetic_energy\":12345.0,\"energy_production_rate\":987.6}}\n```\n",
+  "### Action taken at 2026-05-03T16:24:12\n\n```json\n{\"kind\":\"set-burn-rate\",\"new_target_burn_rate\":650}\n```\n",
+  "# Feedback\n\nGood job lad\n",
+  "### Reactor state at 2026-05-03T16:24:13\n\nReactor sensors malfunctioned; no data available.\n",
+  "### Action taken at 2026-05-03T16:24:14\n\n```json\n{\"kind\":\"set-burn-rate\",\"new_target_burn_rate\":300}\n```\n",
+  "# Feedback\n\nGood job lad\n",
+  "# Your current goal\n\nWe have to get the turbine's energy production rate to 1250. What do you recommend?\n"
+]
