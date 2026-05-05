@@ -16,6 +16,7 @@ use skala_server::{AdvisorKind, App, Config, GeneralConfig, Result};
 use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use tokio::net::TcpListener;
+use tokio::signal;
 
 const INITIAL_MANIFEST_CONTENT: &str = include_str!("./default_manifest_content.toml");
 
@@ -191,6 +192,7 @@ async fn run_serve(config: Utf8PathBuf, db_path: Utf8PathBuf) -> Result<()> {
     info!("listening on {addr}");
 
     axum::serve(listener, app.into_router())
+        .with_graceful_shutdown(detect_sigint())
         .await
         .context("Cannot serve app")?;
     db_pool.close().await; // Await optimisation.
@@ -273,6 +275,24 @@ async fn load_db_pool(path: impl Into<Utf8PathBuf>) -> Result<SqlitePool> {
         .connect_with(opts)
         .await?;
     Ok(ret)
+}
+
+async fn detect_sigint() {
+    let detect_ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("cannot install Ctrl+C handler");
+    };
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("cannot install signal handler")
+            .recv()
+            .await;
+    };
+    tokio::select! {
+        _ = detect_ctrl_c => info!("shutting down"),
+        _ = terminate => info!("shutting down"),
+    }
 }
 
 #[cfg(test)]
