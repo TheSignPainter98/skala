@@ -29,6 +29,12 @@ parts of the project.
   affect server routes, advisor behaviour, generated type contracts, or client
   control flow.
 
+## Platform Support
+
+- The project is only guaranteed to work on Linux. Treat Windows, macOS, and
+  other platforms as best-effort development environments unless a task
+  explicitly expands the supported platform set.
+
 ## Verification
 
 - Run checks that are relevant to the area changed. Use scoped `AGENTS.md` files
