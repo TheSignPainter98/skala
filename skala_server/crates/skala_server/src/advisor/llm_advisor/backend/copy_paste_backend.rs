@@ -1,3 +1,4 @@
+use std::env;
 use std::fmt::{Debug, Write};
 use std::sync::Arc;
 
@@ -65,8 +66,10 @@ impl CopyPasteBackend {
                 warn!("cannot display notification: {err}");
             }
 
+            let editor_command = env::var("EDITOR").unwrap_or_else(|_| "nvim".to_owned());
+
             let mut stdin = BufReader::new(io::stdin());
-            let mut editor = Editor::new("nvim")?;
+            let mut editor = Editor::new(editor_command)?;
             loop {
                 let content = editor.edit().await?;
                 if content.trim().is_empty() {

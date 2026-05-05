@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use tempfile::NamedTempFile;
 use tokio::{fs, process::Command};
 
@@ -18,11 +18,14 @@ impl Editor {
 
     pub async fn edit(&mut self) -> Result<String> {
         let path = self.file.path();
-        Command::new(&self.command)
+        let exit_code = Command::new(&self.command)
             .arg(path)
             .status()
             .await
             .context("cannot edit temp file")?;
+        if !exit_code.success() {
+            return Err(anyhow!("editor exited with code {exit_code}").into());
+        }
         let ret = fs::read_to_string(path)
             .await
             .context("cannot read temp file")?;
