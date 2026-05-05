@@ -1,7 +1,7 @@
 [skala]
 port = 15000
 snapshot-window-limit = 10
-advisor-kind = 'llm'
+advisor-kind = 'open-ai'
 
 [llm]
 url = "http://localhost:8326"

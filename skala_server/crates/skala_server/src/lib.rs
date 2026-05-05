@@ -92,7 +92,7 @@ impl Default for ConfigPort {
 pub enum AdvisorKind {
     CopyPaste,
     #[default]
-    Llm,
+    OpenAi,
 }
 
 #[derive(Copy, Clone, Debug, serde::Deserialize)]

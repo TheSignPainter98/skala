@@ -177,7 +177,7 @@ async fn run_serve(config: Utf8PathBuf, db_path: Utf8PathBuf) -> Result<()> {
     let db_pool = load_db_pool(db_path).await?;
     let backend = match advisor_kind {
         AdvisorKind::CopyPaste => Backend::from(CopyPasteBackend::new()?),
-        AdvisorKind::Llm => Backend::from(OpenAiBackend::new(&llm_config)),
+        AdvisorKind::OpenAi => Backend::from(OpenAiBackend::new(&llm_config)),
     };
     let advisor = LlmAdvisor::new(llm_config, backend);
     let snapshot_window_limit = snapshot_window_limit.into_inner();
