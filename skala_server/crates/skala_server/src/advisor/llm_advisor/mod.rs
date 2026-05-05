@@ -184,7 +184,6 @@ impl Schemas {
 
 #[cfg(test)]
 mod tests {
-    use insta::assert_json_snapshot;
     use insta::assert_snapshot;
 
     use crate::advisor::llm_advisor::backend::OpenAiBackend;
@@ -263,12 +262,12 @@ mod tests {
                 },
             }),
         ];
-        let prompt_info = advisor
+        let prompt_repr = advisor
             .prompt_info(&past_events, 1_250.0)
             .map(|info| info.summary())
-            .collect::<Vec<_>>();
-
-        assert_json_snapshot!(prompt_info);
+            .collect::<Vec<_>>()
+            .join("\n---\n");
+        assert_snapshot!(prompt_repr);
     }
 
     #[test]
