@@ -6,7 +6,7 @@ use log::{info, warn};
 use sqlx::{SqliteTransaction, query, query_as};
 
 use crate::ReactorMode;
-use crate::advisor::{Advice, AdvisedAction, Advisor, PastAction, PastEvent, Snapshot};
+use crate::advisor::{Advice, AdvisedAction, Advisor, Insights, PastAction, PastEvent, Snapshot};
 use crate::components::reactor::{IntactReactorSnapshot, ReactorId, ReactorName, ReactorSnapshot};
 use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
 use crate::time::{IngameDateTime, IrlDateTime};
@@ -76,10 +76,17 @@ pub(crate) async fn route(
             info!("collating history data...");
             let history = collate_history(snapshots, past_actions);
 
+            info!("getting past insights...");
+            let past_insights = get_past_insights(&mut txn, reactor_id).await?;
+
             info!("getting advice...");
             let advice = app_state
                 .advisor
-                .advise(&history, target_energy_production_rate)
+                .advise(
+                    &history,
+                    target_energy_production_rate,
+                    past_insights.as_ref(),
+                )
                 .await?;
 
             info!("recording advice...");
@@ -340,6 +347,29 @@ fn collate_history(snapshots: Vec<Snapshot>, past_actions: Vec<PastAction>) -> V
     ret
 }
 
+async fn get_past_insights(
+    txn: &mut SqliteTransaction<'_>,
+    reactor_id: ReactorId,
+) -> Result<Option<Insights>> {
+    struct Row {
+        _ignore: Option<i64>,
+        insights: Option<String>,
+    }
+    let insights_query = query_as!(
+        Row,
+        "
+            SELECT MAX(event.irl_timestamp) AS _ignore, insight.content AS insights
+            FROM insight
+            JOIN event
+            ON insight.event_id = event.id
+            WHERE event.reactor_id = ?
+        ",
+        reactor_id,
+    );
+    let maybe_row = insights_query.fetch_optional(&mut **txn).await?;
+    Ok(maybe_row.and_then(|row| row.insights).map(Into::into))
+}
+
 #[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize, sqlx::Type)]
 #[sqlx(transparent)]
 pub(crate) struct EventId(i64);
@@ -469,7 +499,11 @@ async fn record_advice(
     event_id: EventId,
     advice: &Advice,
 ) -> Result<()> {
-    let Advice { action, reasoning } = &advice;
+    let Advice {
+        action,
+        reasoning,
+        insight_update,
+    } = &advice;
     let (advised_action_repr, new_target_burn_rate) = match action {
         AdvisedAction::NoAction => (0, None),
         AdvisedAction::Scram => (1, None),
@@ -488,13 +522,29 @@ async fn record_advice(
         new_target_burn_rate,
     );
     advice_insertion_query.execute(&mut **txn).await?;
+
+    if let Some(insight_update) = insight_update {
+        let insights_insertion_query = query!(
+            "
+                INSERT INTO insight (event_id, content)
+                VALUES (?, ?)
+            ",
+            event_id,
+            insight_update,
+        );
+        insights_insertion_query.execute(&mut **txn).await?;
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::future::Future;
+
     use insta::assert_json_snapshot;
     use quicktype::Quicktype;
+    use sqlx::SqlitePool;
+    use sqlx::sqlite::SqlitePoolOptions;
 
     use super::*;
 
@@ -508,5 +558,127 @@ mod tests {
     fn test_response_quicktype_def() {
         assert_eq!("server.Response", Response::type_name().to_string());
         assert_json_snapshot!(Response::type_spec().to_string());
+    }
+
+    #[test]
+    fn test_get_past_insights_returns_none_without_prior_insights() {
+        block_on(async {
+            let pool = setup_test_db().await;
+            let mut txn = pool.begin().await.unwrap();
+            let reactor_id = get_reactor_id(&mut txn, &reactor_name("Reactor A"))
+                .await
+                .unwrap();
+
+            let insights = get_past_insights(&mut txn, reactor_id).await.unwrap();
+
+            assert!(insights.is_none());
+        });
+    }
+
+    #[test]
+    fn test_record_advice_stores_latest_insights_per_reactor() {
+        block_on(async {
+            let pool = setup_test_db().await;
+            let mut txn = pool.begin().await.unwrap();
+            let reactor_id = get_reactor_id(&mut txn, &reactor_name("Reactor A"))
+                .await
+                .unwrap();
+            let other_reactor_id = get_reactor_id(&mut txn, &reactor_name("Reactor B"))
+                .await
+                .unwrap();
+
+            let old_event_id = insert_event(&mut txn, reactor_id, 100, "2026-05-03T16:24:11").await;
+            record_advice(
+                &mut txn,
+                old_event_id,
+                &advice_with_insights("Initial burn-rate response was sluggish."),
+            )
+            .await
+            .unwrap();
+
+            let latest_event_id =
+                insert_event(&mut txn, reactor_id, 200, "2026-05-03T16:24:12").await;
+            record_advice(
+                &mut txn,
+                latest_event_id,
+                &advice_with_insights("Raising burn rate by 100 stabilised turbine output."),
+            )
+            .await
+            .unwrap();
+
+            let other_event_id =
+                insert_event(&mut txn, other_reactor_id, 300, "2026-05-03T16:24:13").await;
+            record_advice(
+                &mut txn,
+                other_event_id,
+                &advice_with_insights("Other reactor insight must not leak."),
+            )
+            .await
+            .unwrap();
+
+            let insights = get_past_insights(&mut txn, reactor_id)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(
+                "Raising burn rate by 100 stabilised turbine output.",
+                insights.as_str()
+            );
+        });
+    }
+
+    fn block_on<F, T>(future: F) -> T
+    where
+        F: Future<Output = T>,
+    {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(future)
+    }
+
+    async fn setup_test_db() -> SqlitePool {
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("../../migrations").run(&pool).await.unwrap();
+        pool
+    }
+
+    fn reactor_name(name: &str) -> ReactorName {
+        serde_json::from_value(serde_json::Value::String(name.to_owned())).unwrap()
+    }
+
+    async fn insert_event(
+        txn: &mut SqliteTransaction<'_>,
+        reactor_id: ReactorId,
+        irl_timestamp: i64,
+        ingame_timestamp: &str,
+    ) -> EventId {
+        let event_insertion_result = sqlx::query(
+            "
+                INSERT INTO event (reactor_id, irl_timestamp, ingame_timestamp)
+                VALUES (?, ?, ?)
+            ",
+        )
+        .bind(reactor_id)
+        .bind(irl_timestamp)
+        .bind(IngameDateTime::from(ingame_timestamp.to_owned()))
+        .execute(&mut **txn)
+        .await
+        .unwrap();
+        EventId::from(event_insertion_result.last_insert_rowid())
+    }
+
+    fn advice_with_insights(insights: &str) -> Advice {
+        Advice {
+            action: AdvisedAction::NoAction,
+            reasoning: "No control change needed.".to_owned(),
+            insight_update: Some(Insights::from(insights.to_owned())),
+        }
     }
 }

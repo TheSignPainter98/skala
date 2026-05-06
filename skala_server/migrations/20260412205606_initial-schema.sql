@@ -97,3 +97,12 @@ CREATE TABLE feedback (
         ON UPDATE CASCADE,
     content TEXT NOT NULL
 ) STRICT;
+
+CREATE TABLE insight (
+    event_id INTEGER NOT NULL
+        PRIMARY KEY
+        REFERENCES event(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    content TEXT NOT NULL
+) STRICT;

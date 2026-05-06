@@ -12,6 +12,13 @@ expression: schema_for!(Advice)
       "description": "The best course of action.",
       "$ref": "#/$defs/AdvisedAction"
     },
+    "insight_update": {
+      "description": "The updated insights into how the system works. If nothing useful has been learned,\nset this to the quoted portion of the 'Past insights' section you were passed in your\nprompt.\n\nIf more has been understood about the system set the new 'insights' here. If present, these\ninsights will be passed to you the next time you need to operate the reactor. You will\nforget all information you do not place here. Setting this field is the only way you have to\nlearn about the system over the long term. If this field is unset, it means that you believe\nthat your current insights are sufficient to operate the reactor safely.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "reasoning": {
       "description": "A very concise description of the reasoning behind the best course of action. The reasoning description must contain at most 16 words.",
       "type": "string",
@@ -33,6 +40,19 @@ expression: schema_for!(Advice)
             "kind": {
               "type": "string",
               "const": "no-action"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "description": "Represents that the reactor is either critical or will soon go critical, hence the reaction must be stopped immediately.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "scram"
             }
           },
           "required": [

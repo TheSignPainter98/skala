@@ -3,10 +3,14 @@ use std::fmt::Debug;
 use axum_test::TestServer;
 use skala_server::{
     App, Result,
-    advisor::{Advice, Advisor, PastEvent},
+    advisor::{Advice, Advisor, Insights, PastEvent},
 };
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
+
+type AdviceFn = dyn for<'event> FnMut(Vec<&'event PastEvent>, f64, Option<&'event Insights>) -> Result<Advice>
+    + Send
+    + 'static;
 
 pub fn setup(db_pool: SqlitePool, advisor: MockAdvisor) -> TestServer {
     let db_pool = db_pool.clone();
@@ -15,15 +19,20 @@ pub fn setup(db_pool: SqlitePool, advisor: MockAdvisor) -> TestServer {
 }
 
 pub struct MockAdvisor {
-    #[allow(clippy::type_complexity)]
-    advice_fn: Mutex<Box<dyn FnMut(Vec<&PastEvent>, f64) -> Result<Advice> + Send + 'static>>,
+    advice_fn: Mutex<Box<AdviceFn>>,
 }
 
 impl MockAdvisor {
     pub fn new(
-        advice_fn: impl FnMut(Vec<&PastEvent>, f64) -> Result<Advice> + Send + 'static,
+        advice_fn: impl for<'event> FnMut(
+            Vec<&'event PastEvent>,
+            f64,
+            Option<&'event Insights>,
+        ) -> Result<Advice>
+        + Send
+        + 'static,
     ) -> Self {
-        let advice_fn: Box<dyn FnMut(Vec<&_>, _) -> _ + Send> = Box::new(advice_fn);
+        let advice_fn: Box<AdviceFn> = Box::new(advice_fn);
         let advice_fn = Mutex::new(advice_fn);
         Self { advice_fn }
     }
@@ -37,9 +46,10 @@ impl Debug for MockAdvisor {
 
 impl Advisor for MockAdvisor {
     async fn advise<'event, I>(
-        &self,
+        &'event self,
         past_events: I,
         target_energy_production_rate: f64,
+        insights: Option<&'event Insights>,
     ) -> Result<Advice>
     where
         I: IntoIterator<Item = &'event PastEvent> + Send,
@@ -48,6 +58,7 @@ impl Advisor for MockAdvisor {
         self.advice_fn.lock().await(
             past_events.into_iter().collect(),
             target_energy_production_rate,
+            insights,
         )
     }
 }

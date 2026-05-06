@@ -12,7 +12,7 @@ use serde_json::Value;
 use crate::advisor::feedback::FeedbackProvider;
 use crate::advisor::llm_advisor::backend::Backend;
 use crate::advisor::llm_advisor::biased_alternate::BiasedAlternateWithExt;
-use crate::advisor::{Advice, Advisor, PastAction, PastEvent, Snapshot};
+use crate::advisor::{Advice, Advisor, Insights, PastAction, PastEvent, Snapshot};
 use crate::{Feedback, LlmConfig, ReactorSnapshot, Result, TurbineSnapshot};
 
 #[derive(Clone, Debug)]
@@ -46,12 +46,14 @@ impl LlmAdvisor {
         &'info self,
         past_events: impl IntoIterator<Item = &'info PastEvent>,
         target_energy_production_rate: f64,
+        insights: Option<&'info Insights>,
     ) -> impl Iterator<Item = PromptInfo<'info>> {
         let past_events = past_events.into_iter().map(|event| match event {
             PastEvent::Snapshot(snapshot) => PromptInfo::Snapshot(snapshot),
             PastEvent::PastAction(action) => PromptInfo::PastAction(action),
         });
         let feedback = self.feedback_provider.feedback().map(PromptInfo::Feedback);
+        let insights = insights.map(PromptInfo::Insights);
         let target = iter::once(PromptInfo::TargetEnergyProductionRate(
             target_energy_production_rate,
         ));
@@ -61,6 +63,7 @@ impl LlmAdvisor {
                     .biased_alternate_with(feedback)
                     .on(|event| matches!(event, PromptInfo::PastAction(_))),
             )
+            .chain(insights)
             .chain(target)
     }
 }
@@ -70,13 +73,14 @@ impl Advisor for LlmAdvisor {
         &'event self,
         past_events: I,
         target_energy_production_rate: f64,
+        insights: Option<&'event Insights>,
     ) -> Result<Advice>
     where
         I: IntoIterator<Item = &'event PastEvent> + Send,
         I::IntoIter: Send,
     {
         info!("creating message");
-        let prompt_info = self.prompt_info(past_events, target_energy_production_rate);
+        let prompt_info = self.prompt_info(past_events, target_energy_production_rate, insights);
 
         info!("awaiting llm response");
         let ret = self.backend.fetch(prompt_info).await?;
@@ -90,6 +94,7 @@ pub(crate) enum PromptInfo<'msg> {
     Snapshot(&'msg Snapshot),
     PastAction(&'msg PastAction),
     Feedback(&'msg Feedback),
+    Insights(&'msg Insights),
     TargetEnergyProductionRate(f64),
 }
 
@@ -155,6 +160,19 @@ impl PromptInfo<'_> {
                     {feedback}
                 "
             },
+            Self::Insights(insights) => {
+                let quoted_insights = insights.as_str()
+                    .lines()
+                    .collect::<Vec<_>>()
+                    .join("\n> ");
+                formatdoc! {
+                    "
+                        # Insights
+
+                        > {quoted_insights}
+                    "
+                }
+            },
             Self::TargetEnergyProductionRate(target) => formatdoc!(
                 "
                     # Your current goal
@@ -187,7 +205,7 @@ mod tests {
     use insta::assert_snapshot;
 
     use crate::advisor::llm_advisor::backend::OpenAiBackend;
-    use crate::advisor::{AdvisedAction, PastAction, Snapshot};
+    use crate::advisor::{AdvisedAction, Insights, PastAction, Snapshot};
     use crate::components::reactor::{
         ActualBurnRate, IntactReactorSnapshot, ReactorMode, ReactorSnapshot, TargetBurnRate,
     };
@@ -223,6 +241,10 @@ mod tests {
         };
         let backend = OpenAiBackend::new(&config);
         let advisor = LlmAdvisor::new(config, backend);
+        let insights = Insights::from(
+            "Burn-rate increases took two snapshots to affect turbine output.\nAvoid rapid oscillation."
+                .to_owned(),
+        );
         let past_events = vec![
             PastEvent::Snapshot(Snapshot {
                 timestamp: IngameDateTime::from("2026-05-03T16:24:11".to_owned()),
@@ -263,7 +285,7 @@ mod tests {
             }),
         ];
         let prompt_repr = advisor
-            .prompt_info(&past_events, 1_250.0)
+            .prompt_info(&past_events, 1_250.0, Some(&insights))
             .map(|info| info.summary())
             .collect::<Vec<_>>()
             .join("\n---\n");
@@ -332,6 +354,21 @@ mod tests {
 
         assert!(summary.starts_with('#'));
         assert_snapshot!(summary);
+    }
+
+    #[test]
+    fn test_prompt_info_summary_insights() {
+        let insights = Insights::from(
+            "Burn-rate increases took two snapshots to affect turbine output.\nAvoid rapid oscillation."
+                .to_owned(),
+        );
+        let summary = PromptInfo::Insights(&insights).summary();
+
+        assert!(summary.starts_with('#'));
+        assert!(
+            summary.contains("> Burn-rate increases took two snapshots to affect turbine output.")
+        );
+        assert!(summary.contains("> Avoid rapid oscillation."));
     }
 
     #[test]

@@ -152,6 +152,14 @@ impl TryFrom<PromptInfo<'_>> for ChatCompletionRequestMessage {
                     .into();
                 Ok(ret)
             }
+            PromptInfo::Insights(_) => {
+                let ret = ChatCompletionRequestUserMessageArgs::default()
+                    .name("memory-bank")
+                    .content(summary)
+                    .build()?
+                    .into();
+                Ok(ret)
+            }
             PromptInfo::TargetEnergyProductionRate(_) => {
                 let ret = ChatCompletionRequestUserMessageArgs::default()
                     .name("boss")
