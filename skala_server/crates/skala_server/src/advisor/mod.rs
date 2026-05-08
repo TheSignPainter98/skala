@@ -16,7 +16,7 @@ pub trait Advisor: Debug + Send + Sync {
         &'event self,
         past_events: I,
         target_energy_production_rate: f64,
-        insights: Option<&'event Insights>,
+        system_knowledge: Option<&'event SystemKnowledge>,
     ) -> impl Future<Output = Result<Advice>> + Send
     where
         I: IntoIterator<Item = &'event PastEvent> + Send,
@@ -65,16 +65,8 @@ pub struct Advice {
     #[schemars(length(max = 120))]
     pub reasoning: String,
 
-    /// The updated insights into how the system works. If nothing useful has been learned,
-    /// set this to the quoted portion of the 'Past insights' section you were passed in your
-    /// prompt.
-    ///
-    /// If more has been understood about the system set the new 'insights' here. If present, these
-    /// insights will be passed to you the next time you need to operate the reactor. You will
-    /// forget all information you do not place here. Setting this field is the only way you have to
-    /// learn about the system over the long term. If this field is unset, it means that you believe
-    /// that your current insights are sufficient to operate the reactor safely.
-    pub insight_update: Option<Insights>,
+    /// The current understanding of how the system works.
+    pub system_knowledge: Option<SystemKnowledge>,
 }
 
 /// Holds the action to apply to the reactor.
@@ -110,24 +102,24 @@ pub enum AdvisedAction {
 )]
 #[serde(transparent)]
 #[sqlx(transparent)]
-pub struct Insights(String);
+pub struct SystemKnowledge(String);
 
-impl Insights {
+impl SystemKnowledge {
     pub(crate) fn as_str(&self) -> &str {
         let Self(inner) = self;
         inner
     }
 }
 
-impl From<String> for Insights {
+impl From<String> for SystemKnowledge {
     fn from(inner: String) -> Self {
         Self(inner)
     }
 }
 
-impl From<Insights> for String {
-    fn from(insights: Insights) -> Self {
-        let Insights(inner) = insights;
+impl From<SystemKnowledge> for String {
+    fn from(system_knowledge: SystemKnowledge) -> Self {
+        let SystemKnowledge(inner) = system_knowledge;
         inner
     }
 }

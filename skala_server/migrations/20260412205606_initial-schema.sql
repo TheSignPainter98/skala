@@ -98,7 +98,7 @@ CREATE TABLE feedback (
     content TEXT NOT NULL
 ) STRICT;
 
-CREATE TABLE insight (
+CREATE TABLE system_knowledge (
     event_id INTEGER NOT NULL
         PRIMARY KEY
         REFERENCES event(id)

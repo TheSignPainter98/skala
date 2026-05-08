@@ -3,12 +3,16 @@ use std::fmt::Debug;
 use axum_test::TestServer;
 use skala_server::{
     App, Result,
-    advisor::{Advice, Advisor, Insights, PastEvent},
+    advisor::{Advice, Advisor, PastEvent, SystemKnowledge},
 };
 use sqlx::SqlitePool;
 use tokio::sync::Mutex;
 
-type AdviceFn = dyn for<'event> FnMut(Vec<&'event PastEvent>, f64, Option<&'event Insights>) -> Result<Advice>
+type AdviceFn = dyn for<'event> FnMut(
+        Vec<&'event PastEvent>,
+        f64,
+        Option<&'event SystemKnowledge>,
+    ) -> Result<Advice>
     + Send
     + 'static;
 
@@ -27,7 +31,7 @@ impl MockAdvisor {
         advice_fn: impl for<'event> FnMut(
             Vec<&'event PastEvent>,
             f64,
-            Option<&'event Insights>,
+            Option<&'event SystemKnowledge>,
         ) -> Result<Advice>
         + Send
         + 'static,
@@ -49,7 +53,7 @@ impl Advisor for MockAdvisor {
         &'event self,
         past_events: I,
         target_energy_production_rate: f64,
-        insights: Option<&'event Insights>,
+        system_knowledge: Option<&'event SystemKnowledge>,
     ) -> Result<Advice>
     where
         I: IntoIterator<Item = &'event PastEvent> + Send,
@@ -58,7 +62,7 @@ impl Advisor for MockAdvisor {
         self.advice_fn.lock().await(
             past_events.into_iter().collect(),
             target_energy_production_rate,
-            insights,
+            system_knowledge,
         )
     }
 }

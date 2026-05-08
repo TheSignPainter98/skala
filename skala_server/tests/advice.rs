@@ -1,7 +1,7 @@
 mod common;
 
 use serde_json::{Value, json};
-use skala_server::advisor::{Advice, AdvisedAction, Insights, PastEvent, Snapshot};
+use skala_server::advisor::{Advice, AdvisedAction, PastEvent, Snapshot, SystemKnowledge};
 use skala_server::{
     ActualBurnRate, IntactReactorSnapshot, IntactTurbineSnapshot, ReactorMode, ReactorSnapshot,
     TargetBurnRate, TurbineSnapshot,
@@ -12,7 +12,7 @@ use crate::common::MockAdvisor;
 
 type PastEventsCheck = Box<dyn Fn(Vec<&PastEvent>) + Send>;
 type TargetBurnRateCheck = Box<dyn Fn(f64) + Send>;
-type InsightsCheck = Box<dyn Fn(Option<&Insights>) + Send>;
+type SystemKnowledgeCheck = Box<dyn Fn(Option<&SystemKnowledge>) + Send>;
 
 #[sqlx::test(migrations = "./migrations")]
 async fn test_destroyed_reactor(db_pool: SqlitePool) {
@@ -73,7 +73,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
         .advice(Advice {
             action: AdvisedAction::NoAction,
             reasoning: "all good".into(),
-            insight_update: Some(Insights::from(
+            system_knowledge: Some(SystemKnowledge::from(
                 "Inactive reactor remained stable.".to_owned(),
             )),
         })
@@ -84,7 +84,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                     "kind": "no-action",
                 },
                 "reasoning": "all good",
-                "insight_update": "Inactive reactor remained stable.",
+                "system_knowledge": "Inactive reactor remained stable.",
             },
         }))
         .check_past_events(|past_events| {
@@ -144,7 +144,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
             assert_eq!(*stored_kinetic_energy, 789.0);
             assert_eq!(*energy_production_rate, 456.0);
         })
-        .check_insights(|insights| assert!(insights.is_none()))
+        .check_system_knowledge(|knowledge| assert!(knowledge.is_none()))
         .check_target_burn_rate(|rate| assert_eq!(rate, TARGET_ENERGY_PRODUCTION_RATE))
         .run(db_pool)
         .await;
@@ -186,7 +186,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 new_target_burn_rate: 1000.into(),
             },
             reasoning: "let's see what happens".into(),
-            insight_update: Some(Insights::from(
+            system_knowledge: Some(SystemKnowledge::from(
                 "Initial active response requested more burn.".to_owned(),
             )),
         })
@@ -198,7 +198,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                     "new_target_burn_rate": 1000,
                 },
                 "reasoning": "let's see what happens",
-                "insight_update": "Initial active response requested more burn.",
+                "system_knowledge": "Initial active response requested more burn.",
             },
         }))
         .check_past_events(|events| {
@@ -213,17 +213,18 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 })],
             ));
         })
-        .check_insights(|insights| assert!(insights.is_none()))
+        .check_system_knowledge(|knowledge| assert!(knowledge.is_none()))
         .check_target_burn_rate(|rate| assert_eq!(rate, TARGET_ENERGY_PRODUCTION_RATE))
         .run(db_pool)
         .await;
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn test_previous_insights_are_passed_to_advisor(db_pool: SqlitePool) {
+async fn test_knowledge_retention(db_pool: SqlitePool) {
     const REACTOR_NAME: &str = "pop";
-    const FIRST_INSIGHTS: &str = "A 100 mL/s burn-rate increase lifted output after one snapshot.";
-    const UPDATED_INSIGHTS: &str = "Holding the new burn rate kept output stable.";
+    const INITIAL_SYSTEM_KNOWLEDGE: &str =
+        "A 100 mL/s burn-rate increase lifted output after one snapshot.";
+    const SYSTEM_KNOWLEDGE: &str = "Holding the new burn rate kept output stable.";
 
     Test::new()
         .reactor_name(REACTOR_NAME)
@@ -231,7 +232,7 @@ async fn test_previous_insights_are_passed_to_advisor(db_pool: SqlitePool) {
         .advice(Advice {
             action: AdvisedAction::NoAction,
             reasoning: "collect baseline".into(),
-            insight_update: Some(Insights::from(FIRST_INSIGHTS.to_owned())),
+            system_knowledge: Some(SystemKnowledge::from(INITIAL_SYSTEM_KNOWLEDGE.to_owned())),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
@@ -240,10 +241,10 @@ async fn test_previous_insights_are_passed_to_advisor(db_pool: SqlitePool) {
                     "kind": "no-action",
                 },
                 "reasoning": "collect baseline",
-                "insight_update": FIRST_INSIGHTS,
+                "system_knowledge": INITIAL_SYSTEM_KNOWLEDGE,
             },
         }))
-        .check_insights(|insights| assert!(insights.is_none()))
+        .check_system_knowledge(|knowledge| assert!(knowledge.is_none()))
         .run(db_pool.clone())
         .await;
 
@@ -253,7 +254,7 @@ async fn test_previous_insights_are_passed_to_advisor(db_pool: SqlitePool) {
         .advice(Advice {
             action: AdvisedAction::NoAction,
             reasoning: "hold steady".into(),
-            insight_update: Some(Insights::from(UPDATED_INSIGHTS.to_owned())),
+            system_knowledge: Some(SystemKnowledge::from(SYSTEM_KNOWLEDGE.to_owned())),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
@@ -262,12 +263,12 @@ async fn test_previous_insights_are_passed_to_advisor(db_pool: SqlitePool) {
                     "kind": "no-action",
                 },
                 "reasoning": "hold steady",
-                "insight_update": UPDATED_INSIGHTS,
+                "system_knowledge": SYSTEM_KNOWLEDGE,
             },
         }))
-        .check_insights(|insights| {
-            let insights = insights.cloned().map(String::from);
-            assert_eq!(insights.as_deref(), Some(FIRST_INSIGHTS));
+        .check_system_knowledge(|knowledge| {
+            let knowledge = knowledge.cloned().map(String::from);
+            assert_eq!(knowledge.as_deref(), Some(INITIAL_SYSTEM_KNOWLEDGE));
         })
         .run(db_pool)
         .await;
@@ -279,7 +280,7 @@ struct Test {
     input: Option<Value>,
     check_past_events: Option<PastEventsCheck>,
     check_target_burn_rate: Option<TargetBurnRateCheck>,
-    check_insights: Option<InsightsCheck>,
+    check_system_knowledge: Option<SystemKnowledgeCheck>,
     advice: Option<Advice>,
     expected_response: Option<Value>,
 }
@@ -291,7 +292,7 @@ impl Test {
             input: None,
             check_past_events: None,
             check_target_burn_rate: None,
-            check_insights: None,
+            check_system_knowledge: None,
             advice: None,
             expected_response: None,
         }
@@ -317,8 +318,11 @@ impl Test {
         self
     }
 
-    fn check_insights(mut self, f: impl Fn(Option<&Insights>) + Send + 'static) -> Self {
-        self.check_insights = Some(Box::new(f));
+    fn check_system_knowledge(
+        mut self,
+        f: impl Fn(Option<&SystemKnowledge>) + Send + 'static,
+    ) -> Self {
+        self.check_system_knowledge = Some(Box::new(f));
         self
     }
 
@@ -338,7 +342,7 @@ impl Test {
             input,
             check_past_events,
             check_target_burn_rate,
-            check_insights,
+            check_system_knowledge,
             advice,
             expected_response,
         } = self;
@@ -347,7 +351,7 @@ impl Test {
         let expected_response = expected_response.expect("no expected response");
 
         let advisor = {
-            MockAdvisor::new(move |reactor_states, target_burn_rate, insights| {
+            MockAdvisor::new(move |reactor_states, target_burn_rate, knowledge| {
                 let advice = advice.clone().expect("no advice");
                 if let Some(check_past_events) = &check_past_events {
                     check_past_events(reactor_states);
@@ -356,8 +360,8 @@ impl Test {
                 if let Some(check_target_burn_rate) = &check_target_burn_rate {
                     check_target_burn_rate(target_burn_rate);
                 }
-                if let Some(check_insights) = &check_insights {
-                    check_insights(insights);
+                if let Some(check_system_knowledge) = &check_system_knowledge {
+                    check_system_knowledge(knowledge);
                 }
                 Ok(advice)
             })

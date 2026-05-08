@@ -12,7 +12,7 @@ use serde_json::Value;
 use crate::advisor::feedback::FeedbackProvider;
 use crate::advisor::llm_advisor::backend::Backend;
 use crate::advisor::llm_advisor::biased_alternate::BiasedAlternateWithExt;
-use crate::advisor::{Advice, Advisor, Insights, PastAction, PastEvent, Snapshot};
+use crate::advisor::{Advice, Advisor, PastAction, PastEvent, Snapshot, SystemKnowledge};
 use crate::{Feedback, LlmConfig, ReactorSnapshot, Result, TurbineSnapshot};
 
 #[derive(Clone, Debug)]
@@ -46,14 +46,18 @@ impl LlmAdvisor {
         &'info self,
         past_events: impl IntoIterator<Item = &'info PastEvent>,
         target_energy_production_rate: f64,
-        insights: Option<&'info Insights>,
+        system_knowledge: Option<&'info SystemKnowledge>,
     ) -> impl Iterator<Item = PromptInfo<'info>> {
         let past_events = past_events.into_iter().map(|event| match event {
             PastEvent::Snapshot(snapshot) => PromptInfo::Snapshot(snapshot),
             PastEvent::PastAction(action) => PromptInfo::PastAction(action),
         });
         let feedback = self.feedback_provider.feedback().map(PromptInfo::Feedback);
-        let insights = insights.map(PromptInfo::Insights);
+        let system_knowledge = iter::once(
+            system_knowledge
+                .map(PromptInfo::SystemKnowledge)
+                .unwrap_or(PromptInfo::MissingSystemKnowledge),
+        );
         let target = iter::once(PromptInfo::TargetEnergyProductionRate(
             target_energy_production_rate,
         ));
@@ -63,7 +67,7 @@ impl LlmAdvisor {
                     .biased_alternate_with(feedback)
                     .on(|event| matches!(event, PromptInfo::PastAction(_))),
             )
-            .chain(insights)
+            .chain(system_knowledge)
             .chain(target)
     }
 }
@@ -73,14 +77,15 @@ impl Advisor for LlmAdvisor {
         &'event self,
         past_events: I,
         target_energy_production_rate: f64,
-        insights: Option<&'event Insights>,
+        system_knowledge: Option<&'event SystemKnowledge>,
     ) -> Result<Advice>
     where
         I: IntoIterator<Item = &'event PastEvent> + Send,
         I::IntoIter: Send,
     {
         info!("creating message");
-        let prompt_info = self.prompt_info(past_events, target_energy_production_rate, insights);
+        let prompt_info =
+            self.prompt_info(past_events, target_energy_production_rate, system_knowledge);
 
         info!("awaiting llm response");
         let ret = self.backend.fetch(prompt_info).await?;
@@ -94,7 +99,8 @@ pub(crate) enum PromptInfo<'msg> {
     Snapshot(&'msg Snapshot),
     PastAction(&'msg PastAction),
     Feedback(&'msg Feedback),
-    Insights(&'msg Insights),
+    SystemKnowledge(&'msg SystemKnowledge),
+    MissingSystemKnowledge,
     TargetEnergyProductionRate(f64),
 }
 
@@ -160,8 +166,8 @@ impl PromptInfo<'_> {
                     {feedback}
                 "
             },
-            Self::Insights(insights) => {
-                let quoted_insights = insights.as_str()
+            Self::SystemKnowledge(system_knowledge) => {
+                let quoted_system_knowledge = system_knowledge.as_str()
                     .lines()
                     .collect::<Vec<_>>()
                     .join("\n> ");
@@ -169,10 +175,17 @@ impl PromptInfo<'_> {
                     "
                         # Insights
 
-                        > {quoted_insights}
+                        > {quoted_system_knowledge}
                     "
                 }
             },
+            Self::MissingSystemKnowledge => {
+                formatdoc! {"
+                    # System knowledge
+
+                    No inferred knowledge recorded yet. Set the `system_knowledge` field in the output.
+                "}
+            }
             Self::TargetEnergyProductionRate(target) => formatdoc!(
                 "
                     # Your current goal
@@ -205,7 +218,7 @@ mod tests {
     use insta::assert_snapshot;
 
     use crate::advisor::llm_advisor::backend::OpenAiBackend;
-    use crate::advisor::{AdvisedAction, Insights, PastAction, Snapshot};
+    use crate::advisor::{AdvisedAction, PastAction, Snapshot, SystemKnowledge};
     use crate::components::reactor::{
         ActualBurnRate, IntactReactorSnapshot, ReactorMode, ReactorSnapshot, TargetBurnRate,
     };
@@ -241,7 +254,7 @@ mod tests {
         };
         let backend = OpenAiBackend::new(&config);
         let advisor = LlmAdvisor::new(config, backend);
-        let insights = Insights::from(
+        let system_knowledge = SystemKnowledge::from(
             "Burn-rate increases took two snapshots to affect turbine output.\nAvoid rapid oscillation."
                 .to_owned(),
         );
@@ -285,7 +298,7 @@ mod tests {
             }),
         ];
         let prompt_repr = advisor
-            .prompt_info(&past_events, 1_250.0, Some(&insights))
+            .prompt_info(&past_events, 1_250.0, Some(&system_knowledge))
             .map(|info| info.summary())
             .collect::<Vec<_>>()
             .join("\n---\n");
@@ -357,12 +370,12 @@ mod tests {
     }
 
     #[test]
-    fn test_prompt_info_summary_insights() {
-        let insights = Insights::from(
+    fn test_prompt_info_summary_system_knowledge() {
+        let system_knowledge = SystemKnowledge::from(
             "Burn-rate increases took two snapshots to affect turbine output.\nAvoid rapid oscillation."
                 .to_owned(),
         );
-        let summary = PromptInfo::Insights(&insights).summary();
+        let summary = PromptInfo::SystemKnowledge(&system_knowledge).summary();
 
         assert!(summary.starts_with('#'));
         assert!(

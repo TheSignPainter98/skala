@@ -139,6 +139,7 @@ impl TryFrom<PromptInfo<'_>> for ChatCompletionRequestMessage {
             }
             PromptInfo::PastAction(_) => {
                 let ret = ChatCompletionRequestAssistantMessageArgs::default()
+                    .name("past-action-monitor")
                     .content(summary)
                     .build()?
                     .into();
@@ -152,7 +153,7 @@ impl TryFrom<PromptInfo<'_>> for ChatCompletionRequestMessage {
                     .into();
                 Ok(ret)
             }
-            PromptInfo::Insights(_) => {
+            PromptInfo::SystemKnowledge(_) | PromptInfo::MissingSystemKnowledge => {
                 let ret = ChatCompletionRequestUserMessageArgs::default()
                     .name("memory-bank")
                     .content(summary)
