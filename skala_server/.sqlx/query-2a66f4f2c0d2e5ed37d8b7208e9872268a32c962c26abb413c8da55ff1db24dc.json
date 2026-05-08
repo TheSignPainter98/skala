@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT MAX(event.irl_timestamp) AS _ignore, content\n            FROM system_knowledge\n            JOIN event\n            ON system_knowledge.event_id = event.id\n            WHERE event.reactor_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "_ignore",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "content",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "2a66f4f2c0d2e5ed37d8b7208e9872268a32c962c26abb413c8da55ff1db24dc"
+}

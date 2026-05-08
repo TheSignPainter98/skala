@@ -1,0 +1,104 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                event.id,\n                snapshot.mode,\n                snapshot.temperature,\n                snapshot.coolant_filled,\n                snapshot.heated_coolant_filled,\n                snapshot.fuel_filled,\n                snapshot.waste_filled,\n                snapshot.actual_burn_rate,\n                snapshot.target_burn_rate,\n                snapshot.damage_percent,\n                snapshot.heating_rate,\n                snapshot.boil_efficiency,\n                snapshot.stored_kinetic_energy,\n                snapshot.energy_production_rate,\n                event.ingame_timestamp\n            FROM snapshot\n            JOIN event\n            ON snapshot.event_id = event.id\n            WHERE event.reactor_id = ?\n            ORDER BY event.irl_timestamp DESC\n            LIMIT ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "mode",
+        "ordinal": 1,
+        "type_info": "Integer"
+      },
+      {
+        "name": "temperature",
+        "ordinal": 2,
+        "type_info": "Float"
+      },
+      {
+        "name": "coolant_filled",
+        "ordinal": 3,
+        "type_info": "Float"
+      },
+      {
+        "name": "heated_coolant_filled",
+        "ordinal": 4,
+        "type_info": "Float"
+      },
+      {
+        "name": "fuel_filled",
+        "ordinal": 5,
+        "type_info": "Float"
+      },
+      {
+        "name": "waste_filled",
+        "ordinal": 6,
+        "type_info": "Float"
+      },
+      {
+        "name": "actual_burn_rate",
+        "ordinal": 7,
+        "type_info": "Float"
+      },
+      {
+        "name": "target_burn_rate",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "damage_percent",
+        "ordinal": 9,
+        "type_info": "Float"
+      },
+      {
+        "name": "heating_rate",
+        "ordinal": 10,
+        "type_info": "Float"
+      },
+      {
+        "name": "boil_efficiency",
+        "ordinal": 11,
+        "type_info": "Float"
+      },
+      {
+        "name": "stored_kinetic_energy",
+        "ordinal": 12,
+        "type_info": "Float"
+      },
+      {
+        "name": "energy_production_rate",
+        "ordinal": 13,
+        "type_info": "Float"
+      },
+      {
+        "name": "ingame_timestamp",
+        "ordinal": 14,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "9e68dae698099730db9413d2af9b8369422b55414b75355e6c22bc1e99949a4b"
+}

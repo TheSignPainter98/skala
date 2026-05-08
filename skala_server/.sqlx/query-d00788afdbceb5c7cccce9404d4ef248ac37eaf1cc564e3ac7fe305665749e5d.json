@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                INSERT INTO system_knowledge (event_id, content)\n                VALUES (?, ?)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d00788afdbceb5c7cccce9404d4ef248ac37eaf1cc564e3ac7fe305665749e5d"
+}

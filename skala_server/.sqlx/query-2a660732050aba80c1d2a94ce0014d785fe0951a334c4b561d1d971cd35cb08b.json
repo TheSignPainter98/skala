@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT\n                event.id,\n                event.ingame_timestamp AS timestamp,\n                advice.action,\n                advice.new_target_burn_rate\n            FROM advice\n            JOIN event\n            ON advice.event_id = event.id\n            WHERE event.reactor_id = ?\n            ORDER BY event.irl_timestamp DESC\n            LIMIT ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "timestamp",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "action",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "new_target_burn_rate",
+        "ordinal": 3,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "2a660732050aba80c1d2a94ce0014d785fe0951a334c4b561d1d971cd35cb08b"
+}

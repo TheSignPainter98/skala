@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO advice (event_id, action, reasoning, new_target_burn_rate)\n            VALUES (?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "0d81599ab82996a702b220e5a15412524e1a8c7466353d2db7cb6a4c91ed3aba"
+}
