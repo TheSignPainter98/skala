@@ -282,7 +282,7 @@ async fn test_set_target_returns_plain_text(db_pool: SqlitePool) {
 
     resp.assert_status_ok();
     assert_eq!(
-        "Target energy production rate for reactor 1 set to 1500.5",
+        "Target energy production rate for reactor pop set to 1500.5",
         resp.text()
     );
 }

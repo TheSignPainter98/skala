@@ -46,6 +46,6 @@ pub(crate) async fn route(
     txn.commit().await?;
 
     Ok(format!(
-        "Target energy production rate for reactor {reactor_id} set to {rate}"
+        "Target energy production rate for reactor {reactor_name} set to {rate}"
     ))
 }
