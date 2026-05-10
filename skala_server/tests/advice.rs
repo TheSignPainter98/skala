@@ -281,7 +281,10 @@ async fn test_set_target_returns_plain_text(db_pool: SqlitePool) {
         .await;
 
     resp.assert_status_ok();
-    assert_eq!("Target energy production rate set to 1500.5", resp.text());
+    assert_eq!(
+        "Target energy production rate for reactor 1 set to 1500.5",
+        resp.text()
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

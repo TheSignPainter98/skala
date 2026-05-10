@@ -150,6 +150,13 @@ impl From<i64> for ReactorId {
     }
 }
 
+impl Display for ReactorId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(inner) = self;
+        inner.fmt(f)
+    }
+}
+
 #[derive(Clone, Debug, quicktype::Quicktype, serde::Deserialize, serde::Serialize, sqlx::Type)]
 #[sqlx(transparent)]
 #[quicktype(namespace = "server")]
