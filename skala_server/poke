@@ -5,6 +5,7 @@ for i in $(seq 10); do
     curl -X POST --header "Content-Type: application/json" -d @- http://localhost:15000/advice <<-EOF
         {
             "reactor_name": "kcza'z diskount reakter",
+            "target_energy_production_rate": 1000.0,
             "reactor_state": {
                 "integrity": "intact",
                 "mode": "active",
@@ -18,6 +19,11 @@ for i in $(seq 10); do
                 "damage_percent": 100,
                 "heating_rate": 100,
                 "boil_efficiency": 100
+            },
+            "turbine_state": {
+                "integrity": "intact",
+                "stored_kinetic_energy": 100,
+                "energy_production_rate": 1000
             },
             "timestamp": "$timestamp"
         }
