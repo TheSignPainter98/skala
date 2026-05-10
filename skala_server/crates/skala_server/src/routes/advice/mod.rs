@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use axum::extract::{Json, State};
 use futures_util::StreamExt;
 use log::{info, warn};
@@ -11,6 +9,7 @@ use crate::advisor::{
 };
 use crate::components::reactor::{IntactReactorSnapshot, ReactorId, ReactorName, ReactorSnapshot};
 use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
+use crate::routes::common::{EventId, get_reactor_id, register_event};
 use crate::time::{IngameDateTime, IrlDateTime};
 use crate::{Result, app::AppState};
 
@@ -81,6 +80,11 @@ pub(crate) async fn route(
             info!("getting past system knowledge...");
             let system_knowledge = get_system_knowledge(&mut txn, reactor_id).await?;
 
+            info!("getting target energy production rate...");
+            let target_energy_production_rate = get_production_target(&mut txn, reactor_id)
+                .await?
+                .unwrap_or(target_energy_production_rate);
+
             info!("getting advice...");
             let advice = app_state
                 .advisor
@@ -104,35 +108,6 @@ pub(crate) async fn route(
         reactor_name,
         advice,
     }))
-}
-
-async fn get_reactor_id(txn: &mut SqliteTransaction<'_>, name: &ReactorName) -> Result<ReactorId> {
-    struct Row {
-        id: i64,
-    }
-    let id_query = query_as!(
-        Row,
-        "
-            SELECT id
-            FROM reactor
-            WHERE name = ?
-        ",
-        name,
-    );
-    let id = id_query.fetch_optional(&mut **txn).await?;
-    if let Some(Row { id }) = id {
-        return Ok(ReactorId::from(id));
-    }
-
-    let name_insertion_query = query!(
-        "
-            INSERT INTO reactor (name)
-            VALUES (?)
-        ",
-        name
-    );
-    let info = name_insertion_query.execute(&mut **txn).await?;
-    Ok(ReactorId::from(info.last_insert_rowid()))
 }
 
 async fn get_system_snapshots(
@@ -349,6 +324,32 @@ fn collate_history(snapshots: Vec<Snapshot>, past_actions: Vec<PastAction>) -> V
     ret
 }
 
+async fn get_production_target(
+    txn: &mut SqliteTransaction<'_>,
+    reactor_id: ReactorId,
+) -> Result<Option<f64>> {
+    struct Row {
+        rate: f64,
+    }
+    let production_target_query = query_as!(
+        Row,
+        "
+            SELECT production_target.rate
+            FROM production_target
+            JOIN event
+            ON production_target.event_id = event.id
+            WHERE event.reactor_id = ?
+            ORDER BY event.irl_timestamp DESC, event.id DESC
+            LIMIT 1
+        ",
+        reactor_id,
+    );
+    Ok(production_target_query
+        .fetch_optional(&mut **txn)
+        .await?
+        .map(|row| row.rate))
+}
+
 async fn get_system_knowledge(
     txn: &mut SqliteTransaction<'_>,
     reactor_id: ReactorId,
@@ -370,46 +371,6 @@ async fn get_system_knowledge(
     );
     let maybe_row = system_knowledge_query.fetch_optional(&mut **txn).await?;
     Ok(maybe_row.and_then(|row| row.content).map(Into::into))
-}
-
-#[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize, sqlx::Type)]
-#[sqlx(transparent)]
-pub(crate) struct EventId(i64);
-
-impl From<i64> for EventId {
-    fn from(inner: i64) -> Self {
-        Self(inner)
-    }
-}
-
-impl Display for EventId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let Self(inner) = self;
-        inner.fmt(f)
-    }
-}
-
-async fn register_event(
-    txn: &mut SqliteTransaction<'_>,
-    reactor_id: ReactorId,
-    irl_timestamp: IrlDateTime,
-    ingame_timestamp: IngameDateTime,
-) -> Result<EventId> {
-    let irl_timestamp = irl_timestamp.unix_timestamp();
-    let event_insertion_query = query!(
-        "
-            INSERT INTO event (reactor_id, irl_timestamp, ingame_timestamp)
-            VALUES (?, ?, ?)
-        ",
-        reactor_id,
-        irl_timestamp,
-        ingame_timestamp,
-    );
-    let id = event_insertion_query
-        .execute(&mut **txn)
-        .await?
-        .last_insert_rowid();
-    Ok(EventId(id))
 }
 
 async fn store_system_state(
@@ -525,17 +486,15 @@ async fn record_advice(
     );
     advice_insertion_query.execute(&mut **txn).await?;
 
-    if let Some(system_knowledge) = system_knowledge {
-        let system_knowledge_query = query!(
-            "
-                INSERT INTO system_knowledge (event_id, content)
-                VALUES (?, ?)
-            ",
-            event_id,
-            system_knowledge,
-        );
-        system_knowledge_query.execute(&mut **txn).await?;
-    }
+    let system_knowledge_query = query!(
+        "
+            INSERT INTO system_knowledge (event_id, content)
+            VALUES (?, ?)
+        ",
+        event_id,
+        system_knowledge,
+    );
+    system_knowledge_query.execute(&mut **txn).await?;
     Ok(())
 }
 
@@ -680,7 +639,7 @@ mod tests {
         Advice {
             action: AdvisedAction::NoAction,
             reasoning: "No control change needed.".to_owned(),
-            system_knowledge: Some(SystemKnowledge::from(system_knowledge.to_owned())),
+            system_knowledge: SystemKnowledge::from(system_knowledge.to_owned()),
         }
     }
 }

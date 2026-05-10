@@ -19,15 +19,13 @@ expression: schema_for!(Advice)
     },
     "system_knowledge": {
       "description": "The current understanding of how the system works.",
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     }
   },
   "required": [
     "action",
-    "reasoning"
+    "reasoning",
+    "system_knowledge"
   ],
   "$defs": {
     "AdvisedAction": {

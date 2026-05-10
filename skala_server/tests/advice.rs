@@ -6,7 +6,7 @@ use skala_server::{
     ActualBurnRate, IntactReactorSnapshot, IntactTurbineSnapshot, ReactorMode, ReactorSnapshot,
     TargetBurnRate, TurbineSnapshot,
 };
-use sqlx::SqlitePool;
+use sqlx::{Row, SqlitePool};
 
 use crate::common::MockAdvisor;
 
@@ -73,9 +73,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
         .advice(Advice {
             action: AdvisedAction::NoAction,
             reasoning: "all good".into(),
-            system_knowledge: Some(SystemKnowledge::from(
-                "Inactive reactor remained stable.".to_owned(),
-            )),
+            system_knowledge: SystemKnowledge::from("Inactive reactor remained stable.".to_owned()),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
@@ -186,9 +184,9 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 new_target_burn_rate: 1000.into(),
             },
             reasoning: "let's see what happens".into(),
-            system_knowledge: Some(SystemKnowledge::from(
+            system_knowledge: SystemKnowledge::from(
                 "Initial active response requested more burn.".to_owned(),
-            )),
+            ),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
@@ -232,7 +230,7 @@ async fn test_knowledge_retention(db_pool: SqlitePool) {
         .advice(Advice {
             action: AdvisedAction::NoAction,
             reasoning: "collect baseline".into(),
-            system_knowledge: Some(SystemKnowledge::from(INITIAL_SYSTEM_KNOWLEDGE.to_owned())),
+            system_knowledge: SystemKnowledge::from(INITIAL_SYSTEM_KNOWLEDGE.to_owned()),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
@@ -254,7 +252,7 @@ async fn test_knowledge_retention(db_pool: SqlitePool) {
         .advice(Advice {
             action: AdvisedAction::NoAction,
             reasoning: "hold steady".into(),
-            system_knowledge: Some(SystemKnowledge::from(SYSTEM_KNOWLEDGE.to_owned())),
+            system_knowledge: SystemKnowledge::from(SYSTEM_KNOWLEDGE.to_owned()),
         })
         .expected_response(json!({
             "reactor_name": REACTOR_NAME,
@@ -270,6 +268,109 @@ async fn test_knowledge_retention(db_pool: SqlitePool) {
             let knowledge = knowledge.cloned().map(String::from);
             assert_eq!(knowledge.as_deref(), Some(INITIAL_SYSTEM_KNOWLEDGE));
         })
+        .run(db_pool)
+        .await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_set_target_returns_plain_text(db_pool: SqlitePool) {
+    let test_server = common::setup(db_pool, default_advisor());
+
+    let resp = test_server
+        .get("/set-target?reactor_name=pop&rate=1500.5")
+        .await;
+
+    resp.assert_status_ok();
+    assert_eq!("Target energy production rate set to 1500.5", resp.text());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_set_target_creates_event_and_production_target(db_pool: SqlitePool) {
+    let test_server = common::setup(db_pool.clone(), default_advisor());
+
+    test_server
+        .get("/set-target?reactor_name=pop&rate=1500.5")
+        .await
+        .assert_status_ok();
+
+    let row = sqlx::query(
+        "
+            SELECT event.ingame_timestamp, production_target.rate
+            FROM production_target
+            JOIN event
+            ON production_target.event_id = event.id
+            JOIN reactor
+            ON event.reactor_id = reactor.id
+            WHERE reactor.name = ?
+        ",
+    )
+    .bind("pop")
+    .fetch_one(&db_pool)
+    .await
+    .unwrap();
+
+    let ingame_timestamp: String = row.get("ingame_timestamp");
+    let rate: f64 = row.get("rate");
+    assert_eq!("(IRL)", ingame_timestamp);
+    assert_eq!(1500.5, rate);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_advice_uses_latest_stored_target_for_matching_reactor(db_pool: SqlitePool) {
+    const REACTOR_NAME: &str = "pop";
+
+    let test_server = common::setup(db_pool.clone(), default_advisor());
+    test_server
+        .get("/set-target?reactor_name=pop&rate=1500.5")
+        .await
+        .assert_status_ok();
+    test_server
+        .get("/set-target?reactor_name=pop&rate=1600.25")
+        .await
+        .assert_status_ok();
+
+    Test::new()
+        .reactor_name(REACTOR_NAME)
+        .input(active_request(REACTOR_NAME, "2026-04-15T00:00:00"))
+        .advice(default_advice())
+        .expected_response(default_expected_response(REACTOR_NAME))
+        .check_target_burn_rate(|rate| assert_eq!(rate, 1600.25))
+        .run(db_pool)
+        .await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_advice_uses_request_target_without_stored_target(db_pool: SqlitePool) {
+    const REACTOR_NAME: &str = "pop";
+    const TARGET_ENERGY_PRODUCTION_RATE: f64 = 1234.5;
+
+    Test::new()
+        .reactor_name(REACTOR_NAME)
+        .input(active_request(REACTOR_NAME, "2026-04-15T00:00:00"))
+        .advice(default_advice())
+        .expected_response(default_expected_response(REACTOR_NAME))
+        .check_target_burn_rate(|rate| assert_eq!(rate, TARGET_ENERGY_PRODUCTION_RATE))
+        .run(db_pool)
+        .await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_advice_targets_are_reactor_scoped(db_pool: SqlitePool) {
+    const REACTOR_NAME: &str = "pop";
+    const TARGET_ENERGY_PRODUCTION_RATE: f64 = 1234.5;
+
+    let test_server = common::setup(db_pool.clone(), default_advisor());
+    test_server
+        .get("/set-target?reactor_name=other&rate=1600.25")
+        .await
+        .assert_status_ok();
+
+    Test::new()
+        .reactor_name(REACTOR_NAME)
+        .input(active_request(REACTOR_NAME, "2026-04-15T00:00:00"))
+        .advice(default_advice())
+        .expected_response(default_expected_response(REACTOR_NAME))
+        .check_target_burn_rate(|rate| assert_eq!(rate, TARGET_ENERGY_PRODUCTION_RATE))
         .run(db_pool)
         .await;
 }
@@ -399,5 +500,30 @@ fn active_request(reactor_name: &str, timestamp: &str) -> Value {
             "energy_production_rate": 456.0,
         },
         "timestamp": timestamp,
+    })
+}
+
+fn default_advisor() -> MockAdvisor {
+    MockAdvisor::new(|_, _, _| Ok(default_advice()))
+}
+
+fn default_advice() -> Advice {
+    Advice {
+        action: AdvisedAction::NoAction,
+        reasoning: "all good".into(),
+        system_knowledge: SystemKnowledge::from("Stable baseline.".to_owned()),
+    }
+}
+
+fn default_expected_response(reactor_name: &str) -> Value {
+    json!({
+        "reactor_name": reactor_name,
+        "advice": {
+            "action": {
+                "kind": "no-action",
+            },
+            "reasoning": "all good",
+            "system_knowledge": "Stable baseline.",
+        },
     })
 }

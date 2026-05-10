@@ -66,7 +66,7 @@ pub struct Advice {
     pub reasoning: String,
 
     /// The current understanding of how the system works.
-    pub system_knowledge: Option<SystemKnowledge>,
+    pub system_knowledge: SystemKnowledge,
 }
 
 /// Holds the action to apply to the reactor.

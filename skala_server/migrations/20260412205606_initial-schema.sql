@@ -98,6 +98,15 @@ CREATE TABLE feedback (
     content TEXT NOT NULL
 ) STRICT;
 
+CREATE TABLE production_target (
+    event_id INTEGER NOT NULL
+        PRIMARY KEY
+        REFERENCES event(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+    rate REAL NOT NULL
+) STRICT;
+
 CREATE TABLE system_knowledge (
     event_id INTEGER NOT NULL
         PRIMARY KEY

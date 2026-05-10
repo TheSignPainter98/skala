@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            SELECT production_target.rate\n            FROM production_target\n            JOIN event\n            ON production_target.event_id = event.id\n            WHERE event.reactor_id = ?\n            ORDER BY event.irl_timestamp DESC, event.id DESC\n            LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "rate",
+        "ordinal": 0,
+        "type_info": "Float"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d9375e66768797ff6a1767d00064cf9a391b861c05b42449b7c3cbca1bdc6f05"
+}

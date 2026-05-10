@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            INSERT INTO production_target (event_id, rate)\n            VALUES (?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "cf168123060e130f9e298d63bc9d76bdebb313e6c925a4813aa100b1ad98557d"
+}
