@@ -1,7 +1,7 @@
 ---
 source: crates/skala_server/src/advisor/llm_advisor/mod.rs
-expression: "PromptInfo::TargetEnergyProductionRate(1_000.0).summary()"
+expression: summary
 ---
 # Your current goal
 
-We have to get the turbine's energy production rate to 1000. What do you recommend?
+We have to get the turbine's energy production rate to 1000, **safely**. What do you recommend?

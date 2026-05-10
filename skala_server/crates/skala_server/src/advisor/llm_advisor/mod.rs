@@ -190,7 +190,7 @@ impl PromptInfo<'_> {
                 "
                     # Your current goal
 
-                    We have to get the turbine's energy production rate to {target}. What do you recommend?
+                    We have to get the turbine's energy production rate to {target}, **safely**. What do you recommend?
                 "
             ),
         }
