@@ -3,7 +3,6 @@ use futures_util::StreamExt;
 use log::{info, warn};
 use sqlx::{SqliteTransaction, query, query_as};
 
-use crate::ReactorMode;
 use crate::advisor::{
     Advice, AdvisedAction, Advisor, PastAction, PastEvent, Snapshot, SystemKnowledge,
 };
@@ -11,6 +10,7 @@ use crate::components::reactor::{IntactReactorSnapshot, ReactorId, ReactorName, 
 use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
 use crate::routes::common::{EventId, get_reactor_id, register_event};
 use crate::time::{IngameDateTime, IrlDateTime};
+use crate::{MaxBurnRate, ReactorMode};
 use crate::{Result, app::AppState};
 
 #[derive(Debug, quicktype::Quicktype, serde::Deserialize)]
@@ -125,6 +125,7 @@ async fn get_system_snapshots(
         waste_filled: Option<f64>,
         actual_burn_rate: Option<f64>,
         target_burn_rate: Option<i64>,
+        max_burn_rate: Option<i64>,
         damage_percent: Option<f64>,
         heating_rate: Option<f64>,
         boil_efficiency: Option<f64>,
@@ -145,6 +146,7 @@ async fn get_system_snapshots(
                 snapshot.waste_filled,
                 snapshot.actual_burn_rate,
                 snapshot.target_burn_rate,
+                snapshot.max_burn_rate,
                 snapshot.damage_percent,
                 snapshot.heating_rate,
                 snapshot.boil_efficiency,
@@ -176,6 +178,7 @@ async fn get_system_snapshots(
                 waste_filled: Some(waste_filled),
                 actual_burn_rate: Some(actual_burn_rate),
                 target_burn_rate: Some(target_burn_rate),
+                max_burn_rate: Some(max_burn_rate),
                 damage_percent: Some(damage_percent),
                 heating_rate: Some(heating_rate),
                 boil_efficiency: Some(boil_efficiency),
@@ -186,6 +189,7 @@ async fn get_system_snapshots(
                 let mode = ReactorMode::try_from(mode)?;
                 let actual_burn_rate = actual_burn_rate.into();
                 let target_burn_rate = target_burn_rate.into();
+                let max_burn_rate = MaxBurnRate::from(max_burn_rate);
                 Snapshot {
                     timestamp: ingame_timestamp,
                     reactor: ReactorSnapshot::Intact(IntactReactorSnapshot {
@@ -197,6 +201,7 @@ async fn get_system_snapshots(
                         waste_filled,
                         actual_burn_rate,
                         target_burn_rate,
+                        max_burn_rate,
                         damage_percent,
                         heating_rate,
                         boil_efficiency,
@@ -217,6 +222,7 @@ async fn get_system_snapshots(
                 waste_filled: None,
                 actual_burn_rate: None,
                 target_burn_rate: None,
+                max_burn_rate: None,
                 damage_percent: None,
                 heating_rate: None,
                 boil_efficiency: None,
@@ -407,6 +413,7 @@ async fn store_system_state(
                 waste_filled,
                 actual_burn_rate,
                 target_burn_rate,
+                max_burn_rate,
                 damage_percent,
                 heating_rate,
                 boil_efficiency,
@@ -428,12 +435,13 @@ async fn store_system_state(
                         waste_filled,
                         actual_burn_rate,
                         target_burn_rate,
+                        max_burn_rate,
                         damage_percent,
                         heating_rate,
                         boil_efficiency,
                         stored_kinetic_energy,
                         energy_production_rate
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ",
                 event_id,
                 intact,
@@ -445,6 +453,7 @@ async fn store_system_state(
                 waste_filled,
                 actual_burn_rate,
                 target_burn_rate,
+                max_burn_rate,
                 damage_percent,
                 heating_rate,
                 boil_efficiency,

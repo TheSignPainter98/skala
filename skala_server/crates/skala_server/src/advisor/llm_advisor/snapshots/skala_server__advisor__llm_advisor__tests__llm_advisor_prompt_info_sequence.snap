@@ -19,7 +19,7 @@ You may receive periodic feedback from your boss.
 ### System state at 2026-05-03T16:24:11
 
 ```json
-{"reactor":{"integrity":"intact","mode":"active","temperature":742.5,"coolant_filled":0.82,"heated_coolant_filled":0.34,"fuel_filled":0.76,"waste_filled":0.12,"actual_burn_rate":503.0,"target_burn_rate":500,"damage_percent":0.0,"heating_rate":18.25,"boil_efficiency":0.91},"turbine":{"integrity":"intact","stored_kinetic_energy":12345.0,"energy_production_rate":987.6}}
+{"reactor":{"integrity":"intact","mode":"active","temperature":742.5,"coolant_filled":0.82,"heated_coolant_filled":0.34,"fuel_filled":0.76,"waste_filled":0.12,"actual_burn_rate":503.0,"target_burn_rate":500,"max_burn_rate":1000,"damage_percent":0.0,"heating_rate":18.25,"boil_efficiency":0.91},"turbine":{"integrity":"intact","stored_kinetic_energy":12345.0,"energy_production_rate":987.6}}
 ```
 
 ---

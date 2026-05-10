@@ -3,8 +3,8 @@ mod common;
 use serde_json::{Value, json};
 use skala_server::advisor::{Advice, AdvisedAction, PastEvent, Snapshot, SystemKnowledge};
 use skala_server::{
-    ActualBurnRate, IntactReactorSnapshot, IntactTurbineSnapshot, ReactorMode, ReactorSnapshot,
-    TargetBurnRate, TurbineSnapshot,
+    ActualBurnRate, IntactReactorSnapshot, IntactTurbineSnapshot, MaxBurnRate, ReactorMode,
+    ReactorSnapshot, TargetBurnRate, TurbineSnapshot,
 };
 use sqlx::{Row, SqlitePool};
 
@@ -59,6 +59,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 "waste_filled": 555.0,
                 "actual_burn_rate": 666.0,
                 "target_burn_rate": 777,
+                "max_burn_rate": 123,
                 "damage_percent": 888.0,
                 "heating_rate": 999.0,
                 "boil_efficiency": 1234.0,
@@ -115,6 +116,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 waste_filled,
                 actual_burn_rate,
                 target_burn_rate,
+                max_burn_rate,
                 damage_percent,
                 heating_rate,
                 boil_efficiency,
@@ -127,6 +129,7 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
             assert_eq!(*waste_filled, 555.0);
             assert_eq!(*actual_burn_rate, ActualBurnRate::from(666.0));
             assert_eq!(*target_burn_rate, TargetBurnRate::from(777));
+            assert_eq!(*max_burn_rate, MaxBurnRate::from(123));
             assert_eq!(*damage_percent, 888.0);
             assert_eq!(*heating_rate, 999.0);
             assert_eq!(*boil_efficiency, 1234.0);
@@ -168,6 +171,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 "waste_filled": 0.0,
                 "actual_burn_rate": 0.0,
                 "target_burn_rate": 0,
+                "max_burn_rate": 1000,
                 "damage_percent": 0.0,
                 "heating_rate": 0.0,
                 "boil_efficiency": 0.0,
@@ -493,6 +497,7 @@ fn active_request(reactor_name: &str, timestamp: &str) -> Value {
             "waste_filled": 0.0,
             "actual_burn_rate": 0.0,
             "target_burn_rate": 0,
+            "max_burn_rate": 1000,
             "damage_percent": 0.0,
             "heating_rate": 0.0,
             "boil_efficiency": 0.0,

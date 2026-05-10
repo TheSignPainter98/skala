@@ -27,6 +27,7 @@ pub struct IntactReactorSnapshot {
     pub waste_filled: f64,
     pub actual_burn_rate: ActualBurnRate,
     pub target_burn_rate: TargetBurnRate,
+    pub max_burn_rate: MaxBurnRate,
     pub damage_percent: f64,
     pub heating_rate: f64,
     pub boil_efficiency: f64,
@@ -107,6 +108,33 @@ impl From<i64> for TargetBurnRate {
 }
 
 impl Display for TargetBurnRate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(rate) = self;
+        write!(f, "{rate}mL/s")
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    quicktype::Quicktype,
+    schemars::JsonSchema,
+    serde::Deserialize,
+    serde::Serialize,
+    sqlx::Type,
+)]
+#[serde(transparent)]
+#[sqlx(transparent)]
+pub struct MaxBurnRate(i64);
+
+impl From<i64> for MaxBurnRate {
+    fn from(rate: i64) -> Self {
+        Self(rate)
+    }
+}
+
+impl Display for MaxBurnRate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(rate) = self;
         write!(f, "{rate}mL/s")

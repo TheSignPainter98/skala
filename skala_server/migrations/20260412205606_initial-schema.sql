@@ -54,6 +54,8 @@ CREATE TABLE snapshot (
         DEFAULT NULL,
     target_burn_rate INTEGER NULL
         DEFAULT NULL,
+    max_burn_rate INTEGER NULL
+        DEFAULT NULL,
     damage_percent REAL NULL
         DEFAULT NULL,
     heating_rate REAL NULL

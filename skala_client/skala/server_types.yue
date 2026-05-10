@@ -36,6 +36,7 @@ declare_type 'server.IntactReactorState', [[{
   waste_filled: number,
   actual_burn_rate: number,
   target_burn_rate: number,
+  max_burn_rate: number,
   damage_percent: number,
   heating_rate: number,
   boil_efficiency: number,

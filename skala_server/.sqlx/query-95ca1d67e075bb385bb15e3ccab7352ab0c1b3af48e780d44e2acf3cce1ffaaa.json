@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n                    INSERT INTO snapshot (\n                        event_id,\n                        intact,\n                        mode,\n                        temperature,\n                        coolant_filled,\n                        heated_coolant_filled,\n                        fuel_filled,\n                        waste_filled,\n                        actual_burn_rate,\n                        target_burn_rate,\n                        max_burn_rate,\n                        damage_percent,\n                        heating_rate,\n                        boil_efficiency,\n                        stored_kinetic_energy,\n                        energy_production_rate\n                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 16
+    },
+    "nullable": []
+  },
+  "hash": "95ca1d67e075bb385bb15e3ccab7352ab0c1b3af48e780d44e2acf3cce1ffaaa"
+}

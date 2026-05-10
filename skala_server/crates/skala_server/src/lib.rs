@@ -11,7 +11,8 @@ use log::error;
 pub use crate::advisor::feedback::Feedback;
 pub use crate::app::App;
 pub use crate::components::reactor::{
-    ActualBurnRate, IntactReactorSnapshot, ReactorMode, ReactorSnapshot, TargetBurnRate,
+    ActualBurnRate, IntactReactorSnapshot, MaxBurnRate, ReactorMode, ReactorSnapshot,
+    TargetBurnRate,
 };
 pub use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
 

@@ -28,6 +28,7 @@ declare_type 'peripheral.ReactorState', [[{
   waste_filled: number,
   actual_burn_rate: number,
   target_burn_rate: number,
+  max_burn_rate: number,
   damage_percent: number,
   heating_rate: number,
   boil_efficiency: number,
@@ -110,6 +111,7 @@ export class Reactor
         .waste_filled = @reactor.getWasteFilledPercentage!
         .actual_burn_rate = @reactor.getActualBurnRate!
         .target_burn_rate = @reactor.getBurnRate!
+        .max_burn_rate = @reactor.getMaxBurnRate!
         .damage_percent = @reactor.getDamagePercent!
         .heating_rate = @reactor.getHeatedCoolantFilledPercentage!
         .boil_efficiency = @reactor.getBoilEfficiency!
