@@ -141,7 +141,7 @@ export main = $F '(control.Args) -> <>', (args) ->
             err = reactor\scram!
             if err?
               print "cannot scram reactor: #{err}"
-          when 'set-burn-rate'
+          when 'set-target-burn-rate'
             { :new_target_burn_rate } = action
             print "setting target burn rate to #{new_target_burn_rate}"
             err = reactor\set_burn_rate new_target_burn_rate

@@ -84,9 +84,10 @@ pub enum AdvisedAction {
     Scram,
 
     /// Represents that the burn rate needs to be changed to the given value.
-    #[serde(rename = "set-burn-rate")]
-    SetBurnRate {
-        /// The value of the new target burn rate.
+    #[serde(rename = "set-target-burn-rate")]
+    SetTargetBurnRate {
+        /// The value of the new target burn rate. This must be no greater than the maximum burn
+        /// rate!
         new_target_burn_rate: TargetBurnRate,
     },
 }

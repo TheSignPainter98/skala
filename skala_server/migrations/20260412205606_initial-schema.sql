@@ -80,7 +80,7 @@ CREATE TABLE advice (
     pretty_action TEXT AS (CASE
         WHEN action = 0 THEN 'no-action'
         WHEN action = 1 THEN 'scram'
-        WHEN action = 2 THEN 'set-burn-rate'
+        WHEN action = 2 THEN 'set-target-burn-rate'
         ELSE 'unknown'
     END),
 

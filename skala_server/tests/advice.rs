@@ -184,7 +184,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
             "timestamp": "2026-04-15T00:00:00"
         }))
         .advice(Advice {
-            action: AdvisedAction::SetBurnRate {
+            action: AdvisedAction::SetTargetBurnRate {
                 new_target_burn_rate: 1000.into(),
             },
             reasoning: "let's see what happens".into(),
@@ -196,7 +196,7 @@ async fn test_active_reactor(db_pool: SqlitePool) {
             "reactor_name": REACTOR_NAME,
             "advice": {
                 "action": {
-                    "kind": "set-burn-rate",
+                    "kind": "set-target-burn-rate",
                     "new_target_burn_rate": 1000,
                 },
                 "reasoning": "let's see what happens",

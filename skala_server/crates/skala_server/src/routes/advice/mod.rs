@@ -305,7 +305,7 @@ async fn get_past_actions(
                 let new_target_burn_rate = new_target_burn_rate.into();
                 PastAction {
                     timestamp,
-                    action: AdvisedAction::SetBurnRate {
+                    action: AdvisedAction::SetTargetBurnRate {
                         new_target_burn_rate,
                     },
                 }
@@ -479,7 +479,7 @@ async fn record_advice(
     let (advised_action_repr, new_target_burn_rate) = match action {
         AdvisedAction::NoAction => (0, None),
         AdvisedAction::Scram => (1, None),
-        AdvisedAction::SetBurnRate {
+        AdvisedAction::SetTargetBurnRate {
             new_target_burn_rate,
         } => (2, Some(new_target_burn_rate)),
     };

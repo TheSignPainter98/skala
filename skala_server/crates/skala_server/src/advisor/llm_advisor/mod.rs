@@ -283,7 +283,7 @@ mod tests {
             }),
             PastEvent::PastAction(PastAction {
                 timestamp: IngameDateTime::from("2026-05-03T16:24:12".to_owned()),
-                action: AdvisedAction::SetBurnRate {
+                action: AdvisedAction::SetTargetBurnRate {
                     new_target_burn_rate: TargetBurnRate::from(650),
                 },
             }),
@@ -294,7 +294,7 @@ mod tests {
             }),
             PastEvent::PastAction(PastAction {
                 timestamp: IngameDateTime::from("2026-05-03T16:24:14".to_owned()),
-                action: AdvisedAction::SetBurnRate {
+                action: AdvisedAction::SetTargetBurnRate {
                     new_target_burn_rate: TargetBurnRate::from(300),
                 },
             }),
@@ -353,7 +353,7 @@ mod tests {
     fn test_prompt_info_summary_past_action() {
         let action = PastAction {
             timestamp: IngameDateTime::from("2026-05-03T16:24:11".to_owned()),
-            action: AdvisedAction::SetBurnRate {
+            action: AdvisedAction::SetTargetBurnRate {
                 new_target_burn_rate: TargetBurnRate::from(750),
             },
         };

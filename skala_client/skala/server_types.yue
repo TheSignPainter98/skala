@@ -54,7 +54,7 @@ declare_type 'server.AdvisedAction', [=[{
 } | {
   kind: "scram",
 } | {
-  kind: "set-burn-rate",
+  kind: "set-target-burn-rate",
   new_target_burn_rate: number,
 }]=]
 

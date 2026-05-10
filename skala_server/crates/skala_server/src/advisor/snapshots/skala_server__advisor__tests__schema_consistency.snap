@@ -63,10 +63,10 @@ expression: schema_for!(Advice)
           "properties": {
             "kind": {
               "type": "string",
-              "const": "set-burn-rate"
+              "const": "set-target-burn-rate"
             },
             "new_target_burn_rate": {
-              "description": "The value of the new target burn rate.",
+              "description": "The value of the new target burn rate. This must be no greater than the maximum burn\nrate!",
               "type": "integer",
               "format": "int64"
             }

@@ -5,5 +5,5 @@ expression: "PromptInfo::PastAction(&action).summary()"
 ### Action taken at 2026-05-03T16:24:11
 
 ```json
-{"kind":"set-burn-rate","new_target_burn_rate":750}
+{"kind":"set-target-burn-rate","new_target_burn_rate":750}
 ```
