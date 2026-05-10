@@ -5,7 +5,7 @@ import 'skala.peripheral.monitor' as :Monitor
 import 'skala.peripheral.reactor' as :Reactor
 import 'skala.peripheral.turbine' as :Turbine
 import 'skala.peripheral.sole' as :sole
-import 'skala.quicktype' as :declare_type, :is, :F
+import 'skala.quicktype' as :declare_type, :is, :F, :T
 import 'skala.quicktype_macros' as $
 import 'skala.util.text' as :concat_lines
 
@@ -20,6 +20,11 @@ SERVER_TIMEOUT = 10
 
 declare_type 'check.Args', [[{
   server_url: string,
+  full: boolean,
+}]]
+declare_type 'check.StatusRow', [[{
+  name: string,
+  status: string,
 }]]
 declare_type 'check.ServerInfo', [[{
   version: string,
@@ -32,9 +37,12 @@ export register_args = (parser) ->
       \description 'URL where the skala server is hosted'
       \short nil
       \default 'http://localhost:15000' -- TODO(kcza): https?
+    \add with Flag 'full'
+      \description 'include detailed reactor and turbine state'
+      \short nil
 
 export main = $F '(check.Args) -> <>', (args) ->
-  { :server_url } = args
+  { :server_url, :full } = args
 
   local server_status
   server_info, err = get_server_info server_url
@@ -44,18 +52,28 @@ export main = $F '(check.Args) -> <>', (args) ->
     server_status = "ok"
 
   local reactor_status
-  _, err = Reactor::find!
+  reactor, err = Reactor::find!
+  local reactor_state
   if err?
     reactor_status = "error! (#{err})"
   else
     reactor_status = 'ok'
+    if full
+      reactor_state, err = reactor\state!
+      if err?
+        reactor_status = "error! (#{err})"
 
   local turbine_status
-  _, err = Turbine::find!
+  turbine, err = Turbine::find!
+  local turbine_state
   if err?
     turbine_status = "error! {#{err}}"
   else
     turbine_status = 'ok'
+    if full
+      turbine_state, err = turbine\state!
+      if err?
+        turbine_status = "error! {#{err}}"
 
   local printer_status
   printer, err = sole 'printer'
@@ -84,40 +102,58 @@ export main = $F '(check.Args) -> <>', (args) ->
       printer_paper_status = 'ok'
 
   local monitor_status
+  local monitor_width
+  local monitor_height
   monitor, err = Monitor::find!
   if err?
     monitor_status = "error (#{err})"
   else
-    width, height = monitor\size!
-    if width < 50
+    monitor_width, monitor_height = monitor\size!
+    if monitor_width < 50
       monitor_status = 'too narrow!'
-    else if height < 19
+    else if monitor_height < 19
       monitor_status = 'too short!'
     else
       monitor_status = 'ok'
 
-  print render_status_table with {}
+  rows = $T '[check.StatusRow]', with {}
     [] =
       name: 'Server'
       status: server_status
     [] =
       name: 'Reactor'
       status: reactor_status
+    if full and reactor_state?
+      for row in *render_reactor_state_rows reactor_state
+        [] = row
     [] =
       name: 'Turbine'
       status: turbine_status
+    if full and turbine_state?
+      for row in *render_turbine_state_rows turbine_state
+        [] = row
     [] =
       name: 'Monitor'
       status: monitor_status
+    if full and monitor_width? and monitor_height?
+      [] =
+        name: '* width'
+        status: tostring monitor_width
+      [] =
+        name: '* height'
+        status: tostring monitor_height
     [] =
       name: 'Printer'
       status: printer_status
-    [] =
-      name: 'Printer ink'
-      status: printer_ink_status
-    [] =
-      name: 'Printer paper'
-      status: printer_paper_status
+    if full
+      [] =
+        name: '* ink'
+        status: printer_ink_status
+      [] =
+        name: '* paper'
+        status: printer_paper_status
+
+  print render_status_table rows
   return
 
 get_server_info = $F '(string) -> <?check.ServerInfo, ?string>', (server_url) ->
@@ -146,7 +182,31 @@ get_server_info = $F '(string) -> <?check.ServerInfo, ?string>', (server_url) ->
     return nil, "cannot use returned server info: #{err}"
   parsed_response, nil
 
-render_status_table = $F '([{name: string, status: string}]) -> string', (rows) ->
+render_reactor_state_rows = $F '(peripheral.ReactorState) -> [check.StatusRow]', (state) ->
+  keys = with {}
+    for key, _ in pairs state
+      [] = key
+  table.sort keys
+
+  with {}
+    for key in *keys
+      [] =
+        name: "* #{key}"
+        status: tostring state[key]
+
+render_turbine_state_rows = $F '(server.TurbineState) -> [check.StatusRow]', (state) ->
+  keys = with {}
+    for key, _ in pairs state
+      [] = key
+  table.sort keys
+
+  with {}
+    for key in *keys
+      [] =
+        name: "* #{key}"
+        status: tostring state[key]
+
+render_status_table = $F '([check.StatusRow]) -> string', (rows) ->
   name_width = 0
   status_width = 0
   for row in *rows
