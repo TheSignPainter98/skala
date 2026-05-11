@@ -15,7 +15,7 @@ expression: schema_for!(Advice)
     "reasoning": {
       "description": "A very concise description of the reasoning behind the best course of action. The reasoning description must contain at most 16 words.",
       "type": "string",
-      "maxLength": 120
+      "maxLength": 1024
     },
     "system_knowledge": {
       "description": "The current understanding of how the system works.",
