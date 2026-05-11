@@ -81,12 +81,20 @@ fn install_signal_handler(shutdown_requested: &Arc<AtomicBool>) -> Result<()> {
 #[derive(Debug, Eq, Parser, PartialEq)]
 #[command(
     name = "skala-graph",
-    about = "Open a SQLite database and render reactor metrics in a terminal graph."
+    about = "Open a SQLite database and render reactor metrics in a terminal graph.",
+    long_about = "Open a SKALA SQLite database and render reactor metrics in a terminal graph.\n\nIf the database contains one reactor, it is selected automatically. Use --reactor to preselect a reactor by name when the database contains more than one."
 )]
 struct CliOptions {
-    #[arg(value_name = "db_path")]
+    #[arg(
+        value_name = "DB_PATH",
+        help = "Path to the SQLite database file to inspect"
+    )]
     db_path: PathBuf,
-    #[arg(long)]
+    #[arg(
+        long,
+        value_name = "NAME",
+        help = "Preselect a reactor by name before opening the interface"
+    )]
     reactor: Option<String>,
 }
 
