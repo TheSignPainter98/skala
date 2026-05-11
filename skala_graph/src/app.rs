@@ -15,6 +15,28 @@ pub enum FocusPane {
     Metrics,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChartScaleMode {
+    Normalised,
+    Raw,
+}
+
+impl ChartScaleMode {
+    pub fn toggle(self) -> Self {
+        match self {
+            Self::Normalised => Self::Raw,
+            Self::Raw => Self::Normalised,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Normalised => "normalised",
+            Self::Raw => "raw",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct AppState {
     pub db_path: PathBuf,
@@ -22,6 +44,7 @@ pub struct AppState {
     pub reactor_index: usize,
     pub metric_index: usize,
     pub selected_metrics: BTreeSet<MetricKey>,
+    pub chart_scale_mode: ChartScaleMode,
     pub focus: FocusPane,
     pub current_data: ReactorData,
     pub status: String,
@@ -42,6 +65,7 @@ impl AppState {
             reactor_index,
             metric_index: 0,
             selected_metrics: MetricKey::DEFAULTS.into_iter().collect(),
+            chart_scale_mode: ChartScaleMode::Normalised,
             focus: FocusPane::Metrics,
             current_data,
             status: "Loaded database".to_owned(),
@@ -78,6 +102,10 @@ impl AppState {
 
     pub fn current_reactor(&self) -> &ReactorSummary {
         &self.reactors[self.reactor_index]
+    }
+
+    pub fn shows_reactor_list(&self) -> bool {
+        self.reactors.len() > 1
     }
 
     pub fn selected_series(&self) -> HashMap<MetricKey, MetricSeries> {
@@ -147,10 +175,20 @@ impl AppState {
     }
 
     pub fn toggle_focus(&mut self) {
+        if !self.shows_reactor_list() {
+            self.focus = FocusPane::Metrics;
+            return;
+        }
+
         self.focus = match self.focus {
             FocusPane::Reactors => FocusPane::Metrics,
             FocusPane::Metrics => FocusPane::Reactors,
         };
+    }
+
+    pub fn toggle_chart_scale_mode(&mut self) {
+        self.chart_scale_mode = self.chart_scale_mode.toggle();
+        self.status = format!("Showing {} chart scale", self.chart_scale_mode.label());
     }
 
     pub fn latest_raw_value(&self, metric: MetricKey) -> Option<f64> {
@@ -243,6 +281,10 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
             app.reload()?;
             Ok(AppAction::Continue)
         }
+        KeyCode::Char('n') => {
+            app.toggle_chart_scale_mode();
+            Ok(AppAction::Continue)
+        }
         _ => Ok(AppAction::Continue),
     }
 }
@@ -272,9 +314,8 @@ mod tests {
     use chrono::NaiveDateTime;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-    #[test]
-    fn toggling_metric_updates_selection() {
-        let mut app = AppState {
+    fn test_app() -> AppState {
+        AppState {
             db_path: PathBuf::from("test.db"),
             reactors: vec![ReactorSummary {
                 id: 1,
@@ -283,6 +324,7 @@ mod tests {
             reactor_index: 0,
             metric_index: 0,
             selected_metrics: BTreeSet::from([MetricKey::Temperature]),
+            chart_scale_mode: ChartScaleMode::Normalised,
             focus: FocusPane::Metrics,
             current_data: ReactorData {
                 reactor: ReactorSummary {
@@ -301,7 +343,12 @@ mod tests {
             },
             status: String::new(),
             connection: None,
-        };
+        }
+    }
+
+    #[test]
+    fn toggling_metric_updates_selection() {
+        let mut app = test_app();
 
         app.toggle_metric();
         assert!(!app.selected_metrics.contains(&MetricKey::Temperature));
@@ -312,27 +359,7 @@ mod tests {
 
     #[test]
     fn ctrl_c_requests_quit() {
-        let mut app = AppState {
-            db_path: PathBuf::from("test.db"),
-            reactors: vec![ReactorSummary {
-                id: 1,
-                name: "reactor_a".to_owned(),
-            }],
-            reactor_index: 0,
-            metric_index: 0,
-            selected_metrics: BTreeSet::from([MetricKey::Temperature]),
-            focus: FocusPane::Metrics,
-            current_data: ReactorData {
-                reactor: ReactorSummary {
-                    id: 1,
-                    name: "reactor_a".to_owned(),
-                },
-                points: Vec::new(),
-                available_metrics: BTreeSet::new(),
-            },
-            status: String::new(),
-            connection: None,
-        };
+        let mut app = test_app();
 
         let action = handle_key(
             &mut app,
@@ -345,27 +372,8 @@ mod tests {
 
     #[test]
     fn left_arrow_hides_all_metrics() {
-        let mut app = AppState {
-            db_path: PathBuf::from("test.db"),
-            reactors: vec![ReactorSummary {
-                id: 1,
-                name: "reactor_a".to_owned(),
-            }],
-            reactor_index: 0,
-            metric_index: 0,
-            selected_metrics: MetricKey::ALL.into_iter().collect(),
-            focus: FocusPane::Metrics,
-            current_data: ReactorData {
-                reactor: ReactorSummary {
-                    id: 1,
-                    name: "reactor_a".to_owned(),
-                },
-                points: Vec::new(),
-                available_metrics: BTreeSet::new(),
-            },
-            status: String::new(),
-            connection: None,
-        };
+        let mut app = test_app();
+        app.selected_metrics = MetricKey::ALL.into_iter().collect();
 
         handle_key(&mut app, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)).expect("handle key");
 
@@ -375,27 +383,8 @@ mod tests {
 
     #[test]
     fn right_arrow_shows_all_metrics() {
-        let mut app = AppState {
-            db_path: PathBuf::from("test.db"),
-            reactors: vec![ReactorSummary {
-                id: 1,
-                name: "reactor_a".to_owned(),
-            }],
-            reactor_index: 0,
-            metric_index: 0,
-            selected_metrics: BTreeSet::new(),
-            focus: FocusPane::Metrics,
-            current_data: ReactorData {
-                reactor: ReactorSummary {
-                    id: 1,
-                    name: "reactor_a".to_owned(),
-                },
-                points: Vec::new(),
-                available_metrics: BTreeSet::new(),
-            },
-            status: String::new(),
-            connection: None,
-        };
+        let mut app = test_app();
+        app.selected_metrics = BTreeSet::new();
 
         handle_key(&mut app, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
             .expect("handle key");
@@ -406,30 +395,62 @@ mod tests {
 
     #[test]
     fn watch_reload_error_updates_status() {
-        let mut app = AppState {
-            db_path: PathBuf::from("test.db"),
-            reactors: vec![ReactorSummary {
-                id: 1,
-                name: "reactor_a".to_owned(),
-            }],
-            reactor_index: 0,
-            metric_index: 0,
-            selected_metrics: BTreeSet::new(),
-            focus: FocusPane::Metrics,
-            current_data: ReactorData {
-                reactor: ReactorSummary {
-                    id: 1,
-                    name: "reactor_a".to_owned(),
-                },
-                points: Vec::new(),
-                available_metrics: BTreeSet::new(),
-            },
-            status: String::new(),
-            connection: None,
-        };
+        let mut app = test_app();
 
         app.set_watch_reload_error("database is locked");
 
         assert_eq!(app.status, "Watch reload failed: database is locked");
+    }
+
+    #[test]
+    fn single_reactor_does_not_show_reactor_list() {
+        let mut app = test_app();
+        app.selected_metrics = BTreeSet::new();
+
+        assert!(!app.shows_reactor_list());
+    }
+
+    #[test]
+    fn tab_keeps_metrics_focus_when_only_one_reactor_exists() {
+        let mut app = test_app();
+        app.selected_metrics = BTreeSet::new();
+
+        handle_key(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)).expect("handle key");
+
+        assert_eq!(app.focus, FocusPane::Metrics);
+    }
+
+    #[test]
+    fn default_chart_scale_mode_is_normalised() {
+        let app = test_app();
+        assert_eq!(app.chart_scale_mode, ChartScaleMode::Normalised);
+    }
+
+    #[test]
+    fn n_toggles_chart_scale_mode() {
+        let mut app = test_app();
+
+        handle_key(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+        )
+        .expect("handle key");
+        assert_eq!(app.chart_scale_mode, ChartScaleMode::Raw);
+
+        handle_key(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
+        )
+        .expect("handle key");
+        assert_eq!(app.chart_scale_mode, ChartScaleMode::Normalised);
+    }
+
+    #[test]
+    fn toggling_chart_scale_mode_updates_status() {
+        let mut app = test_app();
+
+        app.toggle_chart_scale_mode();
+
+        assert_eq!(app.status, "Showing raw chart scale");
     }
 }

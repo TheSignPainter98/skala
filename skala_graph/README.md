@@ -46,6 +46,8 @@ cargo run -- /path/to/skala.db --watch
   known reactor names.
 - Without `--reactor`, the first reactor in name order is selected at startup.
   You can switch reactors later inside the UI.
+- If the database only contains one reactor, the reactor list is hidden and the
+  metrics and chart panes use the full width.
 - With `--watch`, the app retries an automatic reload every 0.25 seconds. If a
   reload fails, the last good data remains visible and the error is shown in
   the status line until a later reload succeeds.
@@ -59,16 +61,21 @@ The initial chart enables these metrics:
 - `target_burn_rate`
 - `energy_production_rate`
 
-All selected metrics share one chart. Values are normalised for plotting, while
-raw values are still shown in the interface labels and status text.
+All selected metrics share one chart. Normalised plotting is the default.
+Press `n` to switch to raw plotting, which keeps all visible selected metrics on
+the same chart and uses one shared Y axis starting at zero and extending to
+the highest raw value across the currently visible selected series. Raw values
+are still shown in the interface labels and status text.
 
 ## Controls
 
-- `Tab`: switch focus between the reactor list and metric list
+- `Tab`: switch focus between the reactor list and metric list when multiple
+  reactors are available
 - `Up` / `Down`: move within the focused list
 - `Space`: toggle the highlighted metric
 - `Left`: hide all metrics
 - `Right`: show all metrics
+- `n`: toggle between normalised and raw chart scaling
 - `r`: reload the database from disk
 - `--watch`: also reload the database from disk automatically every 0.25
   seconds

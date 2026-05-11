@@ -319,21 +319,9 @@ pub fn build_series(data: &ReactorData, metric: MetricKey) -> Option<MetricSerie
         .expect("values is non-empty");
     let is_constant = (raw_max - raw_min).abs() < f64::EPSILON;
 
-    let points = values
-        .into_iter()
-        .map(|(timestamp, value)| {
-            let normalised = if is_constant {
-                0.5
-            } else {
-                (value - raw_min) / (raw_max - raw_min)
-            };
-            (timestamp, normalised)
-        })
-        .collect();
-
     Some(MetricSeries {
         key: metric,
-        points,
+        points: values,
         raw_min,
         raw_max,
         is_constant,
@@ -601,7 +589,7 @@ mod tests {
         };
 
         let series = build_series(&data, MetricKey::TargetBurnRate).expect("series");
-        assert_eq!(series.points[0].1, 0.5);
-        assert_eq!(series.points[1].1, 0.5);
+        assert_eq!(series.points[0].1, 10.0);
+        assert_eq!(series.points[1].1, 10.0);
     }
 }

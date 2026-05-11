@@ -6,7 +6,7 @@ use ratatui::widgets::{
     Axis, Block, Borders, Chart, Dataset, GraphType, List, ListItem, ListState, Paragraph,
 };
 
-use crate::app::{AppState, FocusPane};
+use crate::app::{AppState, ChartScaleMode, FocusPane};
 use crate::data::{MetricKey, MetricSeries};
 
 const PALETTE: [Color; 8] = [
@@ -32,18 +32,31 @@ pub fn render(frame: &mut Frame<'_>, app: &AppState, watch_enabled: bool) {
 
     render_header(frame, layout[0], app);
 
-    let content = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Length(26),
-            Constraint::Length(38),
-            Constraint::Min(30),
-        ])
-        .split(layout[1]);
+    let content = if app.shows_reactor_list() {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(26),
+                Constraint::Length(38),
+                Constraint::Min(30),
+            ])
+            .split(layout[1])
+    } else {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(38), Constraint::Min(30)])
+            .split(layout[1])
+    };
 
-    render_reactors(frame, content[0], app);
-    render_metrics(frame, content[1], app);
-    render_chart(frame, content[2], app);
+    if app.shows_reactor_list() {
+        render_reactors(frame, content[0], app);
+        render_metrics(frame, content[1], app);
+        render_chart(frame, content[2], app);
+    } else {
+        render_metrics(frame, content[0], app);
+        render_chart(frame, content[1], app);
+    }
+
     render_footer(frame, layout[2], app, watch_enabled);
 }
 
@@ -125,9 +138,16 @@ fn render_metrics(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
 
 fn render_chart(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     let series = app.selected_series();
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title("Normalised Time Series");
+    let y_axis = chart_y_axis_bounds(app.chart_scale_mode, &series);
+    let chart_title = match app.chart_scale_mode {
+        ChartScaleMode::Normalised => "Selected Metrics (Normalised)",
+        ChartScaleMode::Raw => "Selected Metrics (Raw)",
+    };
+    let y_axis_title = match app.chart_scale_mode {
+        ChartScaleMode::Normalised => "normalised value",
+        ChartScaleMode::Raw => "raw value (shared axis)",
+    };
+    let block = Block::default().borders(Borders::ALL).title(chart_title);
 
     if app.current_data.points.is_empty() {
         frame.render_widget(
@@ -173,13 +193,9 @@ fn render_chart(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
         )
         .y_axis(
             Axis::default()
-                .title("normalised value")
-                .bounds([0.0, 1.0])
-                .labels(vec![
-                    Line::from("0.0"),
-                    Line::from("0.5"),
-                    Line::from("1.0"),
-                ]),
+                .title(y_axis_title)
+                .bounds([y_axis.0, y_axis.1])
+                .labels(chart_y_axis_labels(y_axis)),
         );
 
     frame.render_widget(chart, area);
@@ -202,7 +218,12 @@ fn chart_datasets<'a>(
             let points = series
                 .points
                 .iter()
-                .map(|(timestamp, value)| ((*timestamp - origin).num_seconds() as f64, *value))
+                .map(|(timestamp, value)| {
+                    (
+                        (*timestamp - origin).num_seconds() as f64,
+                        plotted_value(app.chart_scale_mode, series, *value),
+                    )
+                })
                 .collect::<Vec<_>>();
             Some(
                 Dataset::default()
@@ -214,6 +235,52 @@ fn chart_datasets<'a>(
             )
         })
         .collect()
+}
+
+fn plotted_value(mode: ChartScaleMode, series: &MetricSeries, raw_value: f64) -> f64 {
+    match mode {
+        ChartScaleMode::Normalised => {
+            if series.is_constant {
+                0.5
+            } else {
+                (raw_value - series.raw_min) / (series.raw_max - series.raw_min)
+            }
+        }
+        ChartScaleMode::Raw => raw_value,
+    }
+}
+
+fn chart_y_axis_bounds(
+    mode: ChartScaleMode,
+    series: &HashMap<MetricKey, MetricSeries>,
+) -> (f64, f64) {
+    match mode {
+        ChartScaleMode::Normalised => (0.0, 1.0),
+        ChartScaleMode::Raw => {
+            let Some(maximum) = series
+                .values()
+                .map(|metric| metric.raw_max)
+                .reduce(f64::max)
+            else {
+                return (0.0, 1.0);
+            };
+
+            if maximum <= 0.0 {
+                (0.0, 1.0)
+            } else {
+                (0.0, maximum)
+            }
+        }
+    }
+}
+
+fn chart_y_axis_labels(bounds: (f64, f64)) -> Vec<Line<'static>> {
+    let midpoint = bounds.0 + ((bounds.1 - bounds.0) / 2.0);
+    vec![
+        Line::from(format!("{:.3}", bounds.0)),
+        Line::from(format!("{midpoint:.3}")),
+        Line::from(format!("{:.3}", bounds.1)),
+    ]
 }
 
 fn format_elapsed_time_label(seconds: f64) -> String {
@@ -235,9 +302,16 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState, watch_enable
     } else {
         ""
     };
+    let controls = if app.shows_reactor_list() {
+        "Tab switch focus | Up/Down move"
+    } else {
+        "Up/Down move"
+    };
     let footer = Paragraph::new(format!(
-        "Tab switch focus | Up/Down move | Left hide all | Right show all | Space toggle metric | r reload | q quit{}\nHighlighted: {} = {} | {}",
+        "{} | Left hide all | Right show all | Space toggle metric | n toggle scale | r reload | q quit{}\nPlot mode: {} | Highlighted: {} = {} | {}",
+        controls,
         watch_label,
+        app.chart_scale_mode.label(),
         highlighted.title(),
         latest_value,
         app.status
@@ -249,7 +323,37 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState, watch_enable
 
 #[cfg(test)]
 mod tests {
-    use super::format_elapsed_time_label;
+    use std::collections::HashMap;
+
+    use super::{chart_y_axis_bounds, format_elapsed_time_label, plotted_value};
+    use crate::app::ChartScaleMode;
+    use crate::data::{MetricKey, MetricSeries};
+    use chrono::NaiveDateTime;
+
+    fn metric_series(
+        key: MetricKey,
+        points: &[(&str, f64)],
+        raw_min: f64,
+        raw_max: f64,
+        is_constant: bool,
+    ) -> MetricSeries {
+        MetricSeries {
+            key,
+            points: points
+                .iter()
+                .map(|(timestamp, value)| {
+                    (
+                        NaiveDateTime::parse_from_str(timestamp, "%Y-%m-%dT%H:%M:%S")
+                            .expect("timestamp"),
+                        *value,
+                    )
+                })
+                .collect(),
+            raw_min,
+            raw_max,
+            is_constant,
+        }
+    }
 
     #[test]
     fn elapsed_time_label_starts_from_zero() {
@@ -264,5 +368,115 @@ mod tests {
     #[test]
     fn elapsed_time_label_formats_hours_minutes_and_seconds() {
         assert_eq!(format_elapsed_time_label(3661.0), "01:01:01");
+    }
+
+    #[test]
+    fn normalised_mode_uses_fixed_y_axis_bounds() {
+        let bounds = chart_y_axis_bounds(ChartScaleMode::Normalised, &HashMap::new());
+        assert_eq!(bounds, (0.0, 1.0));
+    }
+
+    #[test]
+    fn raw_mode_uses_combined_bounds_across_selected_series() {
+        let series = HashMap::from([
+            (
+                MetricKey::Temperature,
+                metric_series(
+                    MetricKey::Temperature,
+                    &[("2026-05-10T22:45:21", 5.0), ("2026-05-10T22:45:31", 15.0)],
+                    5.0,
+                    15.0,
+                    false,
+                ),
+            ),
+            (
+                MetricKey::ActualBurnRate,
+                metric_series(
+                    MetricKey::ActualBurnRate,
+                    &[("2026-05-10T22:45:21", 1.0), ("2026-05-10T22:45:31", 2.0)],
+                    1.0,
+                    2.0,
+                    false,
+                ),
+            ),
+        ]);
+
+        let bounds = chart_y_axis_bounds(ChartScaleMode::Raw, &series);
+
+        assert_eq!(bounds, (0.0, 15.0));
+    }
+
+    #[test]
+    fn constant_zero_raw_series_get_padded_bounds() {
+        let series = HashMap::from([(
+            MetricKey::TargetBurnRate,
+            metric_series(
+                MetricKey::TargetBurnRate,
+                &[("2026-05-10T22:45:21", 0.0), ("2026-05-10T22:45:31", 0.0)],
+                0.0,
+                0.0,
+                true,
+            ),
+        )]);
+
+        let bounds = chart_y_axis_bounds(ChartScaleMode::Raw, &series);
+
+        assert_eq!(bounds, (0.0, 1.0));
+    }
+
+    #[test]
+    fn sparse_series_keep_missing_points_out_of_raw_bounds() {
+        let sparse = metric_series(
+            MetricKey::AdviceNewTargetBurnRate,
+            &[("2026-05-10T22:45:31", 30.0)],
+            30.0,
+            30.0,
+            true,
+        );
+
+        let bounds = chart_y_axis_bounds(
+            ChartScaleMode::Raw,
+            &HashMap::from([(MetricKey::AdviceNewTargetBurnRate, sparse.clone())]),
+        );
+
+        assert_eq!(bounds, (0.0, 30.0));
+        assert_eq!(
+            plotted_value(ChartScaleMode::Raw, &sparse, sparse.points[0].1),
+            30.0
+        );
+        assert_eq!(
+            plotted_value(ChartScaleMode::Normalised, &sparse, sparse.points[0].1),
+            0.5
+        );
+    }
+
+    #[test]
+    fn raw_mode_uses_highest_visible_value_even_with_lower_non_zero_series() {
+        let series = HashMap::from([
+            (
+                MetricKey::Temperature,
+                metric_series(
+                    MetricKey::Temperature,
+                    &[("2026-05-10T22:45:21", 20.0), ("2026-05-10T22:45:31", 25.0)],
+                    20.0,
+                    25.0,
+                    false,
+                ),
+            ),
+            (
+                MetricKey::ActualBurnRate,
+                metric_series(
+                    MetricKey::ActualBurnRate,
+                    &[("2026-05-10T22:45:21", 2.0), ("2026-05-10T22:45:31", 3.0)],
+                    2.0,
+                    3.0,
+                    false,
+                ),
+            ),
+        ]);
+
+        let bounds = chart_y_axis_bounds(ChartScaleMode::Raw, &series);
+
+        assert_eq!(bounds, (0.0, 25.0));
     }
 }
