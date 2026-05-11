@@ -1,5 +1,9 @@
 use std::io::{self, stdout};
 use std::path::PathBuf;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use anyhow::Result;
@@ -20,6 +24,8 @@ const FRAME_DURATION: Duration = Duration::from_millis(33);
 fn main() -> Result<()> {
     let options = CliOptions::parse();
     let mut app = AppState::load(&options.db_path, options.reactor.as_deref())?;
+    let shutdown_requested = Arc::new(AtomicBool::new(false));
+    install_signal_handler(&shutdown_requested)?;
 
     enable_raw_mode()?;
     let mut stdout = stdout();
@@ -27,21 +33,28 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let run_result = run_app(&mut terminal, &mut app);
+    let run_result = run_app(&mut terminal, &mut app, &shutdown_requested);
+    let close_result = app.close_database();
 
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
-    run_result
+    run_result?;
+    close_result
 }
 
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut AppState,
+    shutdown_requested: &AtomicBool,
 ) -> Result<()> {
     loop {
         terminal.draw(|frame| ui::render(frame, app))?;
+
+        if shutdown_requested.load(Ordering::Relaxed) {
+            return Ok(());
+        }
 
         if event::poll(FRAME_DURATION)?
             && let Event::Key(key) = event::read()?
@@ -55,6 +68,14 @@ fn run_app(
             }
         }
     }
+}
+
+fn install_signal_handler(shutdown_requested: &Arc<AtomicBool>) -> Result<()> {
+    let shutdown_requested = Arc::clone(shutdown_requested);
+    ctrlc::set_handler(move || {
+        shutdown_requested.store(true, Ordering::Relaxed);
+    })?;
+    Ok(())
 }
 
 #[derive(Debug, Eq, Parser, PartialEq)]

@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
+use rusqlite::Connection;
 
 use crate::data::{
     MetricKey, MetricSeries, ReactorData, ReactorSummary, build_series, load_reactor_data,
@@ -24,6 +25,7 @@ pub struct AppState {
     pub focus: FocusPane,
     pub current_data: ReactorData,
     pub status: String,
+    connection: Option<Connection>,
 }
 
 impl AppState {
@@ -43,23 +45,30 @@ impl AppState {
             focus: FocusPane::Metrics,
             current_data,
             status: "Loaded database".to_owned(),
+            connection: Some(connection),
         })
     }
 
     pub fn reload(&mut self) -> Result<()> {
         let reactor_name = self.current_reactor().name.clone();
         let focus = self.focus;
-        let reloaded = Self::load(&self.db_path, Some(&reactor_name))?;
+        let connection = open_database(&self.db_path)?;
+        validate_schema(&connection)?;
+        let reactors = load_reactors(&connection)?;
+        let reactor_index = select_reactor(&reactors, Some(&reactor_name))?;
+        let current_data = load_reactor_data(&connection, reactors[reactor_index].clone())?;
         let selected_metrics = self.selected_metrics.clone();
-        self.reactors = reloaded.reactors;
-        self.reactor_index = reloaded.reactor_index;
+        let old_connection = self.connection.replace(connection);
+        self.reactors = reactors;
+        self.reactor_index = reactor_index;
         self.metric_index = self
             .metric_index
             .min(MetricKey::ALL.len().saturating_sub(1));
         self.focus = focus;
-        self.current_data = reloaded.current_data;
+        self.current_data = current_data;
         self.selected_metrics = selected_metrics;
         self.status = "Reloaded database".to_owned();
+        drop(old_connection);
         Ok(())
     }
 
@@ -145,11 +154,27 @@ impl AppState {
     }
 
     fn refresh_current_data(&mut self) -> Result<()> {
-        let connection = open_database(&self.db_path)?;
+        let connection = self.connection()?;
         self.current_data =
-            load_reactor_data(&connection, self.reactors[self.reactor_index].clone())?;
+            load_reactor_data(connection, self.reactors[self.reactor_index].clone())?;
         self.status = format!("Selected reactor {}", self.current_reactor().name);
         Ok(())
+    }
+
+    pub fn close_database(&mut self) -> Result<()> {
+        if let Some(connection) = self.connection.take() {
+            connection.close().map_err(|(_, error)| {
+                anyhow!("failed to close SQLite database cleanly: {error}")
+            })?;
+            self.status = "Closed database".to_owned();
+        }
+        Ok(())
+    }
+
+    fn connection(&self) -> Result<&Connection> {
+        self.connection
+            .as_ref()
+            .ok_or_else(|| anyhow!("database connection is not available"))
     }
 }
 
@@ -159,10 +184,11 @@ pub enum AppAction {
 }
 
 pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result<AppAction> {
-    use crossterm::event::KeyCode;
+    use crossterm::event::{KeyCode, KeyModifiers};
 
     match key.code {
         KeyCode::Char('q') => Ok(AppAction::Quit),
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Ok(AppAction::Quit),
         KeyCode::Tab => {
             app.toggle_focus();
             Ok(AppAction::Continue)
@@ -218,6 +244,7 @@ mod tests {
     use super::*;
     use crate::data::{DataPoint, ReactorData};
     use chrono::NaiveDateTime;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     #[test]
     fn toggling_metric_updates_selection() {
@@ -247,6 +274,7 @@ mod tests {
                 available_metrics: BTreeSet::from([MetricKey::Temperature]),
             },
             status: String::new(),
+            connection: None,
         };
 
         app.toggle_metric();
@@ -254,5 +282,38 @@ mod tests {
 
         app.toggle_metric();
         assert!(app.selected_metrics.contains(&MetricKey::Temperature));
+    }
+
+    #[test]
+    fn ctrl_c_requests_quit() {
+        let mut app = AppState {
+            db_path: PathBuf::from("test.db"),
+            reactors: vec![ReactorSummary {
+                id: 1,
+                name: "reactor_a".to_owned(),
+            }],
+            reactor_index: 0,
+            metric_index: 0,
+            selected_metrics: BTreeSet::from([MetricKey::Temperature]),
+            focus: FocusPane::Metrics,
+            current_data: ReactorData {
+                reactor: ReactorSummary {
+                    id: 1,
+                    name: "reactor_a".to_owned(),
+                },
+                points: Vec::new(),
+                available_metrics: BTreeSet::new(),
+            },
+            status: String::new(),
+            connection: None,
+        };
+
+        let action = handle_key(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+        )
+        .expect("handle key");
+
+        assert!(matches!(action, AppAction::Quit));
     }
 }
