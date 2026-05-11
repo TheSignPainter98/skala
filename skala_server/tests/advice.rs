@@ -318,7 +318,7 @@ async fn test_set_target_creates_event_and_production_target(db_pool: SqlitePool
 
     let ingame_timestamp: String = row.get("ingame_timestamp");
     let rate: f64 = row.get("rate");
-    assert_eq!("(IRL)", ingame_timestamp);
+    assert_valid_ingame_timestamp(&ingame_timestamp);
     assert_eq!(1500.5, rate);
 }
 
@@ -534,4 +534,27 @@ fn default_expected_response(reactor_name: &str) -> Value {
             "system_knowledge": "Stable baseline.",
         },
     })
+}
+
+fn assert_valid_ingame_timestamp(timestamp: &str) {
+    assert_eq!(timestamp.len(), 19);
+    assert_eq!(&timestamp[4..5], "-");
+    assert_eq!(&timestamp[7..8], "-");
+    assert_eq!(&timestamp[10..11], "T");
+    assert_eq!(&timestamp[13..14], ":");
+    assert_eq!(&timestamp[16..17], ":");
+
+    let year: u16 = timestamp[0..4].parse().unwrap();
+    let month: u8 = timestamp[5..7].parse().unwrap();
+    let day: u8 = timestamp[8..10].parse().unwrap();
+    let hour: u8 = timestamp[11..13].parse().unwrap();
+    let minute: u8 = timestamp[14..16].parse().unwrap();
+    let second: u8 = timestamp[17..19].parse().unwrap();
+
+    assert!(year > 2000);
+    assert!((1..=12).contains(&month));
+    assert!((1..=31).contains(&day));
+    assert!(hour <= 23);
+    assert!(minute <= 59);
+    assert!(second <= 59);
 }

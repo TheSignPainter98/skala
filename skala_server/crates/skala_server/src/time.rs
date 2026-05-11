@@ -46,6 +46,20 @@ impl IrlDateTime {
         Self(UtcDateTime::now())
     }
 
+    pub fn as_ingame_timestamp(&self) -> IngameDateTime {
+        let Self(inner) = self;
+        let timestamp = format!(
+            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+            inner.year(),
+            u8::from(inner.month()),
+            inner.day(),
+            inner.hour(),
+            inner.minute(),
+            inner.second(),
+        );
+        IngameDateTime::from(timestamp)
+    }
+
     pub fn unix_timestamp(&self) -> i64 {
         let Self(inner) = self;
         inner.unix_timestamp()

@@ -5,7 +5,7 @@ use sqlx::query;
 use crate::advisor::Advisor;
 use crate::components::reactor::ReactorName;
 use crate::routes::common::{get_reactor_id, register_event};
-use crate::time::{IngameDateTime, IrlDateTime};
+use crate::time::IrlDateTime;
 use crate::{Result, app::AppState};
 
 #[derive(Debug, serde::Deserialize)]
@@ -23,15 +23,11 @@ pub(crate) async fn route(
 
     let mut txn = app_state.db_pool.begin_with("BEGIN IMMEDIATE").await?;
 
-    info!("setting production target for {reactor_name}");
+    info!("setting production target for reactor {reactor_name} to {rate}");
     let reactor_id = get_reactor_id(&mut txn, &reactor_name).await?;
-    let event_id = register_event(
-        &mut txn,
-        reactor_id,
-        IrlDateTime::now(),
-        IngameDateTime::from("(IRL)".to_owned()),
-    )
-    .await?;
+    let irl_timestamp = IrlDateTime::now();
+    let ingame_timestamp = irl_timestamp.as_ingame_timestamp();
+    let event_id = register_event(&mut txn, reactor_id, irl_timestamp, ingame_timestamp).await?;
 
     let target_insertion_query = query!(
         "

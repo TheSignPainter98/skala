@@ -5,6 +5,7 @@ set -e
 function set_target() {
     echo "updating target to $1"
     curl "http://localhost:15000/set-target?reactor_name=53&rate=$1"
+    echo
 }
 
 set_target 0
