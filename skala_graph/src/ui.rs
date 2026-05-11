@@ -161,19 +161,15 @@ fn render_chart(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     }
 
     let x_bounds = app.chart_bounds().unwrap_or((0.0, 1.0));
-    let first = app.current_data.points.first().expect("non-empty points");
-    let last = app.current_data.points.last().expect("non-empty points");
+    let end_label = format_elapsed_time_label(x_bounds.1);
 
     let chart = Chart::new(datasets)
         .block(block)
         .x_axis(
             Axis::default()
-                .title("ingame_time")
+                .title("elapsed ingame time")
                 .bounds([x_bounds.0, x_bounds.1])
-                .labels(vec![
-                    Line::from(first.ingame_time.format("%H:%M:%S").to_string()),
-                    Line::from(last.ingame_time.format("%H:%M:%S").to_string()),
-                ]),
+                .labels(vec![Line::from("00:00:00"), Line::from(end_label)]),
         )
         .y_axis(
             Axis::default()
@@ -220,6 +216,14 @@ fn chart_datasets<'a>(
         .collect()
 }
 
+fn format_elapsed_time_label(seconds: f64) -> String {
+    let total_seconds = seconds.round().max(0.0) as i64;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let remaining_seconds = total_seconds % 60;
+    format!("{hours:02}:{minutes:02}:{remaining_seconds:02}")
+}
+
 fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     let highlighted = MetricKey::ALL[app.metric_index];
     let latest_value = app
@@ -235,4 +239,24 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     .block(Block::default().borders(Borders::ALL).title("Controls"));
 
     frame.render_widget(footer, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::format_elapsed_time_label;
+
+    #[test]
+    fn elapsed_time_label_starts_from_zero() {
+        assert_eq!(format_elapsed_time_label(0.0), "00:00:00");
+    }
+
+    #[test]
+    fn elapsed_time_label_rounds_to_whole_seconds() {
+        assert_eq!(format_elapsed_time_label(12.6), "00:00:13");
+    }
+
+    #[test]
+    fn elapsed_time_label_formats_hours_minutes_and_seconds() {
+        assert_eq!(format_elapsed_time_label(3661.0), "01:01:01");
+    }
 }
