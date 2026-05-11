@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
-use crossterm::event::{self, Event};
+use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -14,6 +14,8 @@ use ratatui::backend::CrosstermBackend;
 
 use skala_graph::app::{AppAction, AppState, handle_key};
 use skala_graph::ui;
+
+const FRAME_DURATION: Duration = Duration::from_millis(33);
 
 fn main() -> Result<()> {
     let options = CliOptions::parse();
@@ -41,20 +43,23 @@ fn run_app(
     loop {
         terminal.draw(|frame| ui::render(frame, app))?;
 
-        if event::poll(Duration::from_millis(250))?
+        if event::poll(FRAME_DURATION)?
             && let Event::Key(key) = event::read()?
-            && let AppAction::Quit = handle_key(app, key)?
         {
-            break;
+            if !matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
+                continue;
+            }
+
+            if let AppAction::Quit = handle_key(app, key)? {
+                return Ok(());
+            }
         }
     }
-
-    Ok(())
 }
 
 #[derive(Debug, Eq, Parser, PartialEq)]
 #[command(
-    name = "skala_graph",
+    name = "skala-graph",
     about = "Open a SQLite database and render reactor metrics in a terminal graph."
 )]
 struct CliOptions {
@@ -84,7 +89,7 @@ mod tests {
     #[test]
     fn clap_parses_expected_arguments() {
         let options =
-            CliOptions::parse_from(["skala_graph", "sample.db", "--reactor", "reactor_53"]);
+            CliOptions::parse_from(["skala-graph", "sample.db", "--reactor", "reactor_53"]);
 
         assert_eq!(options.db_path, PathBuf::from("sample.db"));
         assert_eq!(options.reactor.as_deref(), Some("reactor_53"));
