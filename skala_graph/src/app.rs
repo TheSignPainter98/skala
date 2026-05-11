@@ -72,6 +72,10 @@ impl AppState {
         Ok(())
     }
 
+    pub fn set_watch_reload_error(&mut self, error: &str) {
+        self.status = format!("Watch reload failed: {error}");
+    }
+
     pub fn current_reactor(&self) -> &ReactorSummary {
         &self.reactors[self.reactor_index]
     }
@@ -398,5 +402,34 @@ mod tests {
 
         assert_eq!(app.selected_metrics, MetricKey::ALL.into_iter().collect());
         assert_eq!(app.status, "Showing all metrics");
+    }
+
+    #[test]
+    fn watch_reload_error_updates_status() {
+        let mut app = AppState {
+            db_path: PathBuf::from("test.db"),
+            reactors: vec![ReactorSummary {
+                id: 1,
+                name: "reactor_a".to_owned(),
+            }],
+            reactor_index: 0,
+            metric_index: 0,
+            selected_metrics: BTreeSet::new(),
+            focus: FocusPane::Metrics,
+            current_data: ReactorData {
+                reactor: ReactorSummary {
+                    id: 1,
+                    name: "reactor_a".to_owned(),
+                },
+                points: Vec::new(),
+                available_metrics: BTreeSet::new(),
+            },
+            status: String::new(),
+            connection: None,
+        };
+
+        app.set_watch_reload_error("database is locked");
+
+        assert_eq!(app.status, "Watch reload failed: database is locked");
     }
 }

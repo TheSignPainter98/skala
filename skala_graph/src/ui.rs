@@ -20,7 +20,7 @@ const PALETTE: [Color; 8] = [
     Color::LightGreen,
 ];
 
-pub fn render(frame: &mut Frame<'_>, app: &AppState) {
+pub fn render(frame: &mut Frame<'_>, app: &AppState, watch_enabled: bool) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -44,7 +44,7 @@ pub fn render(frame: &mut Frame<'_>, app: &AppState) {
     render_reactors(frame, content[0], app);
     render_metrics(frame, content[1], app);
     render_chart(frame, content[2], app);
-    render_footer(frame, layout[2], app);
+    render_footer(frame, layout[2], app, watch_enabled);
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
@@ -224,14 +224,20 @@ fn format_elapsed_time_label(seconds: f64) -> String {
     format!("{hours:02}:{minutes:02}:{remaining_seconds:02}")
 }
 
-fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
+fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState, watch_enabled: bool) {
     let highlighted = MetricKey::ALL[app.metric_index];
     let latest_value = app
         .latest_raw_value(highlighted)
         .map(|value| format!("{value:.3} {}", highlighted.unit()))
         .unwrap_or_else(|| "no data".to_owned());
+    let watch_label = if watch_enabled {
+        " | auto-reload 0.25s"
+    } else {
+        ""
+    };
     let footer = Paragraph::new(format!(
-        "Tab switch focus | Up/Down move | Left hide all | Right show all | Space toggle metric | r reload | q quit\nHighlighted: {} = {} | {}",
+        "Tab switch focus | Up/Down move | Left hide all | Right show all | Space toggle metric | r reload | q quit{}\nHighlighted: {} = {} | {}",
+        watch_label,
         highlighted.title(),
         latest_value,
         app.status

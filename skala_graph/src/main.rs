@@ -4,7 +4,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use clap::Parser;
@@ -20,6 +20,7 @@ use skala_graph::app::{AppAction, AppState, handle_key};
 use skala_graph::ui;
 
 const FRAME_DURATION: Duration = Duration::from_millis(33);
+const WATCH_RELOAD_INTERVAL: Duration = Duration::from_millis(250);
 
 fn main() -> Result<()> {
     let options = CliOptions::parse();
@@ -33,7 +34,7 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let run_result = run_app(&mut terminal, &mut app, &shutdown_requested);
+    let run_result = run_app(&mut terminal, &mut app, &shutdown_requested, options.watch);
     let close_result = app.close_database();
 
     disable_raw_mode()?;
@@ -48,12 +49,22 @@ fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut AppState,
     shutdown_requested: &AtomicBool,
+    watch_enabled: bool,
 ) -> Result<()> {
+    let mut last_watch_reload = Instant::now();
+
     loop {
-        terminal.draw(|frame| ui::render(frame, app))?;
+        terminal.draw(|frame| ui::render(frame, app, watch_enabled))?;
 
         if shutdown_requested.load(Ordering::Relaxed) {
             return Ok(());
+        }
+
+        if watch_enabled && last_watch_reload.elapsed() >= WATCH_RELOAD_INTERVAL {
+            if let Err(error) = app.reload() {
+                app.set_watch_reload_error(&error.to_string());
+            }
+            last_watch_reload = Instant::now();
         }
 
         if event::poll(FRAME_DURATION)?
@@ -87,7 +98,8 @@ fn install_signal_handler(shutdown_requested: &Arc<AtomicBool>) -> Result<()> {
 struct CliOptions {
     #[arg(
         value_name = "DB_PATH",
-        help = "Path to the SQLite database file to inspect"
+        help = "Path to the SQLite database file to inspect",
+        default_value = "skala.db"
     )]
     db_path: PathBuf,
     #[arg(
@@ -96,6 +108,8 @@ struct CliOptions {
         help = "Preselect a reactor by name before opening the interface"
     )]
     reactor: Option<String>,
+    #[arg(long, help = "Reload the database from disk every 0.25 seconds")]
+    watch: bool,
 }
 
 #[cfg(test)]
@@ -109,18 +123,26 @@ mod tests {
         let options = CliOptions {
             db_path: PathBuf::from("sample.db"),
             reactor: Some("reactor_53".to_owned()),
+            watch: true,
         };
 
         assert_eq!(options.db_path, PathBuf::from("sample.db"));
         assert_eq!(options.reactor.as_deref(), Some("reactor_53"));
+        assert!(options.watch);
     }
 
     #[test]
     fn clap_parses_expected_arguments() {
-        let options =
-            CliOptions::parse_from(["skala-graph", "sample.db", "--reactor", "reactor_53"]);
+        let options = CliOptions::parse_from([
+            "skala-graph",
+            "sample.db",
+            "--reactor",
+            "reactor_53",
+            "--watch",
+        ]);
 
         assert_eq!(options.db_path, PathBuf::from("sample.db"));
         assert_eq!(options.reactor.as_deref(), Some("reactor_53"));
+        assert!(options.watch);
     }
 }
