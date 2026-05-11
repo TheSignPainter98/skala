@@ -227,7 +227,7 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
         .map(|value| format!("{value:.3} {}", highlighted.unit()))
         .unwrap_or_else(|| "no data".to_owned());
     let footer = Paragraph::new(format!(
-        "Tab switch focus | Up/Down move | Space toggle metric | r reload | q quit\nHighlighted: {} = {} | {}",
+        "Tab switch focus | Up/Down move | Left hide all | Right show all | Space toggle metric | r reload | q quit\nHighlighted: {} = {} | {}",
         highlighted.title(),
         latest_value,
         app.status

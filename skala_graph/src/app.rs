@@ -132,6 +132,16 @@ impl AppState {
         }
     }
 
+    pub fn hide_all_metrics(&mut self) {
+        self.selected_metrics.clear();
+        self.status = "Hid all metrics".to_owned();
+    }
+
+    pub fn show_all_metrics(&mut self) {
+        self.selected_metrics = MetricKey::ALL.into_iter().collect();
+        self.status = "Showing all metrics".to_owned();
+    }
+
     pub fn toggle_focus(&mut self) {
         self.focus = match self.focus {
             FocusPane::Reactors => FocusPane::Metrics,
@@ -204,6 +214,18 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
             match app.focus {
                 FocusPane::Reactors => app.next_reactor()?,
                 FocusPane::Metrics => app.next_metric(),
+            }
+            Ok(AppAction::Continue)
+        }
+        KeyCode::Left => {
+            if app.focus == FocusPane::Metrics {
+                app.hide_all_metrics();
+            }
+            Ok(AppAction::Continue)
+        }
+        KeyCode::Right => {
+            if app.focus == FocusPane::Metrics {
+                app.show_all_metrics();
             }
             Ok(AppAction::Continue)
         }
@@ -315,5 +337,66 @@ mod tests {
         .expect("handle key");
 
         assert!(matches!(action, AppAction::Quit));
+    }
+
+    #[test]
+    fn left_arrow_hides_all_metrics() {
+        let mut app = AppState {
+            db_path: PathBuf::from("test.db"),
+            reactors: vec![ReactorSummary {
+                id: 1,
+                name: "reactor_a".to_owned(),
+            }],
+            reactor_index: 0,
+            metric_index: 0,
+            selected_metrics: MetricKey::ALL.into_iter().collect(),
+            focus: FocusPane::Metrics,
+            current_data: ReactorData {
+                reactor: ReactorSummary {
+                    id: 1,
+                    name: "reactor_a".to_owned(),
+                },
+                points: Vec::new(),
+                available_metrics: BTreeSet::new(),
+            },
+            status: String::new(),
+            connection: None,
+        };
+
+        handle_key(&mut app, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)).expect("handle key");
+
+        assert!(app.selected_metrics.is_empty());
+        assert_eq!(app.status, "Hid all metrics");
+    }
+
+    #[test]
+    fn right_arrow_shows_all_metrics() {
+        let mut app = AppState {
+            db_path: PathBuf::from("test.db"),
+            reactors: vec![ReactorSummary {
+                id: 1,
+                name: "reactor_a".to_owned(),
+            }],
+            reactor_index: 0,
+            metric_index: 0,
+            selected_metrics: BTreeSet::new(),
+            focus: FocusPane::Metrics,
+            current_data: ReactorData {
+                reactor: ReactorSummary {
+                    id: 1,
+                    name: "reactor_a".to_owned(),
+                },
+                points: Vec::new(),
+                available_metrics: BTreeSet::new(),
+            },
+            status: String::new(),
+            connection: None,
+        };
+
+        handle_key(&mut app, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .expect("handle key");
+
+        assert_eq!(app.selected_metrics, MetricKey::ALL.into_iter().collect());
+        assert_eq!(app.status, "Showing all metrics");
     }
 }
