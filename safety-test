@@ -3,12 +3,31 @@
 set -e
 
 function set_target() {
-    echo "updating target to $1"
+    echo "updating target to $1" >&2
     curl "http://localhost:15000/set-target?reactor_name=reactor_53&rate=$1"
-    echo
+    echo >&2
 }
 
 set_target 0
+
+while true; do
+    read -r -p "Start the safety test? [Y/n] " confirm
+
+    case "$confirm" in
+        "" | [Yy] | [Yy][Ee][Ss])
+            break
+            ;;
+        [Nn] | [Nn][Oo])
+            echo "Safety test cancelled." >&2
+            exit 0
+            ;;
+        *)
+            echo "Please answer Y or n." >&2
+            ;;
+    esac
+done
+
+echo 'Commencing test' >&2
 sleep 60s
 set_target 0
 set_target 100
