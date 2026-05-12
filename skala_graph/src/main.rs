@@ -1,12 +1,14 @@
 use std::io::{self, stdout};
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
@@ -16,7 +18,9 @@ use crossterm::terminal::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use skala_graph::app::{AppAction, AppState, handle_key};
+use skala_graph::app::{
+    AppAction, AppState, StartupSelection, ensure_reactor_selection, handle_key,
+};
 use skala_graph::ui;
 
 const FRAME_DURATION: Duration = Duration::from_millis(33);
@@ -24,9 +28,15 @@ const WATCH_RELOAD_INTERVAL: Duration = Duration::from_millis(250);
 
 fn main() -> Result<()> {
     let options = CliOptions::parse();
-    let mut app = AppState::load(&options.db_path, options.reactor.as_deref())?;
     let shutdown_requested = Arc::new(AtomicBool::new(false));
     install_signal_handler(&shutdown_requested)?;
+    wait_for_reactor_at_startup(
+        &options.db_path,
+        options.reactor.as_deref(),
+        &shutdown_requested,
+        options.watch,
+    )?;
+    let mut app = AppState::load(&options.db_path, options.reactor.as_deref())?;
 
     enable_raw_mode()?;
     let mut stdout = stdout();
@@ -43,6 +53,48 @@ fn main() -> Result<()> {
 
     run_result?;
     close_result
+}
+
+fn wait_for_reactor_at_startup(
+    path: &Path,
+    requested_reactor: Option<&str>,
+    shutdown_requested: &AtomicBool,
+    watch_enabled: bool,
+) -> Result<()> {
+    let mut announced_wait = false;
+
+    loop {
+        if shutdown_requested.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
+        match ensure_reactor_selection(path, requested_reactor)? {
+            StartupSelection::Ready => return Ok(()),
+            StartupSelection::WaitForReactor if watch_enabled => {
+                if !announced_wait {
+                    print_waiting_message(path, requested_reactor);
+                    announced_wait = true;
+                }
+                sleep(WATCH_RELOAD_INTERVAL);
+            }
+            StartupSelection::WaitForReactor => {
+                bail!("the database does not contain any reactors with events");
+            }
+        }
+    }
+}
+
+fn print_waiting_message(path: &Path, requested_reactor: Option<&str>) {
+    match requested_reactor {
+        Some(reactor) => eprintln!(
+            "No reactors with events are available in {} yet; waiting for reactor `{reactor}`.",
+            path.display()
+        ),
+        None => eprintln!(
+            "No reactors with events are available in {} yet; waiting for data.",
+            path.display()
+        ),
+    }
 }
 
 fn run_app(
@@ -108,7 +160,10 @@ struct CliOptions {
         help = "Preselect a reactor by name before opening the interface"
     )]
     reactor: Option<String>,
-    #[arg(long, help = "Reload the database from disk every 0.25 seconds")]
+    #[arg(
+        long,
+        help = "Reload the database from disk every 0.25 seconds and wait at startup if no reactors have events yet"
+    )]
     watch: bool,
 }
 

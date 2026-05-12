@@ -41,7 +41,10 @@ cargo run -- /path/to/skala.db --watch
 
 - The database is opened read-only.
 - Startup fails if the expected SKALA tables or columns are missing.
-- If the database contains no reactors with events, startup fails.
+- If the database contains no reactors with events, startup fails unless
+  `--watch` is enabled.
+- With `--watch`, the app prints a startup message and waits until reactor
+  event data appears.
 - If `--reactor` is set and the name is unknown, startup fails and lists the
   known reactor names.
 - Without `--reactor`, the first reactor in name order is selected at startup.

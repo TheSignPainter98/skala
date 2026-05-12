@@ -235,6 +235,12 @@ pub enum AppAction {
     Quit,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StartupSelection {
+    WaitForReactor,
+    Ready,
+}
+
 pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result<AppAction> {
     use crossterm::event::{KeyCode, KeyModifiers};
 
@@ -289,22 +295,29 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
     }
 }
 
-pub fn ensure_reactor_selection(path: &Path, requested_reactor: Option<&str>) -> Result<()> {
+pub fn ensure_reactor_selection(
+    path: &Path,
+    requested_reactor: Option<&str>,
+) -> Result<StartupSelection> {
     let connection = open_database(path)?;
     validate_schema(&connection)?;
     let reactors = load_reactors(&connection)?;
+    determine_startup_selection(&reactors, requested_reactor)
+}
 
+fn determine_startup_selection(
+    reactors: &[ReactorSummary],
+    requested_reactor: Option<&str>,
+) -> Result<StartupSelection> {
     if reactors.is_empty() {
-        return Err(anyhow!(
-            "the database does not contain any reactors with events"
-        ));
+        return Ok(StartupSelection::WaitForReactor);
     }
 
     if requested_reactor.is_some() {
         select_reactor(&reactors, requested_reactor)?;
     }
 
-    Ok(())
+    Ok(StartupSelection::Ready)
 }
 
 #[cfg(test)]
@@ -452,5 +465,47 @@ mod tests {
         app.toggle_chart_scale_mode();
 
         assert_eq!(app.status, "Showing raw chart scale");
+    }
+
+    #[test]
+    fn startup_selection_waits_for_first_reactor() {
+        let selection = determine_startup_selection(&[], None).expect("selection should succeed");
+
+        assert_eq!(selection, StartupSelection::WaitForReactor);
+    }
+
+    #[test]
+    fn startup_selection_accepts_requested_reactor_when_present() {
+        let reactors = vec![
+            ReactorSummary {
+                id: 1,
+                name: "reactor_a".to_owned(),
+            },
+            ReactorSummary {
+                id: 2,
+                name: "reactor_b".to_owned(),
+            },
+        ];
+
+        let selection = determine_startup_selection(&reactors, Some("reactor_b"))
+            .expect("selection should succeed");
+
+        assert_eq!(selection, StartupSelection::Ready);
+    }
+
+    #[test]
+    fn startup_selection_rejects_unknown_requested_reactor_when_others_exist() {
+        let reactors = vec![ReactorSummary {
+            id: 1,
+            name: "reactor_a".to_owned(),
+        }];
+
+        let error = determine_startup_selection(&reactors, Some("reactor_b"))
+            .expect_err("selection should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "reactor `reactor_b` was not found; known reactors: reactor_a"
+        );
     }
 }
