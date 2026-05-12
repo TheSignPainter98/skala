@@ -4,20 +4,26 @@ set -e
 
 function set_target() {
     echo "updating target to $1"
-    curl "http://localhost:15000/set-target?reactor_name=53&rate=$1"
+    curl "http://localhost:15000/set-target?reactor_name=reactor_53&rate=$1"
     echo
 }
 
 set_target 0
 sleep 60s
+set_target 0
 set_target 100
 sleep 60s
+set_target 100
 set_target 10
 sleep 60s
+set_target 10
 set_target 300
 sleep 60s
+set_target 300
 set_target 10
 sleep 60s
+set_target 10
 set_target 1000
 sleep 60s
+set_target 1000
 set_target 10
