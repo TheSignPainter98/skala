@@ -53,16 +53,16 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
                 "integrity": "intact",
                 "mode": "inactive",
                 "temperature": 111.0,
-                "coolant_filled": 222.0,
-                "heated_coolant_filled": 333.0,
-                "fuel_filled": 444.0,
-                "waste_filled": 555.0,
+                "coolant_filled_percent": 222.0,
+                "heated_coolant_filled_percent": 333.0,
+                "fuel_filled_percent": 444.0,
+                "waste_filled_percent": 555.0,
                 "actual_burn_rate": 666.0,
                 "target_burn_rate": 777,
                 "max_burn_rate": 123,
                 "damage_percent": 888.0,
                 "heating_rate": 999.0,
-                "boil_efficiency": 1234.0,
+                "boil_efficiency_percent": 1234.0,
             },
             "turbine_state": {
                 "integrity": "intact",
@@ -110,29 +110,29 @@ async fn test_inactive_reactor(db_pool: SqlitePool) {
             let IntactReactorSnapshot {
                 mode,
                 temperature,
-                coolant_filled,
-                heated_coolant_filled,
-                fuel_filled,
-                waste_filled,
+                coolant_filled_percent,
+                heated_coolant_filled_percent,
+                fuel_filled_percent,
+                waste_filled_percent,
                 actual_burn_rate,
                 target_burn_rate,
                 max_burn_rate,
                 damage_percent,
                 heating_rate,
-                boil_efficiency,
+                boil_efficiency_percent,
             } = intact_reactor_snapshot;
             assert!(matches!(*mode, ReactorMode::Inactive));
             assert_eq!(*temperature, 111.0);
-            assert_eq!(*coolant_filled, 222.0);
-            assert_eq!(*heated_coolant_filled, 333.0);
-            assert_eq!(*fuel_filled, 444.0);
-            assert_eq!(*waste_filled, 555.0);
+            assert_eq!(*coolant_filled_percent, 222.0.into());
+            assert_eq!(*heated_coolant_filled_percent, 333.0.into());
+            assert_eq!(*fuel_filled_percent, 444.0.into());
+            assert_eq!(*waste_filled_percent, 555.0.into());
             assert_eq!(*actual_burn_rate, ActualBurnRate::from(666.0));
             assert_eq!(*target_burn_rate, TargetBurnRate::from(777));
             assert_eq!(*max_burn_rate, MaxBurnRate::from(123));
-            assert_eq!(*damage_percent, 888.0);
+            assert_eq!(*damage_percent, 888.0.into());
             assert_eq!(*heating_rate, 999.0);
-            assert_eq!(*boil_efficiency, 1234.0);
+            assert_eq!(*boil_efficiency_percent, 1234.0.into());
 
             let intact_turbine_snapshot = match turbine {
                 TurbineSnapshot::Intact(intact_turbine_snapshot) => intact_turbine_snapshot,
@@ -165,16 +165,16 @@ async fn test_active_reactor(db_pool: SqlitePool) {
                 "integrity": "intact",
                 "mode": "active",
                 "temperature": 0.0,
-                "coolant_filled": 0.0,
-                "heated_coolant_filled": 0.0,
-                "fuel_filled": 0.0,
-                "waste_filled": 0.0,
+                "coolant_filled_percent": 0.0,
+                "heated_coolant_filled_percent": 0.0,
+                "fuel_filled_percent": 0.0,
+                "waste_filled_percent": 0.0,
                 "actual_burn_rate": 0.0,
                 "target_burn_rate": 0,
                 "max_burn_rate": 1000,
                 "damage_percent": 0.0,
                 "heating_rate": 0.0,
-                "boil_efficiency": 0.0,
+                "boil_efficiency_percent": 0.0,
             },
             "turbine_state": {
                 "integrity": "intact",
@@ -491,16 +491,16 @@ fn active_request(reactor_name: &str, timestamp: &str) -> Value {
             "integrity": "intact",
             "mode": "active",
             "temperature": 0.0,
-            "coolant_filled": 0.0,
-            "heated_coolant_filled": 0.0,
-            "fuel_filled": 0.0,
-            "waste_filled": 0.0,
+            "coolant_filled_percent": 0.0,
+            "heated_coolant_filled_percent": 0.0,
+            "fuel_filled_percent": 0.0,
+            "waste_filled_percent": 0.0,
             "actual_burn_rate": 0.0,
             "target_burn_rate": 0,
             "max_burn_rate": 1000,
             "damage_percent": 0.0,
             "heating_rate": 0.0,
-            "boil_efficiency": 0.0,
+            "boil_efficiency_percent": 0.0,
         },
         "turbine_state": {
             "integrity": "intact",

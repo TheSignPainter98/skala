@@ -6,7 +6,9 @@ use sqlx::{SqliteTransaction, query, query_as};
 use crate::advisor::{
     Advice, AdvisedAction, Advisor, PastAction, PastEvent, Snapshot, SystemKnowledge,
 };
-use crate::components::reactor::{IntactReactorSnapshot, ReactorId, ReactorName, ReactorSnapshot};
+use crate::components::reactor::{
+    IntactReactorSnapshot, Percent, ReactorId, ReactorName, ReactorSnapshot,
+};
 use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
 use crate::routes::common::{EventId, get_reactor_id, register_event};
 use crate::time::{IngameDateTime, IrlDateTime};
@@ -190,21 +192,27 @@ async fn get_system_snapshots(
                 let actual_burn_rate = actual_burn_rate.into();
                 let target_burn_rate = target_burn_rate.into();
                 let max_burn_rate = MaxBurnRate::from(max_burn_rate);
+                let coolant_filled_percent = Percent::from(coolant_filled);
+                let heated_coolant_filled_percent = Percent::from(heated_coolant_filled);
+                let fuel_filled_percent = Percent::from(fuel_filled);
+                let waste_filled_percent = Percent::from(waste_filled);
+                let damage_percent = Percent::from(damage_percent);
+                let boil_efficiency_percent = Percent::from(boil_efficiency);
                 Snapshot {
                     timestamp: ingame_timestamp,
                     reactor: ReactorSnapshot::Intact(IntactReactorSnapshot {
                         mode,
                         temperature,
-                        coolant_filled,
-                        heated_coolant_filled,
-                        fuel_filled,
-                        waste_filled,
+                        coolant_filled_percent,
+                        heated_coolant_filled_percent,
+                        fuel_filled_percent,
+                        waste_filled_percent,
                         actual_burn_rate,
                         target_burn_rate,
                         max_burn_rate,
                         damage_percent,
                         heating_rate,
-                        boil_efficiency,
+                        boil_efficiency_percent,
                     }),
                     turbine: TurbineSnapshot::Intact(IntactTurbineSnapshot {
                         stored_kinetic_energy,
@@ -407,16 +415,16 @@ async fn store_system_state(
             let IntactReactorSnapshot {
                 mode,
                 temperature,
-                coolant_filled,
-                heated_coolant_filled,
-                fuel_filled,
-                waste_filled,
+                coolant_filled_percent: coolant_filled,
+                heated_coolant_filled_percent: heated_coolant_filled,
+                fuel_filled_percent: fuel_filled,
+                waste_filled_percent: waste_filled,
                 actual_burn_rate,
                 target_burn_rate,
                 max_burn_rate,
                 damage_percent,
                 heating_rate,
-                boil_efficiency,
+                boil_efficiency_percent: boil_efficiency,
             } = intact_reactor_state;
             let IntactTurbineSnapshot {
                 stored_kinetic_energy,

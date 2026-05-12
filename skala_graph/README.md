@@ -10,12 +10,11 @@ not apply here. This isn't a critical component.
 ## Usage
 
 ```text
-skala-graph <DB_PATH> [--reactor <NAME>] [--watch]
+skala-graph <DB_PATH> [--reactor <NAME>]
 ```
 
 - `<DB_PATH>` is the path to the SQLite database to open.
 - `--reactor <NAME>` optionally preselects a reactor before the UI starts.
-- `--watch` reloads the database from disk every 0.25 seconds while the UI is open.
 
 ## Examples
 
@@ -31,29 +30,27 @@ Open a database and preselect a reactor:
 cargo run -- /path/to/skala.db --reactor reactor_53
 ```
 
-Open a database with automatic reloads enabled:
+Open a database and let it wait for reactor data and auto-reload:
 
 ```bash
-cargo run -- /path/to/skala.db --watch
+cargo run -- /path/to/skala.db
 ```
 
 ## Startup behaviour
 
 - The database is opened read-only.
 - Startup fails if the expected SKALA tables or columns are missing.
-- If the database contains no reactors with events, startup fails unless
-  `--watch` is enabled.
-- With `--watch`, the app prints a startup message and waits until reactor
-  event data appears.
+- If the database contains no reactors with events, the app prints a startup
+  message and waits until reactor event data appears.
 - If `--reactor` is set and the name is unknown, startup fails and lists the
   known reactor names.
 - Without `--reactor`, the first reactor in name order is selected at startup.
   You can switch reactors later inside the UI.
 - If the database only contains one reactor, the reactor list is hidden and the
   metrics and chart panes use the full width.
-- With `--watch`, the app retries an automatic reload every 0.25 seconds. If a
-  reload fails, the last good data remains visible and the error is shown in
-  the status line until a later reload succeeds.
+- The app retries an automatic reload every 0.25 seconds. If a reload fails,
+  the last good data remains visible and the error is shown in the status line
+  until a later reload succeeds.
 
 ## Default view
 
@@ -80,8 +77,7 @@ are still shown in the interface labels and status text.
 - `Right`: show all metrics
 - `n`: toggle between normalised and raw chart scaling
 - `r`: reload the database from disk
-- `--watch`: also reload the database from disk automatically every 0.25
-  seconds
+- automatic reload runs every 0.25 seconds
 - `q` or `Ctrl+C`: quit
 
 ## Help output

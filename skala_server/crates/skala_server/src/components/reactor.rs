@@ -21,16 +21,16 @@ pub enum ReactorSnapshot {
 pub struct IntactReactorSnapshot {
     pub mode: ReactorMode,
     pub temperature: f64,
-    pub coolant_filled: f64,
-    pub heated_coolant_filled: f64,
-    pub fuel_filled: f64,
-    pub waste_filled: f64,
+    pub coolant_filled_percent: Percent,
+    pub heated_coolant_filled_percent: Percent,
+    pub fuel_filled_percent: Percent,
+    pub waste_filled_percent: Percent,
     pub actual_burn_rate: ActualBurnRate,
     pub target_burn_rate: TargetBurnRate,
     pub max_burn_rate: MaxBurnRate,
-    pub damage_percent: f64,
+    pub damage_percent: Percent,
     pub heating_rate: f64,
-    pub boil_efficiency: f64,
+    pub boil_efficiency_percent: Percent,
 }
 
 #[derive(
@@ -165,6 +165,40 @@ impl Display for ActualBurnRate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let Self(rate) = self;
         write!(f, "{rate}mL/s")
+    }
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    PartialOrd,
+    quicktype::Quicktype,
+    serde::Deserialize,
+    serde::Serialize,
+    sqlx::Type,
+)]
+#[sqlx(transparent)]
+pub struct Percent(f64);
+
+impl From<f64> for Percent {
+    fn from(inner: f64) -> Self {
+        Self(inner * 100.0)
+    }
+}
+
+impl From<Percent> for f64 {
+    fn from(percent: Percent) -> Self {
+        let Percent(inner) = percent;
+        inner / 100.0
+    }
+}
+
+impl Display for Percent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Self(inner) = self;
+        write!(f, "{inner}%")
     }
 }
 

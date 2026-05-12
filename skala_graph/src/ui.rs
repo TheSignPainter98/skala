@@ -20,7 +20,7 @@ const PALETTE: [Color; 8] = [
     Color::LightGreen,
 ];
 
-pub fn render(frame: &mut Frame<'_>, app: &AppState, watch_enabled: bool) {
+pub fn render(frame: &mut Frame<'_>, app: &AppState) {
     let layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -57,7 +57,7 @@ pub fn render(frame: &mut Frame<'_>, app: &AppState, watch_enabled: bool) {
         render_chart(frame, content[1], app);
     }
 
-    render_footer(frame, layout[2], app, watch_enabled);
+    render_footer(frame, layout[2], app);
 }
 
 fn render_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
@@ -291,26 +291,20 @@ fn format_elapsed_time_label(seconds: f64) -> String {
     format!("{hours:02}:{minutes:02}:{remaining_seconds:02}")
 }
 
-fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState, watch_enabled: bool) {
+fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     let highlighted = MetricKey::ALL[app.metric_index];
     let latest_value = app
         .latest_raw_value(highlighted)
         .map(|value| format!("{value:.3} {}", highlighted.unit()))
         .unwrap_or_else(|| "no data".to_owned());
-    let watch_label = if watch_enabled {
-        " | auto-reload 0.25s"
-    } else {
-        ""
-    };
     let controls = if app.shows_reactor_list() {
         "Tab switch focus | Up/Down move"
     } else {
         "Up/Down move"
     };
     let footer = Paragraph::new(format!(
-        "{} | Left hide all | Right show all | Space toggle metric | n toggle scale | r reload | q quit{}\nPlot mode: {} | Highlighted: {} = {} | {}",
+        "{} | Left hide all | Right show all | Space toggle metric | n toggle scale | r reload | auto-reload 0.25s | q quit\nPlot mode: {} | Highlighted: {} = {} | {}",
         controls,
-        watch_label,
         app.chart_scale_mode.label(),
         highlighted.title(),
         latest_value,

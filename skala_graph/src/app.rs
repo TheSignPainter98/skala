@@ -314,7 +314,7 @@ fn determine_startup_selection(
     }
 
     if requested_reactor.is_some() {
-        select_reactor(&reactors, requested_reactor)?;
+        select_reactor(reactors, requested_reactor)?;
     }
 
     Ok(StartupSelection::Ready)

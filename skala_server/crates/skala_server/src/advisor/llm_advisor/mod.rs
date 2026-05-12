@@ -220,7 +220,7 @@ mod tests {
     use crate::advisor::llm_advisor::backend::OpenAiBackend;
     use crate::advisor::{AdvisedAction, PastAction, Snapshot, SystemKnowledge};
     use crate::components::reactor::{
-        ActualBurnRate, IntactReactorSnapshot, MaxBurnRate, ReactorMode, ReactorSnapshot,
+        ActualBurnRate, IntactReactorSnapshot, MaxBurnRate, Percent, ReactorMode, ReactorSnapshot,
         TargetBurnRate,
     };
     use crate::components::turbine::{IntactTurbineSnapshot, TurbineSnapshot};
@@ -265,16 +265,16 @@ mod tests {
                 reactor: ReactorSnapshot::Intact(IntactReactorSnapshot {
                     mode: ReactorMode::Active,
                     temperature: 742.5,
-                    coolant_filled: 0.82,
-                    heated_coolant_filled: 0.34,
-                    fuel_filled: 0.76,
-                    waste_filled: 0.12,
+                    coolant_filled_percent: Percent::from(0.82),
+                    heated_coolant_filled_percent: Percent::from(0.34),
+                    fuel_filled_percent: Percent::from(0.76),
+                    waste_filled_percent: Percent::from(0.12),
                     actual_burn_rate: ActualBurnRate::from(503.2),
                     target_burn_rate: TargetBurnRate::from(500),
                     max_burn_rate: MaxBurnRate::from(1_000),
-                    damage_percent: 0.0,
+                    damage_percent: Percent::from(0.0),
                     heating_rate: 18.25,
-                    boil_efficiency: 0.91,
+                    boil_efficiency_percent: Percent::from(0.91),
                 }),
                 turbine: TurbineSnapshot::Intact(IntactTurbineSnapshot {
                     stored_kinetic_energy: 12_345.0,
@@ -314,16 +314,16 @@ mod tests {
             reactor: ReactorSnapshot::Intact(IntactReactorSnapshot {
                 mode: ReactorMode::Active,
                 temperature: 742.5,
-                coolant_filled: 0.82,
-                heated_coolant_filled: 0.34,
-                fuel_filled: 0.76,
-                waste_filled: 0.12,
+                coolant_filled_percent: Percent::from(0.82),
+                heated_coolant_filled_percent: Percent::from(0.34),
+                fuel_filled_percent: Percent::from(0.76),
+                waste_filled_percent: Percent::from(0.12),
                 actual_burn_rate: ActualBurnRate::from(503.2),
                 target_burn_rate: TargetBurnRate::from(500),
                 max_burn_rate: MaxBurnRate::from(1_000),
-                damage_percent: 0.0,
+                damage_percent: Percent::from(0.0),
                 heating_rate: 18.25,
-                boil_efficiency: 0.91,
+                boil_efficiency_percent: Percent::from(0.91),
             }),
             turbine: TurbineSnapshot::Intact(IntactTurbineSnapshot {
                 stored_kinetic_energy: 12_345.0,

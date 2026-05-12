@@ -8,7 +8,7 @@ use std::sync::{
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
@@ -34,7 +34,6 @@ fn main() -> Result<()> {
         &options.db_path,
         options.reactor.as_deref(),
         &shutdown_requested,
-        options.watch,
     )?;
     let mut app = AppState::load(&options.db_path, options.reactor.as_deref())?;
 
@@ -44,7 +43,7 @@ fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let run_result = run_app(&mut terminal, &mut app, &shutdown_requested, options.watch);
+    let run_result = run_app(&mut terminal, &mut app, &shutdown_requested);
     let close_result = app.close_database();
 
     disable_raw_mode()?;
@@ -59,7 +58,6 @@ fn wait_for_reactor_at_startup(
     path: &Path,
     requested_reactor: Option<&str>,
     shutdown_requested: &AtomicBool,
-    watch_enabled: bool,
 ) -> Result<()> {
     let mut announced_wait = false;
 
@@ -70,15 +68,12 @@ fn wait_for_reactor_at_startup(
 
         match ensure_reactor_selection(path, requested_reactor)? {
             StartupSelection::Ready => return Ok(()),
-            StartupSelection::WaitForReactor if watch_enabled => {
+            StartupSelection::WaitForReactor => {
                 if !announced_wait {
                     print_waiting_message(path, requested_reactor);
                     announced_wait = true;
                 }
                 sleep(WATCH_RELOAD_INTERVAL);
-            }
-            StartupSelection::WaitForReactor => {
-                bail!("the database does not contain any reactors with events");
             }
         }
     }
@@ -101,18 +96,17 @@ fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut AppState,
     shutdown_requested: &AtomicBool,
-    watch_enabled: bool,
 ) -> Result<()> {
     let mut last_watch_reload = Instant::now();
 
     loop {
-        terminal.draw(|frame| ui::render(frame, app, watch_enabled))?;
+        terminal.draw(|frame| ui::render(frame, app))?;
 
         if shutdown_requested.load(Ordering::Relaxed) {
             return Ok(());
         }
 
-        if watch_enabled && last_watch_reload.elapsed() >= WATCH_RELOAD_INTERVAL {
+        if last_watch_reload.elapsed() >= WATCH_RELOAD_INTERVAL {
             if let Err(error) = app.reload() {
                 app.set_watch_reload_error(&error.to_string());
             }
@@ -160,11 +154,6 @@ struct CliOptions {
         help = "Preselect a reactor by name before opening the interface"
     )]
     reactor: Option<String>,
-    #[arg(
-        long,
-        help = "Reload the database from disk every 0.25 seconds and wait at startup if no reactors have events yet"
-    )]
-    watch: bool,
 }
 
 #[cfg(test)]
@@ -178,26 +167,25 @@ mod tests {
         let options = CliOptions {
             db_path: PathBuf::from("sample.db"),
             reactor: Some("reactor_53".to_owned()),
-            watch: true,
         };
 
         assert_eq!(options.db_path, PathBuf::from("sample.db"));
         assert_eq!(options.reactor.as_deref(), Some("reactor_53"));
-        assert!(options.watch);
     }
 
     #[test]
     fn clap_parses_expected_arguments() {
-        let options = CliOptions::parse_from([
-            "skala-graph",
-            "sample.db",
-            "--reactor",
-            "reactor_53",
-            "--watch",
-        ]);
+        let options =
+            CliOptions::parse_from(["skala-graph", "sample.db", "--reactor", "reactor_53"]);
 
         assert_eq!(options.db_path, PathBuf::from("sample.db"));
         assert_eq!(options.reactor.as_deref(), Some("reactor_53"));
-        assert!(options.watch);
+    }
+
+    #[test]
+    fn clap_rejects_watch_argument() {
+        let result = CliOptions::try_parse_from(["skala-graph", "sample.db", "--watch"]);
+
+        assert!(result.is_err());
     }
 }
