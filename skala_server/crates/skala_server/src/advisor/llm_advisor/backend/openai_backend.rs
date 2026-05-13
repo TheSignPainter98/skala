@@ -121,7 +121,7 @@ impl TryFrom<PromptInfo<'_>> for ChatCompletionRequestMessage {
     fn try_from(info: PromptInfo<'_>) -> std::result::Result<Self, Self::Error> {
         let summary = info.summary();
         match info {
-            PromptInfo::BasePrompt(_) => {
+            PromptInfo::Raw(_) => {
                 let ret = ChatCompletionRequestDeveloperMessageArgs::default()
                     .name("god")
                     .content(summary)

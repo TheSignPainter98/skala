@@ -61,12 +61,15 @@ impl LlmAdvisor {
         let target = iter::once(PromptInfo::TargetEnergyProductionRate(
             target_energy_production_rate,
         ));
-        iter::once(PromptInfo::BasePrompt(include_str!("base_prompt.md")))
+        iter::once(PromptInfo::Raw(include_str!("base_prompt.md")))
             .chain(
                 past_events
                     .biased_alternate_with(feedback)
                     .on(|event| matches!(event, PromptInfo::PastAction(_))),
             )
+            .chain(iter::once(PromptInfo::Raw(include_str!(
+                "reactor_info_prompt.md"
+            ))))
             .chain(system_knowledge)
             .chain(target)
     }
@@ -95,7 +98,7 @@ impl Advisor for LlmAdvisor {
 }
 
 pub(crate) enum PromptInfo<'msg> {
-    BasePrompt(&'msg str),
+    Raw(&'msg str),
     Snapshot(&'msg Snapshot),
     PastAction(&'msg PastAction),
     Feedback(&'msg Feedback),
@@ -107,7 +110,7 @@ pub(crate) enum PromptInfo<'msg> {
 impl PromptInfo<'_> {
     pub(crate) fn summary(&self) -> String {
         match self {
-            Self::BasePrompt(text) => (*text).to_owned(), // Forces unnecessary allocation.
+            Self::Raw(text) => (*text).to_owned(), // Forces unnecessary allocation.
             Self::Snapshot(snapshot) => {
                 let Snapshot {
                     timestamp,
@@ -117,7 +120,7 @@ impl PromptInfo<'_> {
                 if matches!(reactor, ReactorSnapshot::Destroyed) {
                     return formatdoc!(
                         "
-                            ### Reactor state at {timestamp}
+                            # Reactor state at {timestamp}
 
                             Reactor sensors malfunctioned; no data available.
                         "
@@ -128,7 +131,7 @@ impl PromptInfo<'_> {
                 let state_json = serde_json::to_string(&snapshot_body).unwrap();
                 return formatdoc!(
                     "
-                        ### System state at {timestamp}
+                        # System state at {timestamp}
 
                         ```json
                         {state_json}
@@ -151,7 +154,7 @@ impl PromptInfo<'_> {
                 let state_json = serde_json::to_string(action).unwrap();
                 formatdoc!(
                     "
-                        ### Action taken at {timestamp}
+                        # Action taken at {timestamp}
 
                         ```json
                         {state_json}
@@ -190,7 +193,7 @@ impl PromptInfo<'_> {
                 "
                     # Your current goal
 
-                    We have to get the turbine's energy production rate to {target}, **safely**. What do you recommend?
+                    The national power grid controller kindly asks that we get the turbine's energy production rate to {target}, **safely**. What do you recommend?
                 "
             ),
         }
@@ -237,7 +240,7 @@ mod tests {
 
     #[test]
     fn test_prompt_info_summary_base_prompt() {
-        let summary = PromptInfo::BasePrompt("# Keep the reactor stable.").summary();
+        let summary = PromptInfo::Raw("# Keep the reactor stable.").summary();
 
         assert!(summary.starts_with('#'));
         assert_snapshot!(summary);
