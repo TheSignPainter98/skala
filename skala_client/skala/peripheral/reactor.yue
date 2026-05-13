@@ -22,16 +22,16 @@ declare_type 'peripheral.Reactor', [[{
 declare_type 'peripheral.ReactorState', [[{
   mode: "active"|"inactive",
   temperature: number,
-  coolant_filled: number,
-  heated_coolant_filled: number,
-  fuel_filled: number,
-  waste_filled: number,
+  coolant_filled_percent: number,
+  heated_coolant_filled_percent: number,
+  fuel_filled_percent: number,
+  waste_filled_percent: number,
   actual_burn_rate: number,
   target_burn_rate: number,
   max_burn_rate: number,
   damage_percent: number,
   heating_rate: number,
-  boil_efficiency: number,
+  boil_efficiency_percent: number,
 }]]
 export class Reactor
   new: (@reactor) =>
@@ -105,16 +105,16 @@ export class Reactor
       state = with {}
         .mode = mode
         .temperature = @reactor.getTemperature!
-        .coolant_filled = @reactor.getCoolantFilledPercentage!
-        .heated_coolant_filled = @reactor.getHeatedCoolantFilledPercentage!
-        .fuel_filled = @reactor.getFuelFilledPercentage!
-        .waste_filled = @reactor.getWasteFilledPercentage!
+        .coolant_filled_percent = @reactor.getCoolantFilledPercentage!
+        .heated_coolant_filled_percent = @reactor.getHeatedCoolantFilledPercentage!
+        .fuel_filled_percent = @reactor.getFuelFilledPercentage!
+        .waste_filled_percent = @reactor.getWasteFilledPercentage!
         .actual_burn_rate = @reactor.getActualBurnRate!
         .target_burn_rate = @reactor.getBurnRate!
         .max_burn_rate = @reactor.getMaxBurnRate!
         .damage_percent = @reactor.getDamagePercent!
         .heating_rate = @reactor.getHeatedCoolantFilledPercentage!
-        .boil_efficiency = @reactor.getBoilEfficiency!
+        .boil_efficiency_percent = @reactor.getBoilEfficiency!
     catch err2
       err = err2
     if err?

@@ -30,16 +30,16 @@ declare_type 'server.IntactReactorState', [[{
   integrity: "intact",
   mode: server.ReactorMode,
   temperature: number,
-  coolant_filled: number,
-  heated_coolant_filled: number,
-  fuel_filled: number,
-  waste_filled: number,
+  coolant_filled_percent: number,
+  heated_coolant_filled_percent: number,
+  fuel_filled_percent: number,
+  waste_filled_percent: number,
   actual_burn_rate: number,
   target_burn_rate: number,
   max_burn_rate: number,
   damage_percent: number,
   heating_rate: number,
-  boil_efficiency: number,
+  boil_efficiency_percent: number,
 }]]
 
 declare_type 'server.ReactorName', 'string'

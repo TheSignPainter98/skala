@@ -29,31 +29,31 @@ export class ReportPrinter
       {
         :status
         :temperature
-        :coolant_filled
-        :heated_coolant_filled
-        :fuel_filled
-        :waste_filled
+        :coolant_filled_percent
+        :heated_coolant_filled_percent
+        :fuel_filled_percent
+        :waste_filled_percent
         :actual_burn_rate
         :target_burn_rate
         :damage_percent
         :heating_rate
-        :boil_efficiency
+        :boil_efficiency_percent
       } = state
       [] =
         name: 'core temp'
         value: '%.2f°C'\format temperature - KELVIN_OFFSET
       [] =
         name: "c'lnt lvl"
-        value: '%.2f%%'\format 100 * coolant_filled
+        value: '%.2f%%'\format 100 * coolant_filled_percent
       [] =
         name: "hot c'lnt level"
-        value: '%.2f%%'\format 100 * heated_coolant_filled
+        value: '%.2f%%'\format 100 * heated_coolant_filled_percent
       [] =
         name: 'fuel lvl'
-        value: '%.2f%%'\format 100 * fuel_filled
+        value: '%.2f%%'\format 100 * fuel_filled_percent
       [] =
         name: 'waste lvl'
-        value: '%.2f%%'\format 100 * waste_filled
+        value: '%.2f%%'\format 100 * waste_filled_percent
       [] =
         name: 'burn rate'
         value: '%.2gmB/s'\format actual_burn_rate * TICKS_PER_SECOND
@@ -68,7 +68,7 @@ export class ReportPrinter
         value: '%.2gmB/s'\format heating_rate * TICKS_PER_SECOND
       [] =
         name: 'boil effncy'
-        value: '%.2f%%'\format 100 * boil_efficiency
+        value: '%.2f%%'\format 100 * boil_efficiency_percent
 
     time = os.time 'ingame'
     hour, hour_frac = math.modf time
