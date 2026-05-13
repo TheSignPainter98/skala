@@ -75,6 +75,7 @@ are still shown in the interface labels and status text.
 - `Space`: toggle the highlighted metric
 - `Left`: hide all metrics
 - `Right`: show all metrics
+- `m`: toggle the metrics pane
 - `n`: toggle between normalised and raw chart scaling
 - `r`: reload the database from disk
 - automatic reload runs every 0.25 seconds

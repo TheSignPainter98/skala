@@ -44,6 +44,7 @@ pub struct AppState {
     pub reactor_index: usize,
     pub metric_index: usize,
     pub selected_metrics: BTreeSet<MetricKey>,
+    pub metrics_visible: bool,
     pub chart_scale_mode: ChartScaleMode,
     pub focus: FocusPane,
     pub current_data: ReactorData,
@@ -65,6 +66,7 @@ impl AppState {
             reactor_index,
             metric_index: 0,
             selected_metrics: MetricKey::DEFAULTS.into_iter().collect(),
+            metrics_visible: true,
             chart_scale_mode: ChartScaleMode::Normalised,
             focus: FocusPane::Metrics,
             current_data,
@@ -174,7 +176,31 @@ impl AppState {
         self.status = "Showing all metrics".to_owned();
     }
 
+    pub fn toggle_metrics_visibility(&mut self) {
+        self.metrics_visible = !self.metrics_visible;
+        if self.metrics_visible {
+            self.focus = FocusPane::Metrics;
+            self.status = "Showing metrics pane".to_owned();
+        } else {
+            if self.shows_reactor_list() {
+                self.focus = FocusPane::Reactors;
+            } else {
+                self.focus = FocusPane::Metrics;
+            }
+            self.status = "Hid metrics pane".to_owned();
+        }
+    }
+
     pub fn toggle_focus(&mut self) {
+        if !self.metrics_visible {
+            if self.shows_reactor_list() {
+                self.focus = FocusPane::Reactors;
+            } else {
+                self.focus = FocusPane::Metrics;
+            }
+            return;
+        }
+
         if !self.shows_reactor_list() {
             self.focus = FocusPane::Metrics;
             return;
@@ -254,33 +280,39 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
         KeyCode::Up => {
             match app.focus {
                 FocusPane::Reactors => app.previous_reactor()?,
-                FocusPane::Metrics => app.previous_metric(),
+                FocusPane::Metrics if app.metrics_visible => app.previous_metric(),
+                FocusPane::Metrics => {}
             }
             Ok(AppAction::Continue)
         }
         KeyCode::Down => {
             match app.focus {
                 FocusPane::Reactors => app.next_reactor()?,
-                FocusPane::Metrics => app.next_metric(),
+                FocusPane::Metrics if app.metrics_visible => app.next_metric(),
+                FocusPane::Metrics => {}
             }
             Ok(AppAction::Continue)
         }
         KeyCode::Left => {
-            if app.focus == FocusPane::Metrics {
+            if app.focus == FocusPane::Metrics && app.metrics_visible {
                 app.hide_all_metrics();
             }
             Ok(AppAction::Continue)
         }
         KeyCode::Right => {
-            if app.focus == FocusPane::Metrics {
+            if app.focus == FocusPane::Metrics && app.metrics_visible {
                 app.show_all_metrics();
             }
             Ok(AppAction::Continue)
         }
         KeyCode::Char(' ') => {
-            if app.focus == FocusPane::Metrics {
+            if app.focus == FocusPane::Metrics && app.metrics_visible {
                 app.toggle_metric();
             }
+            Ok(AppAction::Continue)
+        }
+        KeyCode::Char('m') => {
+            app.toggle_metrics_visibility();
             Ok(AppAction::Continue)
         }
         KeyCode::Char('r') => {
@@ -337,6 +369,7 @@ mod tests {
             reactor_index: 0,
             metric_index: 0,
             selected_metrics: BTreeSet::from([MetricKey::Temperature]),
+            metrics_visible: true,
             chart_scale_mode: ChartScaleMode::Normalised,
             focus: FocusPane::Metrics,
             current_data: ReactorData {
@@ -431,6 +464,75 @@ mod tests {
         handle_key(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)).expect("handle key");
 
         assert_eq!(app.focus, FocusPane::Metrics);
+    }
+
+    #[test]
+    fn m_toggles_metrics_visibility() {
+        let mut app = test_app();
+
+        handle_key(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+        )
+        .expect("handle key");
+
+        assert!(!app.metrics_visible);
+        assert_eq!(app.status, "Hid metrics pane");
+
+        handle_key(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+        )
+        .expect("handle key");
+
+        assert!(app.metrics_visible);
+        assert_eq!(app.focus, FocusPane::Metrics);
+        assert_eq!(app.status, "Showing metrics pane");
+    }
+
+    #[test]
+    fn metric_keys_do_nothing_when_metrics_are_hidden() {
+        let mut app = test_app();
+        app.metrics_visible = false;
+        app.metric_index = 0;
+        app.selected_metrics = BTreeSet::from([MetricKey::Temperature]);
+
+        for key in [
+            KeyCode::Down,
+            KeyCode::Up,
+            KeyCode::Char(' '),
+            KeyCode::Left,
+            KeyCode::Right,
+        ] {
+            handle_key(&mut app, KeyEvent::new(key, KeyModifiers::NONE)).expect("handle key");
+        }
+
+        assert_eq!(app.metric_index, 0);
+        assert_eq!(
+            app.selected_metrics,
+            BTreeSet::from([MetricKey::Temperature])
+        );
+    }
+
+    #[test]
+    fn showing_metrics_restores_metrics_focus() {
+        let mut app = test_app();
+        app.reactors.push(ReactorSummary {
+            id: 2,
+            name: "reactor_b".to_owned(),
+        });
+        app.metrics_visible = false;
+        app.focus = FocusPane::Reactors;
+
+        handle_key(
+            &mut app,
+            KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
+        )
+        .expect("handle key");
+
+        assert!(app.metrics_visible);
+        assert_eq!(app.focus, FocusPane::Metrics);
+        assert_eq!(app.status, "Showing metrics pane");
     }
 
     #[test]

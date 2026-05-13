@@ -32,29 +32,37 @@ pub fn render(frame: &mut Frame<'_>, app: &AppState) {
 
     render_header(frame, layout[0], app);
 
-    let content = if app.shows_reactor_list() {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Length(26),
-                Constraint::Length(38),
-                Constraint::Min(30),
-            ])
-            .split(layout[1])
-    } else {
-        Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(38), Constraint::Min(30)])
-            .split(layout[1])
-    };
-
-    if app.shows_reactor_list() {
-        render_reactors(frame, content[0], app);
-        render_metrics(frame, content[1], app);
-        render_chart(frame, content[2], app);
-    } else {
-        render_metrics(frame, content[0], app);
-        render_chart(frame, content[1], app);
+    match (app.shows_reactor_list(), app.metrics_visible) {
+        (true, true) => {
+            let content = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Length(26),
+                    Constraint::Length(38),
+                    Constraint::Min(30),
+                ])
+                .split(layout[1]);
+            render_reactors(frame, content[0], app);
+            render_metrics(frame, content[1], app);
+            render_chart(frame, content[2], app);
+        }
+        (true, false) => {
+            let content = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(26), Constraint::Min(30)])
+                .split(layout[1]);
+            render_reactors(frame, content[0], app);
+            render_chart(frame, content[1], app);
+        }
+        (false, true) => {
+            let content = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(38), Constraint::Min(30)])
+                .split(layout[1]);
+            render_metrics(frame, content[0], app);
+            render_chart(frame, content[1], app);
+        }
+        (false, false) => render_chart(frame, layout[1], app),
     }
 
     render_footer(frame, layout[2], app);
@@ -302,9 +310,15 @@ fn render_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     } else {
         "Up/Down move"
     };
+    let metric_controls = if app.metrics_visible {
+        "Left hide all | Right show all | Space toggle metric"
+    } else {
+        "metric controls hidden"
+    };
     let footer = Paragraph::new(format!(
-        "{} | Left hide all | Right show all | Space toggle metric | n toggle scale | r reload | auto-reload 0.25s | q quit\nPlot mode: {} | Highlighted: {} = {} | {}",
+        "{} | {} | m toggle metrics | n toggle scale | r reload | auto-reload 0.25s | q quit\nPlot mode: {} | Highlighted: {} = {} | {}",
         controls,
+        metric_controls,
         app.chart_scale_mode.label(),
         highlighted.title(),
         latest_value,
