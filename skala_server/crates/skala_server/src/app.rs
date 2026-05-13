@@ -2,9 +2,10 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use axum::Router;
+use axum::middleware as axum_middleware;
 use sqlx::SqlitePool;
 
-use crate::{advisor::Advisor, routes};
+use crate::{advisor::Advisor, middleware, routes};
 
 pub struct App {
     router: Router<()>,
@@ -16,7 +17,9 @@ impl App {
         A: Advisor + 'static,
     {
         let app_state = AppState::new(db_pool, snapshot_window_limit, advisor);
-        let router = routes::register(Router::new()).with_state(app_state);
+        let router = routes::register(Router::new())
+            .layer(axum_middleware::from_fn(middleware::log_error_response))
+            .with_state(app_state);
         Self { router }
     }
 

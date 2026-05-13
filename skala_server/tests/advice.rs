@@ -1,5 +1,6 @@
 mod common;
 
+use anyhow::anyhow;
 use serde_json::{Value, json};
 use skala_server::advisor::{Advice, AdvisedAction, PastEvent, Snapshot, SystemKnowledge};
 use skala_server::{
@@ -288,6 +289,53 @@ async fn test_set_target_returns_plain_text(db_pool: SqlitePool) {
     assert_eq!(
         "Target energy production rate for reactor pop set to 1500.5",
         resp.text()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_success_response_is_not_logged_as_error(db_pool: SqlitePool) {
+    let logs = common::recorded_logs();
+    let test_server = common::setup(db_pool, default_advisor());
+
+    let resp = test_server
+        .get("/set-target?reactor_name=pop&rate=1500.5")
+        .await;
+
+    resp.assert_status_ok();
+    assert!(!logs.contains("HTTP 200 OK response for GET /set-target"));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_internal_server_error_response_is_logged(db_pool: SqlitePool) {
+    const ERROR_RESPONSE: &str = "unique middleware error response";
+
+    let logs = common::recorded_logs();
+    let advisor = MockAdvisor::new(|_, _, _| Err(anyhow!(ERROR_RESPONSE).into()));
+    let test_server = common::setup(db_pool, advisor);
+
+    let resp = test_server
+        .post("/advice")
+        .json(&active_request("pop", "2026-04-15T00:00:00"))
+        .await;
+
+    resp.assert_status_internal_server_error();
+    assert_eq!(ERROR_RESPONSE, resp.text());
+    assert!(logs.contains("HTTP 500 Internal Server Error response for POST /advice"));
+    assert!(logs.contains(ERROR_RESPONSE));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn test_not_found_response_is_logged(db_pool: SqlitePool) {
+    const PATH: &str = "/unique-middleware-not-found-route";
+
+    let logs = common::recorded_logs();
+    let test_server = common::setup(db_pool, default_advisor());
+
+    let resp = test_server.get(PATH).await;
+
+    resp.assert_status_not_found();
+    assert!(
+        logs.contains("HTTP 404 Not Found response for GET /unique-middleware-not-found-route")
     );
 }
 

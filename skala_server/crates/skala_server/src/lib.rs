@@ -1,12 +1,12 @@
 pub mod advisor;
 mod app;
 mod components;
+mod middleware;
 mod routes;
 mod time;
 
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use log::error;
 
 pub use crate::advisor::feedback::Feedback;
 pub use crate::app::App;
@@ -41,9 +41,7 @@ impl_from_error!(sqlx::migrate::MigrateError);
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
-        // This is NOT the place for this, however it's easy to set up and I'm in a rush.
         let repr = self.to_string();
-        error!("{repr}");
         (StatusCode::INTERNAL_SERVER_ERROR, repr).into_response()
     }
 }

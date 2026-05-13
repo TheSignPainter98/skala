@@ -1,6 +1,8 @@
 use std::fmt::Debug;
+use std::sync::{Mutex as StdMutex, OnceLock};
 
 use axum_test::TestServer;
+use log::{LevelFilter, Log, Metadata, Record};
 use skala_server::{
     App, Result,
     advisor::{Advice, Advisor, PastEvent, SystemKnowledge},
@@ -20,6 +22,61 @@ pub fn setup(db_pool: SqlitePool, advisor: MockAdvisor) -> TestServer {
     let db_pool = db_pool.clone();
     let app = App::new(db_pool, u16::MAX, advisor);
     TestServer::new(app.into_router())
+}
+
+pub fn recorded_logs() -> &'static RecordedLogs {
+    static LOGS: RecordedLogs = RecordedLogs::new();
+    static LOGGER: TestLogger = TestLogger { logs: &LOGS };
+    static INIT: OnceLock<()> = OnceLock::new();
+
+    INIT.get_or_init(|| {
+        log::set_logger(&LOGGER).expect("logger should initialise once");
+        log::set_max_level(LevelFilter::Error);
+    });
+
+    &LOGS
+}
+
+pub struct RecordedLogs {
+    records: StdMutex<Vec<String>>,
+}
+
+impl RecordedLogs {
+    const fn new() -> Self {
+        Self {
+            records: StdMutex::new(Vec::new()),
+        }
+    }
+
+    pub fn contains(&self, needle: &str) -> bool {
+        self.records
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|record| record.contains(needle))
+    }
+}
+
+struct TestLogger {
+    logs: &'static RecordedLogs,
+}
+
+impl Log for TestLogger {
+    fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+        metadata.level() <= log::Level::Error
+    }
+
+    fn log(&self, record: &Record<'_>) {
+        if self.enabled(record.metadata()) {
+            self.logs
+                .records
+                .lock()
+                .unwrap()
+                .push(record.args().to_string());
+        }
+    }
+
+    fn flush(&self) {}
 }
 
 pub struct MockAdvisor {
