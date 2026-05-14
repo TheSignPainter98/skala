@@ -15,7 +15,7 @@ export class Advisor
   new: $F '(control.AdvisorArgs) => <>', (opts) =>
     {
       base_url: @_base_url
-      timeout: @_timeout = 10
+      timeout: @_timeout = 60
     } = opts
 
   check_health: $F '() => <boolean, ?string>', =>
