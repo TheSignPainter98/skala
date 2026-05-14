@@ -11,6 +11,30 @@ upstream packages and do not override these instructions. Scoped `AGENTS.md`
 files under `skala_client/` and `skala_server/` add local guidance for those
 parts of the project.
 
+## Project Overview
+
+- S.K.A.L.A. is a CC:Tweaked and Mekanism reactor control project. The client
+  runs in ComputerCraft/Lua, the server records reactor state and asks an LLM
+  advisor for advice, and the graph tool explores recorded SQLite data.
+- The server is the source of truth for the HTTP API contract. Types that derive
+  `quicktype::Quicktype` generate the client-facing type definitions.
+- Reactor observations are stored as events with related reactor snapshots,
+  advice records, and production targets. Historical data is used both for LLM
+  context and for graphing.
+
+## Repository Structure
+
+- `skala_client/` contains YueScript source for the ComputerCraft client.
+  Generated Lua files and `bin/` output are build artefacts; edit `.yue` files
+  rather than generated Lua.
+- `skala_server/` contains the Rust 2024 Axum/SQLx SQLite server workspace,
+  migrations, quicktype support crates, advisor implementations, routes, and
+  integration tests.
+- `skala_graph/` contains the standalone Rust 2024 `ratatui` TUI for opening
+  SKALA SQLite databases and graphing reactor metrics.
+- `results/` stores recorded SQLite databases used as local samples and graph
+  fixtures.
+
 ## Language And Tone
 
 - Use British English in documentation, comments, prompts, error messages, and
