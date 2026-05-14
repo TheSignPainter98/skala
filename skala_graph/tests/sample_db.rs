@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use skala_graph::app::AppState;
@@ -24,11 +25,13 @@ fn sample_database_loads_with_expected_defaults() {
     assert_eq!(app.reactors.len(), 1);
     assert_eq!(app.current_reactor().name, "reactor_53");
     assert!(!app.current_data.points.is_empty());
-    assert!(app.selected_metrics.contains(&MetricKey::Temperature));
-    assert!(app.selected_metrics.contains(&MetricKey::ActualBurnRate));
-    assert!(app.selected_metrics.contains(&MetricKey::TargetBurnRate));
-    assert!(
-        app.selected_metrics
-            .contains(&MetricKey::EnergyProductionRate)
+    assert_eq!(
+        app.selected_metrics,
+        BTreeSet::from([
+            MetricKey::DamagePercent,
+            MetricKey::EnergyProductionRate,
+            MetricKey::AdviceNewTargetBurnRate,
+            MetricKey::ProductionTargetRate,
+        ])
     );
 }

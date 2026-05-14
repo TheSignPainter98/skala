@@ -72,10 +72,10 @@ impl MetricKey {
     ];
 
     pub const DEFAULTS: [Self; 4] = [
-        Self::Temperature,
-        Self::ActualBurnRate,
-        Self::TargetBurnRate,
+        Self::DamagePercent,
         Self::EnergyProductionRate,
+        Self::AdviceNewTargetBurnRate,
+        Self::ProductionTargetRate,
     ];
 
     pub fn title(self) -> &'static str {
@@ -93,7 +93,7 @@ impl MetricKey {
             Self::BoilEfficiency => "Boil efficiency",
             Self::StoredKineticEnergy => "Stored kinetic energy",
             Self::EnergyProductionRate => "Energy production rate",
-            Self::AdviceNewTargetBurnRate => "LLM advised burn rate",
+            Self::AdviceNewTargetBurnRate => "Advised Burn Rate",
             Self::ProductionTargetRate => "Production target",
         }
     }

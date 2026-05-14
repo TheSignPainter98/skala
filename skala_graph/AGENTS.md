@@ -21,10 +21,10 @@ These instructions apply to `skala_graph/**`.
   `../results/qwen-2.5-positive-meltdown.db`.
 - Metric selection is checkbox-driven inside the TUI.
 - The default visible metrics are:
-  - `temperature`
-  - `actual_burn_rate`
-  - `target_burn_rate`
+  - `damage_percent`
   - `energy_production_rate`
+  - `advice_new_target_burn_rate`
+  - `production_target_rate`
 - The graph uses `event.ingame_timestamp` as the x-axis source.
 - Multiple selected metrics share one chart by plotting normalised values; raw
   values are still kept for labels and status text.

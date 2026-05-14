@@ -56,10 +56,10 @@ cargo run -- /path/to/skala.db
 
 The initial chart enables these metrics:
 
-- `temperature`
-- `actual_burn_rate`
-- `target_burn_rate`
+- `damage_percent`
 - `energy_production_rate`
+- `advice_new_target_burn_rate`
+- `production_target_rate`
 
 All selected metrics share one chart. Normalised plotting is the default.
 Press `n` to switch to raw plotting, which keeps all visible selected metrics on
