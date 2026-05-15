@@ -249,7 +249,7 @@ fn plotted_value(mode: ChartScaleMode, series: &MetricSeries, raw_value: f64) ->
     match mode {
         ChartScaleMode::Normalised => {
             if series.is_constant {
-                0.5
+                0.0
             } else {
                 (raw_value - series.raw_min) / (series.raw_max - series.raw_min)
             }
@@ -454,7 +454,7 @@ mod tests {
         );
         assert_eq!(
             plotted_value(ChartScaleMode::Normalised, &sparse, sparse.points[0].1),
-            0.5
+            0.0
         );
     }
 
