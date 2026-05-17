@@ -30,7 +30,7 @@ fn sample_database_loads_with_expected_defaults() {
         BTreeSet::from([
             MetricKey::DamagePercent,
             MetricKey::EnergyProductionRate,
-            MetricKey::AdviceNewTargetBurnRate,
+            MetricKey::AdviceNewTargetReactivity,
             MetricKey::ProductionTargetRate,
         ])
     );

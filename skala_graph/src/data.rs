@@ -40,15 +40,15 @@ pub enum MetricKey {
     HeatedCoolantFilled,
     FuelFilled,
     WasteFilled,
-    ActualBurnRate,
-    TargetBurnRate,
-    MaxBurnRate,
+    ActualReactivity,
+    TargetReactivity,
+    MaxReactivity,
     DamagePercent,
     HeatingRate,
     BoilEfficiency,
     StoredKineticEnergy,
     EnergyProductionRate,
-    AdviceNewTargetBurnRate,
+    AdviceNewTargetReactivity,
     ProductionTargetRate,
 }
 
@@ -59,22 +59,22 @@ impl MetricKey {
         Self::HeatedCoolantFilled,
         Self::FuelFilled,
         Self::WasteFilled,
-        Self::ActualBurnRate,
-        Self::TargetBurnRate,
-        Self::MaxBurnRate,
+        Self::ActualReactivity,
+        Self::TargetReactivity,
+        Self::MaxReactivity,
         Self::DamagePercent,
         Self::HeatingRate,
         Self::BoilEfficiency,
         Self::StoredKineticEnergy,
         Self::EnergyProductionRate,
-        Self::AdviceNewTargetBurnRate,
+        Self::AdviceNewTargetReactivity,
         Self::ProductionTargetRate,
     ];
 
     pub const DEFAULTS: [Self; 4] = [
         Self::DamagePercent,
         Self::EnergyProductionRate,
-        Self::AdviceNewTargetBurnRate,
+        Self::AdviceNewTargetReactivity,
         Self::ProductionTargetRate,
     ];
 
@@ -85,15 +85,15 @@ impl MetricKey {
             Self::HeatedCoolantFilled => "Heated coolant filled",
             Self::FuelFilled => "Fuel filled",
             Self::WasteFilled => "Waste filled",
-            Self::ActualBurnRate => "Actual burn rate",
-            Self::TargetBurnRate => "Target burn rate",
-            Self::MaxBurnRate => "Max burn rate",
+            Self::ActualReactivity => "Actual reactivity",
+            Self::TargetReactivity => "Target reactivity",
+            Self::MaxReactivity => "Max reactivity",
             Self::DamagePercent => "Reactor damage",
             Self::HeatingRate => "Heating rate",
             Self::BoilEfficiency => "Boil efficiency",
             Self::StoredKineticEnergy => "Stored kinetic energy",
             Self::EnergyProductionRate => "Energy production rate",
-            Self::AdviceNewTargetBurnRate => "Advised Burn Rate",
+            Self::AdviceNewTargetReactivity => "Advised reactivity",
             Self::ProductionTargetRate => "Production target",
         }
     }
@@ -105,15 +105,15 @@ impl MetricKey {
             Self::HeatedCoolantFilled => "mB",
             Self::FuelFilled => "mB",
             Self::WasteFilled => "mB",
-            Self::ActualBurnRate => "mB/t",
-            Self::TargetBurnRate => "mB/t",
-            Self::MaxBurnRate => "mB/t",
+            Self::ActualReactivity => "mB/t",
+            Self::TargetReactivity => "mB/t",
+            Self::MaxReactivity => "mB/t",
             Self::DamagePercent => "%",
             Self::HeatingRate => "K/t",
             Self::BoilEfficiency => "%",
             Self::StoredKineticEnergy => "J",
             Self::EnergyProductionRate => "J/t",
-            Self::AdviceNewTargetBurnRate => "mB/t",
+            Self::AdviceNewTargetReactivity => "mB/t",
             Self::ProductionTargetRate => "J/t",
         }
     }
@@ -125,15 +125,15 @@ impl MetricKey {
             Self::HeatedCoolantFilled => "heated_coolant_filled",
             Self::FuelFilled => "fuel_filled",
             Self::WasteFilled => "waste_filled",
-            Self::ActualBurnRate => "actual_burn_rate",
-            Self::TargetBurnRate => "target_burn_rate",
-            Self::MaxBurnRate => "max_burn_rate",
+            Self::ActualReactivity => "actual_burn_rate",
+            Self::TargetReactivity => "target_burn_rate",
+            Self::MaxReactivity => "max_burn_rate",
             Self::DamagePercent => "damage_percent",
             Self::HeatingRate => "heating_rate",
             Self::BoilEfficiency => "boil_efficiency",
             Self::StoredKineticEnergy => "stored_kinetic_energy",
             Self::EnergyProductionRate => "energy_production_rate",
-            Self::AdviceNewTargetBurnRate => "advice_new_target_burn_rate",
+            Self::AdviceNewTargetReactivity => "advice_new_target_burn_rate",
             Self::ProductionTargetRate => "production_target_rate",
         }
     }
@@ -339,15 +339,15 @@ fn row_to_point(row: &Row<'_>) -> Result<DataPoint> {
         (MetricKey::HeatedCoolantFilled, row.get(3)?),
         (MetricKey::FuelFilled, row.get(4)?),
         (MetricKey::WasteFilled, row.get(5)?),
-        (MetricKey::ActualBurnRate, row.get(6)?),
-        (MetricKey::TargetBurnRate, row.get(7)?),
-        (MetricKey::MaxBurnRate, row.get(8)?),
+        (MetricKey::ActualReactivity, row.get(6)?),
+        (MetricKey::TargetReactivity, row.get(7)?),
+        (MetricKey::MaxReactivity, row.get(8)?),
         (MetricKey::DamagePercent, row.get(9)?),
         (MetricKey::HeatingRate, row.get(10)?),
         (MetricKey::BoilEfficiency, row.get(11)?),
         (MetricKey::StoredKineticEnergy, row.get(12)?),
         (MetricKey::EnergyProductionRate, row.get(13)?),
-        (MetricKey::AdviceNewTargetBurnRate, row.get(14)?),
+        (MetricKey::AdviceNewTargetReactivity, row.get(14)?),
         (MetricKey::ProductionTargetRate, row.get(15)?),
     ]);
 
@@ -533,13 +533,13 @@ mod tests {
             .expect("insert snapshot");
         connection
             .execute(
-                "INSERT INTO advice (event_id, action, pretty_action, new_target_burn_rate, reasoning) VALUES (1, 2, 'set-target-burn-rate', NULL, 'n/a')",
+                "INSERT INTO advice (event_id, action, pretty_action, new_target_burn_rate, reasoning) VALUES (1, 2, 'set-target-reactivity', NULL, 'n/a')",
                 [],
             )
             .expect("insert advice");
         connection
             .execute(
-                "INSERT INTO advice (event_id, action, pretty_action, new_target_burn_rate, reasoning) VALUES (2, 2, 'set-target-burn-rate', 30, 'n/a')",
+                "INSERT INTO advice (event_id, action, pretty_action, new_target_burn_rate, reasoning) VALUES (2, 2, 'set-target-reactivity', 30, 'n/a')",
                 [],
             )
             .expect("insert advice");
@@ -552,7 +552,7 @@ mod tests {
             },
         )
         .expect("load reactor data");
-        let sparse = build_series(&data, MetricKey::AdviceNewTargetBurnRate).expect("series");
+        let sparse = build_series(&data, MetricKey::AdviceNewTargetReactivity).expect("series");
 
         assert_eq!(sparse.points.len(), 1);
         assert_eq!(sparse.raw_min, 30.0);
@@ -574,7 +574,7 @@ mod tests {
                         "%Y-%m-%dT%H:%M:%S",
                     )
                     .expect("timestamp"),
-                    raw_values: HashMap::from([(MetricKey::TargetBurnRate, Some(10.0))]),
+                    raw_values: HashMap::from([(MetricKey::TargetReactivity, Some(10.0))]),
                 },
                 DataPoint {
                     ingame_time: NaiveDateTime::parse_from_str(
@@ -582,13 +582,13 @@ mod tests {
                         "%Y-%m-%dT%H:%M:%S",
                     )
                     .expect("timestamp"),
-                    raw_values: HashMap::from([(MetricKey::TargetBurnRate, Some(10.0))]),
+                    raw_values: HashMap::from([(MetricKey::TargetReactivity, Some(10.0))]),
                 },
             ],
-            available_metrics: BTreeSet::from([MetricKey::TargetBurnRate]),
+            available_metrics: BTreeSet::from([MetricKey::TargetReactivity]),
         };
 
-        let series = build_series(&data, MetricKey::TargetBurnRate).expect("series");
+        let series = build_series(&data, MetricKey::TargetReactivity).expect("series");
         assert_eq!(series.points[0].1, 10.0);
         assert_eq!(series.points[1].1, 10.0);
     }

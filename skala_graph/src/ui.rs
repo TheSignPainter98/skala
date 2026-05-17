@@ -398,9 +398,9 @@ mod tests {
                 ),
             ),
             (
-                MetricKey::ActualBurnRate,
+                MetricKey::ActualReactivity,
                 metric_series(
-                    MetricKey::ActualBurnRate,
+                    MetricKey::ActualReactivity,
                     &[("2026-05-10T22:45:21", 1.0), ("2026-05-10T22:45:31", 2.0)],
                     1.0,
                     2.0,
@@ -417,9 +417,9 @@ mod tests {
     #[test]
     fn constant_zero_raw_series_get_padded_bounds() {
         let series = HashMap::from([(
-            MetricKey::TargetBurnRate,
+            MetricKey::TargetReactivity,
             metric_series(
-                MetricKey::TargetBurnRate,
+                MetricKey::TargetReactivity,
                 &[("2026-05-10T22:45:21", 0.0), ("2026-05-10T22:45:31", 0.0)],
                 0.0,
                 0.0,
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn sparse_series_keep_missing_points_out_of_raw_bounds() {
         let sparse = metric_series(
-            MetricKey::AdviceNewTargetBurnRate,
+            MetricKey::AdviceNewTargetReactivity,
             &[("2026-05-10T22:45:31", 30.0)],
             30.0,
             30.0,
@@ -444,7 +444,7 @@ mod tests {
 
         let bounds = chart_y_axis_bounds(
             ChartScaleMode::Raw,
-            &HashMap::from([(MetricKey::AdviceNewTargetBurnRate, sparse.clone())]),
+            &HashMap::from([(MetricKey::AdviceNewTargetReactivity, sparse.clone())]),
         );
 
         assert_eq!(bounds, (0.0, 30.0));
@@ -472,9 +472,9 @@ mod tests {
                 ),
             ),
             (
-                MetricKey::ActualBurnRate,
+                MetricKey::ActualReactivity,
                 metric_series(
-                    MetricKey::ActualBurnRate,
+                    MetricKey::ActualReactivity,
                     &[("2026-05-10T22:45:21", 2.0), ("2026-05-10T22:45:31", 3.0)],
                     2.0,
                     3.0,
