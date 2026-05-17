@@ -16,21 +16,21 @@ version = "1.0.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.102"
-axum = { version = "0.8.8", features = ["json"] }
-camino = "1.2.2"
-clap = { version = "4.6.0", features = ["derive"] }
-colog = "1.4.0"
-indoc = "2.0.7"
-log = "0.4.29"
-proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
-quicktype = { path = "crates/quicktype" }
-skala_graph = { path = "crates/skala_graph", optional = true }
-skala_server = { path = "crates/skala_server" }
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
-tokio = { version = "1.51.1", features = ["rt", "signal"] }
-toml = "1.1.2"
+anyhow = { version = "1.0.102", default-features = false, features = ["std"] }
+axum = { version = "0.8.8", default-features = false, features = ["form", "http1", "json", "matched-path", "original-uri", "query", "tokio", "tracing"] }
+camino = { version = "1.2.2", default-features = false }
+clap = { version = "4.6.0", default-features = false, features = ["color", "derive", "error-context", "help", "std", "suggestions", "usage"] }
+colog = { version = "1.4.0", default-features = false }
+indoc = { version = "2.0.7", default-features = false }
+log = { version = "0.4.29", default-features = false }
+proc-macro2 = { version = "1.0.106", default-features = false, features = ["proc-macro", "span-locations"] }
+quicktype = { path = "crates/quicktype", default-features = false }
+skala_graph = { path = "crates/skala_graph", optional = true, default-features = false }
+skala_server = { path = "crates/skala_server", default-features = false }
+sqlx = { version = "0.8.6", default-features = false, features = ["derive", "json", "macros", "migrate", "runtime-tokio", "sqlite"] }
+tokio = { version = "1.51.1", default-features = false, features = ["rt", "signal"] }
+toml = { version = "1.1.2", default-features = false, features = ["parse", "serde", "std"] }
 
 [dev-dependencies]
-axum-test = "20.0.0"
-serde_json = "1.0.149"
+axum-test = { version = "20.0.0", default-features = false }
+serde_json = { version = "1.0.149", default-features = false, features = ["std"] }

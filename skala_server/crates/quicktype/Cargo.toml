@@ -4,5 +4,5 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-linkme = "0.3.36"
-quicktype_macros = { path = "../quicktype_macros" }
+linkme = { version = "0.3.36", default-features = false }
+quicktype_macros = { path = "../quicktype_macros", default-features = false }

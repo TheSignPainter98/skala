@@ -47,6 +47,10 @@ parts of the project.
 
 - New functions must include explicit type annotations where the language
   supports them.
+- In Rust `Cargo.toml` files, declare direct dependencies with
+  `default-features = false` and opt into the required features explicitly. Do
+  not apply this rule to proc-macro crates written in this repository, for
+  example `quicktype_macros`.
 - Keep changes close to the surrounding style. Avoid broad refactors while
   making feature or bug-fix changes.
 - Prefer small, behaviour-focused changes with matching tests when code changes
