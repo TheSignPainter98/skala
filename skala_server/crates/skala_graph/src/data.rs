@@ -1,37 +1,12 @@
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
+use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
 use chrono::NaiveDateTime;
-use rusqlite::{Connection, OpenFlags, OptionalExtension, Row, params};
-
-const REQUIRED_TABLES: &[&str] = &[
-    "event",
-    "reactor",
-    "snapshot",
-    "advice",
-    "production_target",
-];
-const REQUIRED_EVENT_COLUMNS: &[&str] = &["id", "reactor_id", "irl_timestamp", "ingame_timestamp"];
-const REQUIRED_SNAPSHOT_COLUMNS: &[&str] = &[
-    "event_id",
-    "temperature",
-    "coolant_filled",
-    "heated_coolant_filled",
-    "fuel_filled",
-    "waste_filled",
-    "actual_burn_rate",
-    "target_burn_rate",
-    "max_burn_rate",
-    "damage_percent",
-    "heating_rate",
-    "boil_efficiency",
-    "stored_kinetic_energy",
-    "energy_production_rate",
-];
-const REQUIRED_ADVICE_COLUMNS: &[&str] = &["event_id", "new_target_burn_rate"];
-const REQUIRED_PRODUCTION_TARGET_COLUMNS: &[&str] = &["event_id", "rate"];
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow};
+use sqlx::{Row, SqlitePool};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum MetricKey {
@@ -173,32 +148,19 @@ pub struct ReactorData {
     pub available_metrics: BTreeSet<MetricKey>,
 }
 
-pub fn open_database(path: &Path) -> Result<Connection> {
-    Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .with_context(|| format!("failed to open SQLite database at {}", path.display()))
+pub async fn open_database(path: &Path) -> Result<SqlitePool> {
+    let connect_options =
+        SqliteConnectOptions::from_str(&format!("sqlite://{}", path.display()))?.read_only(true);
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(connect_options)
+        .await
+        .with_context(|| format!("failed to open SQLite database at {}", path.display()))?;
+    Ok(pool)
 }
 
-pub fn validate_schema(connection: &Connection) -> Result<()> {
-    for table in REQUIRED_TABLES {
-        if !table_exists(connection, table)? {
-            bail!("required table `{table}` is missing");
-        }
-    }
-
-    ensure_columns(connection, "event", REQUIRED_EVENT_COLUMNS)?;
-    ensure_columns(connection, "snapshot", REQUIRED_SNAPSHOT_COLUMNS)?;
-    ensure_columns(connection, "advice", REQUIRED_ADVICE_COLUMNS)?;
-    ensure_columns(
-        connection,
-        "production_target",
-        REQUIRED_PRODUCTION_TARGET_COLUMNS,
-    )?;
-
-    Ok(())
-}
-
-pub fn load_reactors(connection: &Connection) -> Result<Vec<ReactorSummary>> {
-    let mut statement = connection.prepare(
+pub async fn load_reactors(connection: &SqlitePool) -> Result<Vec<ReactorSummary>> {
+    let rows = sqlx::query(
         "
         SELECT reactor.id, reactor.name
         FROM reactor
@@ -206,18 +168,18 @@ pub fn load_reactors(connection: &Connection) -> Result<Vec<ReactorSummary>> {
         GROUP BY reactor.id, reactor.name
         ORDER BY reactor.name
         ",
-    )?;
+    )
+    .fetch_all(connection)
+    .await?;
 
-    let reactors = statement
-        .query_map([], |row| {
+    rows.into_iter()
+        .map(|row| {
             Ok(ReactorSummary {
-                id: row.get(0)?,
-                name: row.get(1)?,
+                id: row.try_get(0)?,
+                name: row.try_get(1)?,
             })
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-
-    Ok(reactors)
+        })
+        .collect()
 }
 
 pub fn select_reactor(reactors: &[ReactorSummary], name: Option<&str>) -> Result<usize> {
@@ -241,8 +203,11 @@ pub fn select_reactor(reactors: &[ReactorSummary], name: Option<&str>) -> Result
     }
 }
 
-pub fn load_reactor_data(connection: &Connection, reactor: ReactorSummary) -> Result<ReactorData> {
-    let mut statement = connection.prepare(
+pub async fn load_reactor_data(
+    connection: &SqlitePool,
+    reactor: ReactorSummary,
+) -> Result<ReactorData> {
+    let rows = sqlx::query(
         "
         SELECT
             event.ingame_timestamp,
@@ -268,13 +233,15 @@ pub fn load_reactor_data(connection: &Connection, reactor: ReactorSummary) -> Re
         WHERE event.reactor_id = ?
         ORDER BY event.irl_timestamp ASC, event.id ASC
         ",
-    )?;
+    )
+    .bind(reactor.id)
+    .fetch_all(connection)
+    .await?;
 
-    let mut rows = statement.query(params![reactor.id])?;
     let mut points = Vec::new();
     let mut available_metrics = BTreeSet::new();
 
-    while let Some(row) = rows.next()? {
+    for row in &rows {
         let point = row_to_point(row)?;
         for (key, value) in &point.raw_values {
             if value.is_some() {
@@ -328,27 +295,27 @@ pub fn build_series(data: &ReactorData, metric: MetricKey) -> Option<MetricSerie
     })
 }
 
-fn row_to_point(row: &Row<'_>) -> Result<DataPoint> {
-    let timestamp_text: String = row.get(0)?;
+fn row_to_point(row: &SqliteRow) -> Result<DataPoint> {
+    let timestamp_text: String = row.try_get(0)?;
     let ingame_time = NaiveDateTime::parse_from_str(&timestamp_text, "%Y-%m-%dT%H:%M:%S")
         .with_context(|| format!("invalid ingame_timestamp `{timestamp_text}`"))?;
 
     let raw_values = HashMap::from([
-        (MetricKey::Temperature, row.get(1)?),
-        (MetricKey::CoolantFilled, row.get(2)?),
-        (MetricKey::HeatedCoolantFilled, row.get(3)?),
-        (MetricKey::FuelFilled, row.get(4)?),
-        (MetricKey::WasteFilled, row.get(5)?),
-        (MetricKey::ActualReactivity, row.get(6)?),
-        (MetricKey::TargetReactivity, row.get(7)?),
-        (MetricKey::MaxReactivity, row.get(8)?),
-        (MetricKey::DamagePercent, row.get(9)?),
-        (MetricKey::HeatingRate, row.get(10)?),
-        (MetricKey::BoilEfficiency, row.get(11)?),
-        (MetricKey::StoredKineticEnergy, row.get(12)?),
-        (MetricKey::EnergyProductionRate, row.get(13)?),
-        (MetricKey::AdviceNewTargetReactivity, row.get(14)?),
-        (MetricKey::ProductionTargetRate, row.get(15)?),
+        (MetricKey::Temperature, numeric_cell(row, 1)?),
+        (MetricKey::CoolantFilled, numeric_cell(row, 2)?),
+        (MetricKey::HeatedCoolantFilled, numeric_cell(row, 3)?),
+        (MetricKey::FuelFilled, numeric_cell(row, 4)?),
+        (MetricKey::WasteFilled, numeric_cell(row, 5)?),
+        (MetricKey::ActualReactivity, numeric_cell(row, 6)?),
+        (MetricKey::TargetReactivity, numeric_cell(row, 7)?),
+        (MetricKey::MaxReactivity, numeric_cell(row, 8)?),
+        (MetricKey::DamagePercent, numeric_cell(row, 9)?),
+        (MetricKey::HeatingRate, numeric_cell(row, 10)?),
+        (MetricKey::BoilEfficiency, numeric_cell(row, 11)?),
+        (MetricKey::StoredKineticEnergy, numeric_cell(row, 12)?),
+        (MetricKey::EnergyProductionRate, numeric_cell(row, 13)?),
+        (MetricKey::AdviceNewTargetReactivity, numeric_cell(row, 14)?),
+        (MetricKey::ProductionTargetRate, numeric_cell(row, 15)?),
     ]);
 
     Ok(DataPoint {
@@ -357,42 +324,30 @@ fn row_to_point(row: &Row<'_>) -> Result<DataPoint> {
     })
 }
 
-fn table_exists(connection: &Connection, table: &str) -> Result<bool> {
-    Ok(connection
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
-            params![table],
-            |row| row.get::<_, i64>(0),
-        )
-        .optional()?
-        .is_some())
-}
-
-fn ensure_columns(connection: &Connection, table: &str, required_columns: &[&str]) -> Result<()> {
-    let pragma = format!("PRAGMA table_info({table})");
-    let mut statement = connection.prepare(&pragma)?;
-    let existing = statement
-        .query_map([], |row| row.get::<_, String>(1))?
-        .collect::<rusqlite::Result<BTreeSet<_>>>()?;
-
-    for column in required_columns {
-        if !existing.contains(*column) {
-            bail!("required column `{table}.{column}` is missing");
-        }
+fn numeric_cell(row: &SqliteRow, index: usize) -> Result<Option<f64>> {
+    match row.try_get::<Option<f64>, _>(index) {
+        Ok(value) => Ok(value),
+        Err(float_error) => row
+            .try_get::<Option<i64>, _>(index)
+            .map(|value| value.map(|value| value as f64))
+            .map_err(|_| float_error.into()),
     }
-
-    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::Executor;
+    use sqlx::sqlite::SqlitePoolOptions;
 
-    fn setup_connection() -> Connection {
-        let connection = Connection::open_in_memory().expect("in-memory db");
-        connection
-            .execute_batch(
-                "
+    async fn setup_connection() -> SqlitePool {
+        let connection = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .expect("in-memory db");
+        sqlx::raw_sql(
+            "
                 CREATE TABLE event (
                     id INTEGER PRIMARY KEY,
                     reactor_id INTEGER NOT NULL,
@@ -431,117 +386,55 @@ mod tests {
                     rate REAL NOT NULL
                 ) STRICT;
                 ",
-            )
-            .expect("schema");
+        )
+        .execute(&connection)
+        .await
+        .expect("schema");
         connection
     }
 
-    #[test]
-    fn schema_validation_accepts_expected_schema() {
-        let connection = setup_connection();
-        validate_schema(&connection).expect("schema should validate");
-    }
-
-    #[test]
-    fn schema_validation_rejects_missing_table() {
-        let connection = Connection::open_in_memory().expect("in-memory db");
-        let error = validate_schema(&connection).expect_err("schema should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("required table `event` is missing")
-        );
-    }
-
-    #[test]
-    fn schema_validation_rejects_missing_event_column() {
-        let connection = Connection::open_in_memory().expect("in-memory db");
+    #[tokio::test(flavor = "current_thread")]
+    async fn load_series_handles_sparse_values() {
+        let connection = setup_connection().await;
         connection
-            .execute_batch(
-                "
-                CREATE TABLE event (
-                    id INTEGER PRIMARY KEY,
-                    reactor_id INTEGER NOT NULL,
-                    irl_timestamp INTEGER NOT NULL
-                ) STRICT;
-                CREATE TABLE reactor (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE) STRICT;
-                CREATE TABLE snapshot (
-                    event_id INTEGER PRIMARY KEY,
-                    temperature REAL NULL,
-                    coolant_filled REAL NULL,
-                    heated_coolant_filled REAL NULL,
-                    fuel_filled REAL NULL,
-                    waste_filled REAL NULL,
-                    actual_burn_rate REAL NULL,
-                    target_burn_rate INTEGER NULL,
-                    max_burn_rate INTEGER NULL,
-                    damage_percent REAL NULL,
-                    heating_rate REAL NULL,
-                    boil_efficiency REAL NULL,
-                    stored_kinetic_energy REAL NULL,
-                    energy_production_rate REAL NULL
-                ) STRICT;
-                CREATE TABLE advice (
-                    event_id INTEGER PRIMARY KEY,
-                    action INTEGER NOT NULL,
-                    pretty_action TEXT,
-                    new_target_burn_rate INTEGER NULL,
-                    reasoning TEXT NOT NULL
-                ) STRICT;
-                CREATE TABLE production_target (event_id INTEGER PRIMARY KEY, rate REAL NOT NULL) STRICT;
-                ",
-            )
-            .expect("schema");
-
-        let error = validate_schema(&connection).expect_err("schema should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("required column `event.ingame_timestamp` is missing")
-        );
-    }
-
-    #[test]
-    fn load_series_handles_sparse_values() {
-        let connection = setup_connection();
-        connection
-            .execute("INSERT INTO reactor (id, name) VALUES (1, 'reactor_a')", [])
+            .execute("INSERT INTO reactor (id, name) VALUES (1, 'reactor_a')")
+            .await
             .expect("insert reactor");
         connection
             .execute(
                 "INSERT INTO event (id, reactor_id, irl_timestamp, ingame_timestamp) VALUES (1, 1, 100, '2026-05-10T22:45:21')",
-                [],
             )
+            .await
             .expect("insert event");
         connection
             .execute(
                 "INSERT INTO event (id, reactor_id, irl_timestamp, ingame_timestamp) VALUES (2, 1, 200, '2026-05-10T22:45:31')",
-                [],
             )
+            .await
             .expect("insert event");
         connection
             .execute(
                 "INSERT INTO snapshot (event_id, temperature, actual_burn_rate, target_burn_rate, energy_production_rate) VALUES (1, 5.0, 1.0, 10, 100.0)",
-                [],
             )
+            .await
             .expect("insert snapshot");
         connection
             .execute(
                 "INSERT INTO snapshot (event_id, temperature, actual_burn_rate, target_burn_rate, energy_production_rate) VALUES (2, 15.0, 2.0, 20, 200.0)",
-                [],
             )
+            .await
             .expect("insert snapshot");
         connection
             .execute(
                 "INSERT INTO advice (event_id, action, pretty_action, new_target_burn_rate, reasoning) VALUES (1, 2, 'set-target-reactivity', NULL, 'n/a')",
-                [],
             )
+            .await
             .expect("insert advice");
         connection
             .execute(
                 "INSERT INTO advice (event_id, action, pretty_action, new_target_burn_rate, reasoning) VALUES (2, 2, 'set-target-reactivity', 30, 'n/a')",
-                [],
             )
+            .await
             .expect("insert advice");
 
         let data = load_reactor_data(
@@ -551,6 +444,7 @@ mod tests {
                 name: "reactor_a".to_owned(),
             },
         )
+        .await
         .expect("load reactor data");
         let sparse = build_series(&data, MetricKey::AdviceNewTargetReactivity).expect("series");
 

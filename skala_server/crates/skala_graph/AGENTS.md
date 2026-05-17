@@ -2,12 +2,12 @@
 
 ## Scope
 
-These instructions apply to `skala_graph/**`.
+These instructions apply to `skala_server/crates/skala_graph/**`.
 
 ## Stack And Structure
 
 - Keep the current separation between:
-  - CLI/bootstrap code in `src/main.rs`
+  - bootstrap and runner code in `src/lib.rs`
   - application state and input handling in `src/app.rs`
   - SQLite access and typed data shaping in `src/data.rs`
   - rendering in `src/ui.rs`
@@ -15,10 +15,9 @@ These instructions apply to `skala_graph/**`.
 
 ## Project Facts
 
-- `skala_graph` is a standalone Rust `ratatui` TUI for exploring SKALA SQLite
-  databases.
+- `skala_graph` is a Rust `ratatui` TUI for exploring SKALA SQLite databases.
 - The intended sample database is
-  `../results/qwen-2.5-positive-meltdown.db`.
+  `../../../results/qwen-2.5-positive-meltdown.db`.
 - Metric selection is checkbox-driven inside the TUI.
 - The default visible metrics are:
   - `damage_percent`
@@ -43,17 +42,13 @@ These instructions apply to `skala_graph/**`.
 
 - Follow the existing Rust 2024 style used in this crate.
 - Keep function signatures explicit.
-- Use `clap` for CLI parsing rather than hand-rolled argument handling.
 - Keep user-facing copy, comments, and documentation in British English.
 
 ## Verification
 
-Run checks from `skala_graph/`:
+Run checks from `skala_server/`:
 
-- `cargo fmt`
-- `cargo check --offline`
-- `cargo clippy --offline -- -D warnings`
-- `cargo test --offline`
-
-For documentation-only changes in this directory, a focused review plus
-`git diff --check` is sufficient.
+- `cargo fmt -- --check`
+- `cargo check --workspace`
+- `cargo clippy --workspace --all-features -- -D warnings`
+- `cargo test --workspace`

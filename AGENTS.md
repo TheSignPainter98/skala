@@ -63,6 +63,7 @@ parts of the project.
 
 - Run checks that are relevant to the area changed. Use scoped `AGENTS.md` files
   for client and server commands.
+- Test all changes using the `prek` command.
 - For documentation-only changes, a focused Markdown review and
   `git diff --check` are enough.
 

@@ -2,11 +2,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
-use rusqlite::Connection;
+use sqlx::SqlitePool;
 
 use crate::data::{
     MetricKey, MetricSeries, ReactorData, ReactorSummary, build_series, load_reactor_data,
-    load_reactors, open_database, select_reactor, validate_schema,
+    load_reactors, open_database, select_reactor,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49,16 +49,15 @@ pub struct AppState {
     pub focus: FocusPane,
     pub current_data: ReactorData,
     pub status: String,
-    connection: Option<Connection>,
+    connection: Option<SqlitePool>,
 }
 
 impl AppState {
-    pub fn load(path: &Path, requested_reactor: Option<&str>) -> Result<Self> {
-        let connection = open_database(path)?;
-        validate_schema(&connection)?;
-        let reactors = load_reactors(&connection)?;
+    pub async fn load(path: &Path, requested_reactor: Option<&str>) -> Result<Self> {
+        let connection = open_database(path).await?;
+        let reactors = load_reactors(&connection).await?;
         let reactor_index = select_reactor(&reactors, requested_reactor)?;
-        let current_data = load_reactor_data(&connection, reactors[reactor_index].clone())?;
+        let current_data = load_reactor_data(&connection, reactors[reactor_index].clone()).await?;
 
         Ok(Self {
             db_path: path.to_path_buf(),
@@ -75,14 +74,13 @@ impl AppState {
         })
     }
 
-    pub fn reload(&mut self) -> Result<()> {
+    pub async fn reload(&mut self) -> Result<()> {
         let reactor_name = self.current_reactor().name.clone();
         let focus = self.focus;
-        let connection = open_database(&self.db_path)?;
-        validate_schema(&connection)?;
-        let reactors = load_reactors(&connection)?;
+        let connection = open_database(&self.db_path).await?;
+        let reactors = load_reactors(&connection).await?;
         let reactor_index = select_reactor(&reactors, Some(&reactor_name))?;
-        let current_data = load_reactor_data(&connection, reactors[reactor_index].clone())?;
+        let current_data = load_reactor_data(&connection, reactors[reactor_index].clone()).await?;
         let selected_metrics = self.selected_metrics.clone();
         let old_connection = self.connection.replace(connection);
         self.reactors = reactors;
@@ -135,15 +133,15 @@ impl AppState {
         };
     }
 
-    pub fn next_reactor(&mut self) -> Result<()> {
+    pub async fn next_reactor(&mut self) -> Result<()> {
         if self.reactors.is_empty() {
             return Ok(());
         }
         self.reactor_index = (self.reactor_index + 1) % self.reactors.len();
-        self.refresh_current_data()
+        self.refresh_current_data().await
     }
 
-    pub fn previous_reactor(&mut self) -> Result<()> {
+    pub async fn previous_reactor(&mut self) -> Result<()> {
         if self.reactors.is_empty() {
             return Ok(());
         }
@@ -152,7 +150,7 @@ impl AppState {
         } else {
             self.reactor_index - 1
         };
-        self.refresh_current_data()
+        self.refresh_current_data().await
     }
 
     pub fn toggle_metric(&mut self) {
@@ -231,25 +229,23 @@ impl AppState {
         Some((0.0, (end - start).num_seconds().max(1) as f64))
     }
 
-    fn refresh_current_data(&mut self) -> Result<()> {
+    async fn refresh_current_data(&mut self) -> Result<()> {
         let connection = self.connection()?;
         self.current_data =
-            load_reactor_data(connection, self.reactors[self.reactor_index].clone())?;
+            load_reactor_data(connection, self.reactors[self.reactor_index].clone()).await?;
         self.status = format!("Selected reactor {}", self.current_reactor().name);
         Ok(())
     }
 
-    pub fn close_database(&mut self) -> Result<()> {
+    pub async fn close_database(&mut self) -> Result<()> {
         if let Some(connection) = self.connection.take() {
-            connection.close().map_err(|(_, error)| {
-                anyhow!("failed to close SQLite database cleanly: {error}")
-            })?;
+            connection.close().await;
             self.status = "Closed database".to_owned();
         }
         Ok(())
     }
 
-    fn connection(&self) -> Result<&Connection> {
+    fn connection(&self) -> Result<&SqlitePool> {
         self.connection
             .as_ref()
             .ok_or_else(|| anyhow!("database connection is not available"))
@@ -267,7 +263,7 @@ pub enum StartupSelection {
     Ready,
 }
 
-pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result<AppAction> {
+pub async fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result<AppAction> {
     use crossterm::event::{KeyCode, KeyModifiers};
 
     match key.code {
@@ -279,7 +275,7 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
         }
         KeyCode::Up => {
             match app.focus {
-                FocusPane::Reactors => app.previous_reactor()?,
+                FocusPane::Reactors => app.previous_reactor().await?,
                 FocusPane::Metrics if app.metrics_visible => app.previous_metric(),
                 FocusPane::Metrics => {}
             }
@@ -287,7 +283,7 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
         }
         KeyCode::Down => {
             match app.focus {
-                FocusPane::Reactors => app.next_reactor()?,
+                FocusPane::Reactors => app.next_reactor().await?,
                 FocusPane::Metrics if app.metrics_visible => app.next_metric(),
                 FocusPane::Metrics => {}
             }
@@ -316,7 +312,7 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
             Ok(AppAction::Continue)
         }
         KeyCode::Char('r') => {
-            app.reload()?;
+            app.reload().await?;
             Ok(AppAction::Continue)
         }
         KeyCode::Char('n') => {
@@ -327,13 +323,12 @@ pub fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> Result
     }
 }
 
-pub fn ensure_reactor_selection(
+pub async fn ensure_reactor_selection(
     path: &Path,
     requested_reactor: Option<&str>,
 ) -> Result<StartupSelection> {
-    let connection = open_database(path)?;
-    validate_schema(&connection)?;
-    let reactors = load_reactors(&connection)?;
+    let connection = open_database(path).await?;
+    let reactors = load_reactors(&connection).await?;
     determine_startup_selection(&reactors, requested_reactor)
 }
 
@@ -403,36 +398,40 @@ mod tests {
         assert!(app.selected_metrics.contains(&MetricKey::Temperature));
     }
 
-    #[test]
-    fn ctrl_c_requests_quit() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn ctrl_c_requests_quit() {
         let mut app = test_app();
 
         let action = handle_key(
             &mut app,
             KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
         )
+        .await
         .expect("handle key");
 
         assert!(matches!(action, AppAction::Quit));
     }
 
-    #[test]
-    fn left_arrow_hides_all_metrics() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn left_arrow_hides_all_metrics() {
         let mut app = test_app();
         app.selected_metrics = MetricKey::ALL.into_iter().collect();
 
-        handle_key(&mut app, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE)).expect("handle key");
+        handle_key(&mut app, KeyEvent::new(KeyCode::Left, KeyModifiers::NONE))
+            .await
+            .expect("handle key");
 
         assert!(app.selected_metrics.is_empty());
         assert_eq!(app.status, "Hid all metrics");
     }
 
-    #[test]
-    fn right_arrow_shows_all_metrics() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn right_arrow_shows_all_metrics() {
         let mut app = test_app();
         app.selected_metrics = BTreeSet::new();
 
         handle_key(&mut app, KeyEvent::new(KeyCode::Right, KeyModifiers::NONE))
+            .await
             .expect("handle key");
 
         assert_eq!(app.selected_metrics, MetricKey::ALL.into_iter().collect());
@@ -456,24 +455,27 @@ mod tests {
         assert!(!app.shows_reactor_list());
     }
 
-    #[test]
-    fn tab_keeps_metrics_focus_when_only_one_reactor_exists() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn tab_keeps_metrics_focus_when_only_one_reactor_exists() {
         let mut app = test_app();
         app.selected_metrics = BTreeSet::new();
 
-        handle_key(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE)).expect("handle key");
+        handle_key(&mut app, KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE))
+            .await
+            .expect("handle key");
 
         assert_eq!(app.focus, FocusPane::Metrics);
     }
 
-    #[test]
-    fn m_toggles_metrics_visibility() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn m_toggles_metrics_visibility() {
         let mut app = test_app();
 
         handle_key(
             &mut app,
             KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
         )
+        .await
         .expect("handle key");
 
         assert!(!app.metrics_visible);
@@ -483,6 +485,7 @@ mod tests {
             &mut app,
             KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
         )
+        .await
         .expect("handle key");
 
         assert!(app.metrics_visible);
@@ -490,8 +493,8 @@ mod tests {
         assert_eq!(app.status, "Showing metrics pane");
     }
 
-    #[test]
-    fn metric_keys_do_nothing_when_metrics_are_hidden() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn metric_keys_do_nothing_when_metrics_are_hidden() {
         let mut app = test_app();
         app.metrics_visible = false;
         app.metric_index = 0;
@@ -504,7 +507,9 @@ mod tests {
             KeyCode::Left,
             KeyCode::Right,
         ] {
-            handle_key(&mut app, KeyEvent::new(key, KeyModifiers::NONE)).expect("handle key");
+            handle_key(&mut app, KeyEvent::new(key, KeyModifiers::NONE))
+                .await
+                .expect("handle key");
         }
 
         assert_eq!(app.metric_index, 0);
@@ -514,8 +519,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn showing_metrics_restores_metrics_focus() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn showing_metrics_restores_metrics_focus() {
         let mut app = test_app();
         app.reactors.push(ReactorSummary {
             id: 2,
@@ -528,6 +533,7 @@ mod tests {
             &mut app,
             KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE),
         )
+        .await
         .expect("handle key");
 
         assert!(app.metrics_visible);
@@ -541,14 +547,15 @@ mod tests {
         assert_eq!(app.chart_scale_mode, ChartScaleMode::Normalised);
     }
 
-    #[test]
-    fn n_toggles_chart_scale_mode() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn n_toggles_chart_scale_mode() {
         let mut app = test_app();
 
         handle_key(
             &mut app,
             KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
         )
+        .await
         .expect("handle key");
         assert_eq!(app.chart_scale_mode, ChartScaleMode::Raw);
 
@@ -556,6 +563,7 @@ mod tests {
             &mut app,
             KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE),
         )
+        .await
         .expect("handle key");
         assert_eq!(app.chart_scale_mode, ChartScaleMode::Normalised);
     }

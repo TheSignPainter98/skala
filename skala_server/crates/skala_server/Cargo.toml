@@ -20,7 +20,7 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 tempfile = "3.27.0"
 thiserror = "2.0.18"
 time = "0.3.47"
-tokio = { version = "1.52.1", features = ["io-std", "io-util", "process"] }
+tokio = { version = "1.52.1", features = ["io-std", "io-util", "macros", "process", "rt"] }
 
 [dev-dependencies]
 googletest = "0.14.2"

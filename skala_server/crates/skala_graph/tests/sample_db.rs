@@ -7,12 +7,14 @@ use skala_graph::data::MetricKey;
 fn sample_db_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
+        .join("..")
+        .join("..")
         .join("results")
         .join("qwen-2.5-positive-meltdown.db")
 }
 
-#[test]
-fn sample_database_loads_with_expected_defaults() {
+#[tokio::test(flavor = "current_thread")]
+async fn sample_database_loads_with_expected_defaults() {
     let db_path = sample_db_path();
     assert!(
         db_path.exists(),
@@ -20,7 +22,9 @@ fn sample_database_loads_with_expected_defaults() {
         db_path.display()
     );
 
-    let app = AppState::load(&db_path, Some("reactor_53")).expect("load sample database");
+    let app = AppState::load(&db_path, Some("reactor_53"))
+        .await
+        .expect("load sample database");
 
     assert_eq!(app.reactors.len(), 1);
     assert_eq!(app.current_reactor().name, "reactor_53");

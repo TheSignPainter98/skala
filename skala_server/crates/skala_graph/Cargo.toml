@@ -1,0 +1,16 @@
+[package]
+name = "skala_graph"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = "1.0.102"
+chrono = { version = "0.4.44", default-features = false, features = ["std"] }
+crossterm = "0.29.0"
+ctrlc = "3.5.2"
+ratatui = "0.30.0"
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
+tokio = { version = "1.51.1", features = ["macros", "rt", "time"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"

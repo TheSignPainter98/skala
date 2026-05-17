@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
-use clap::Parser;
+use clap::{Args as ClapArgs, Parser};
 use indoc::writedoc;
 use log::{error, info};
 use quicktype::QuicktypeDerivedType;
@@ -35,6 +35,7 @@ async fn run() -> Result<()> {
     match command {
         Command::Init { dir } => run_init(dir).await,
         Command::Serve { config, db_path } => run_serve(config, db_path).await,
+        Command::Graph(args) => run_graph(args).await,
         Command::PrintQuicktypeSpecs => {
             run_print_quicktype_specs();
             Ok(())
@@ -223,9 +224,50 @@ enum Command {
         db_path: Utf8PathBuf,
     },
 
+    /// Open a SQLite database and render reactor metrics in a terminal graph
+    Graph(GraphArgs),
+
     /// Show quicktype specs
     #[clap(hide = true)]
     PrintQuicktypeSpecs,
+}
+
+#[derive(ClapArgs, Debug, Eq, PartialEq)]
+struct GraphArgs {
+    #[arg(
+        value_name = "DB_PATH",
+        help = "Path to the SQLite database file to inspect",
+        default_value = "skala.db"
+    )]
+    db_path: Utf8PathBuf,
+
+    #[arg(
+        long,
+        value_name = "NAME",
+        help = "Preselect a reactor by name before opening the interface"
+    )]
+    reactor: Option<String>,
+}
+
+async fn run_graph(args: GraphArgs) -> Result<()> {
+    #[cfg(feature = "graph")]
+    {
+        let options = skala_graph::GraphOptions {
+            db_path: args.db_path.into_std_path_buf(),
+            reactor: args.reactor,
+        };
+        skala_graph::run(&options).await?;
+        Ok(())
+    }
+
+    #[cfg(not(feature = "graph"))]
+    {
+        let _ = args;
+        Err(anyhow!(
+            "graph support was compiled out at build time; rebuild with default features or enable the `graph` feature"
+        )
+        .into())
+    }
 }
 
 fn run_print_quicktype_specs() {
@@ -303,5 +345,77 @@ mod tests {
     #[test]
     fn test_initial_manifest_content() {
         toml::from_str::<Config>(INITIAL_MANIFEST_CONTENT).unwrap();
+    }
+
+    #[test]
+    fn cli_parses_init_command_as_before() {
+        let args = Args::try_parse_from(["skala", "init", "reactor-dir"]).expect("parse init");
+
+        assert!(matches!(
+            args.command,
+            Command::Init { dir } if dir == Utf8Path::new("reactor-dir")
+        ));
+    }
+
+    #[test]
+    fn cli_parses_serve_command_as_before() {
+        let args = Args::try_parse_from([
+            "skala",
+            "serve",
+            "--config",
+            "config.toml",
+            "--db-path",
+            "state.db",
+        ])
+        .expect("parse serve");
+
+        assert!(matches!(
+            args.command,
+            Command::Serve { config, db_path }
+                if config == Utf8Path::new("config.toml")
+                    && db_path == Utf8Path::new("state.db")
+        ));
+    }
+
+    #[test]
+    fn cli_parses_graph_command_with_defaults() {
+        let args = Args::try_parse_from(["skala", "graph"]).expect("parse graph");
+
+        assert!(matches!(
+            args.command,
+            Command::Graph(GraphArgs { db_path, reactor })
+                if db_path == Utf8Path::new("skala.db") && reactor.is_none()
+        ));
+    }
+
+    #[test]
+    fn cli_parses_graph_command_with_database_path() {
+        let args = Args::try_parse_from(["skala", "graph", "sample.db"]).expect("parse graph path");
+
+        assert!(matches!(
+            args.command,
+            Command::Graph(GraphArgs { db_path, reactor })
+                if db_path == Utf8Path::new("sample.db") && reactor.is_none()
+        ));
+    }
+
+    #[test]
+    fn cli_parses_graph_command_with_reactor() {
+        let args = Args::try_parse_from(["skala", "graph", "sample.db", "--reactor", "reactor_53"])
+            .expect("parse graph reactor");
+
+        assert!(matches!(
+            args.command,
+            Command::Graph(GraphArgs { db_path, reactor })
+                if db_path == Utf8Path::new("sample.db")
+                    && reactor.as_deref() == Some("reactor_53")
+        ));
+    }
+
+    #[test]
+    fn cli_rejects_unknown_graph_only_flags() {
+        let result = Args::try_parse_from(["skala", "graph", "sample.db", "--watch"]);
+
+        assert!(result.is_err());
     }
 }

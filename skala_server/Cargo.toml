@@ -3,6 +3,10 @@ name = "skala"
 version.workspace = true
 edition = "2024"
 
+[features]
+default = ["graph"]
+graph = ["dep:skala_graph"]
+
 [workspace]
 resolver = "2"
 members = ["crates/*"]
@@ -21,6 +25,7 @@ indoc = "2.0.7"
 log = "0.4.29"
 proc-macro2 = { version = "1.0.106", features = ["span-locations"] }
 quicktype = { path = "crates/quicktype" }
+skala_graph = { path = "crates/skala_graph", optional = true }
 skala_server = { path = "crates/skala_server" }
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.51.1", features = ["rt", "signal"] }
