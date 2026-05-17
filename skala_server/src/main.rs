@@ -224,6 +224,7 @@ enum Command {
     },
 
     /// Show quicktype specs
+    #[clap(hide = true)]
     PrintQuicktypeSpecs,
 }
 
