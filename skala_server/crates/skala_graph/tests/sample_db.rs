@@ -5,12 +5,10 @@ use skala_graph::app::AppState;
 use skala_graph::data::MetricKey;
 
 fn sample_db_path() -> Utf8PathBuf {
-    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("..")
-        .join("results")
-        .join("qwen-2.5-positive-meltdown.db")
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    Utf8PathBuf::from(format!(
+        "{manifest_dir}/../../../results/qwen-2.5-positive-meltdown.db"
+    ))
 }
 
 #[tokio::test(flavor = "current_thread")]
