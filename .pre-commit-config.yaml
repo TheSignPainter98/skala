@@ -76,6 +76,14 @@ repos:
         args:
           - 'test'
           - '--workspace'
+      - id: yuescript-valid
+        name: run yue
+        files: '.*\.yue'
+        language: system
+        entry: yue
+        pass_filenames: false
+        args:
+          - '.'
 
       # NB: the following check is commented out as the generated `quicktype` definitions aren't yet good enough for use.
       # TODO(kcza): reinstate once ready.
