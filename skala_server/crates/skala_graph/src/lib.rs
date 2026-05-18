@@ -1,8 +1,4 @@
-use std::io::{self, stdout};
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::io;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
@@ -15,6 +11,7 @@ use crossterm::terminal::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use tokio::time::sleep;
+use tokio_util::sync::CancellationToken;
 
 use crate::app::{AppAction, AppState, StartupSelection, ensure_reactor_selection, handle_key};
 
@@ -22,7 +19,7 @@ pub mod app;
 pub mod data;
 pub mod ui;
 
-const FRAME_DURATION: Duration = Duration::from_millis(33);
+const FRAME_DURATION: Duration = Duration::from_millis((1.0 / 30.0) as u64);
 const WATCH_RELOAD_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -41,23 +38,24 @@ impl Default for GraphOptions {
 }
 
 pub async fn run(options: &GraphOptions) -> Result<()> {
-    let shutdown_requested = Arc::new(AtomicBool::new(false));
-    install_signal_handler(&shutdown_requested)?;
-    wait_for_reactor_at_startup(
+    let cancelled = CancellationToken::new();
+
+    install_signal_handler(cancelled.clone())?;
+    pause_until_reactor_present(
         &options.db_path,
         options.reactor.as_deref(),
-        &shutdown_requested,
+        cancelled.clone(),
     )
     .await?;
     let mut app = AppState::load(&options.db_path, options.reactor.as_deref()).await?;
 
     enable_raw_mode()?;
-    let mut stdout = stdout();
+    let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let run_result = run_app(&mut terminal, &mut app, &shutdown_requested).await;
+    let run_result = run_app(&mut terminal, &mut app, cancelled).await;
     let close_result = app.close_database().await;
 
     disable_raw_mode()?;
@@ -68,15 +66,15 @@ pub async fn run(options: &GraphOptions) -> Result<()> {
     close_result
 }
 
-async fn wait_for_reactor_at_startup(
+async fn pause_until_reactor_present(
     path: &Utf8Path,
     requested_reactor: Option<&str>,
-    shutdown_requested: &AtomicBool,
+    cancelled: CancellationToken,
 ) -> Result<()> {
     let mut announced_wait = false;
 
     loop {
-        if shutdown_requested.load(Ordering::Relaxed) {
+        if cancelled.is_cancelled() {
             return Ok(());
         }
 
@@ -105,14 +103,14 @@ fn print_waiting_message(path: &Utf8Path, requested_reactor: Option<&str>) {
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut AppState,
-    shutdown_requested: &AtomicBool,
+    cancelled: CancellationToken,
 ) -> Result<()> {
     let mut last_watch_reload = Instant::now();
 
     loop {
         terminal.draw(|frame| ui::render(frame, app))?;
 
-        if shutdown_requested.load(Ordering::Relaxed) {
+        if cancelled.is_cancelled() {
             return Ok(());
         }
 
@@ -137,10 +135,9 @@ async fn run_app(
     }
 }
 
-fn install_signal_handler(shutdown_requested: &Arc<AtomicBool>) -> Result<()> {
-    let shutdown_requested = Arc::clone(shutdown_requested);
+fn install_signal_handler(cancelled: CancellationToken) -> Result<()> {
     ctrlc::set_handler(move || {
-        shutdown_requested.store(true, Ordering::Relaxed);
+        cancelled.cancel();
     })?;
     Ok(())
 }

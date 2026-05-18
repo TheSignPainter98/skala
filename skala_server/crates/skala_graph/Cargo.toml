@@ -12,6 +12,7 @@ ctrlc = { version = "3.5.2", default-features = false }
 ratatui = { version = "0.30.0", default-features = false, features = ["crossterm"] }
 sqlx = { version = "0.8.6", default-features = false, features = ["derive", "json", "macros", "migrate", "runtime-tokio", "sqlite"] }
 tokio = { version = "1.51.1", default-features = false, features = ["macros", "rt", "time"] }
+tokio-util = { version = "0.7.18", default-features = false }
 
 [dev-dependencies]
 tempfile = { version = "3.27.0", default-features = false }
