@@ -1,9 +1,9 @@
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{Display, Formatter};
-use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, anyhow, bail};
+use camino::Utf8Path;
 use chrono::NaiveDateTime;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteRow};
 use sqlx::{Row, SqlitePool};
@@ -148,14 +148,14 @@ pub struct ReactorData {
     pub available_metrics: BTreeSet<MetricKey>,
 }
 
-pub async fn open_database(path: &Path) -> Result<SqlitePool> {
+pub async fn open_database(path: &Utf8Path) -> Result<SqlitePool> {
     let connect_options =
-        SqliteConnectOptions::from_str(&format!("sqlite://{}", path.display()))?.read_only(true);
+        SqliteConnectOptions::from_str(&format!("sqlite://{path}?"))?.read_only(true);
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
         .connect_with(connect_options)
         .await
-        .with_context(|| format!("failed to open SQLite database at {}", path.display()))?;
+        .with_context(|| format!("failed to open SQLite database at {path}"))?;
     Ok(pool)
 }
 

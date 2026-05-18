@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
-use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
+use camino::{Utf8Path, Utf8PathBuf};
 use sqlx::SqlitePool;
 
 use crate::data::{
@@ -39,7 +39,7 @@ impl ChartScaleMode {
 
 #[derive(Debug)]
 pub struct AppState {
-    pub db_path: PathBuf,
+    pub db_path: Utf8PathBuf,
     pub reactors: Vec<ReactorSummary>,
     pub reactor_index: usize,
     pub metric_index: usize,
@@ -53,7 +53,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn load(path: &Path, requested_reactor: Option<&str>) -> Result<Self> {
+    pub async fn load(path: &Utf8Path, requested_reactor: Option<&str>) -> Result<Self> {
         let connection = open_database(path).await?;
         let reactors = load_reactors(&connection).await?;
         let reactor_index = select_reactor(&reactors, requested_reactor)?;
@@ -324,7 +324,7 @@ pub async fn handle_key(app: &mut AppState, key: crossterm::event::KeyEvent) -> 
 }
 
 pub async fn ensure_reactor_selection(
-    path: &Path,
+    path: &Utf8Path,
     requested_reactor: Option<&str>,
 ) -> Result<StartupSelection> {
     let connection = open_database(path).await?;
@@ -356,7 +356,7 @@ mod tests {
 
     fn test_app() -> AppState {
         AppState {
-            db_path: PathBuf::from("test.db"),
+            db_path: Utf8PathBuf::from("test.db"),
             reactors: vec![ReactorSummary {
                 id: 1,
                 name: "reactor_a".to_owned(),

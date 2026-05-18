@@ -1,5 +1,4 @@
 use std::io::{self, stdout};
-use std::path::{Path, PathBuf};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -7,6 +6,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -27,14 +27,14 @@ const WATCH_RELOAD_INTERVAL: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphOptions {
-    pub db_path: PathBuf,
+    pub db_path: Utf8PathBuf,
     pub reactor: Option<String>,
 }
 
 impl Default for GraphOptions {
     fn default() -> Self {
         Self {
-            db_path: PathBuf::from("skala.db"),
+            db_path: Utf8PathBuf::from("skala.db"),
             reactor: None,
         }
     }
@@ -69,7 +69,7 @@ pub async fn run(options: &GraphOptions) -> Result<()> {
 }
 
 async fn wait_for_reactor_at_startup(
-    path: &Path,
+    path: &Utf8Path,
     requested_reactor: Option<&str>,
     shutdown_requested: &AtomicBool,
 ) -> Result<()> {
@@ -93,16 +93,12 @@ async fn wait_for_reactor_at_startup(
     }
 }
 
-fn print_waiting_message(path: &Path, requested_reactor: Option<&str>) {
+fn print_waiting_message(path: &Utf8Path, requested_reactor: Option<&str>) {
     match requested_reactor {
         Some(reactor) => eprintln!(
-            "No reactors with events are available in {} yet; waiting for reactor `{reactor}`.",
-            path.display()
+            "No reactors with events are available in {path} yet; waiting for reactor `{reactor}`."
         ),
-        None => eprintln!(
-            "No reactors with events are available in {} yet; waiting for data.",
-            path.display()
-        ),
+        None => eprintln!("No reactors with events are available in {path} yet; waiting for data."),
     }
 }
 

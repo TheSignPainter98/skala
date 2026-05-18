@@ -252,11 +252,11 @@ struct GraphArgs {
 async fn run_graph(args: GraphArgs) -> Result<()> {
     #[cfg(feature = "graph")]
     {
-        let options = skala_graph::GraphOptions {
-            db_path: args.db_path.into_std_path_buf(),
-            reactor: args.reactor,
-        };
-        skala_graph::run(&options).await?;
+        use skala_graph::GraphOptions;
+
+        let GraphArgs { db_path, reactor } = args;
+        let opts = GraphOptions { db_path, reactor };
+        skala_graph::run(&opts).await?;
         Ok(())
     }
 

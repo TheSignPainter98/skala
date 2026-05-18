@@ -71,7 +71,7 @@ pub fn render(frame: &mut Frame<'_>, app: &AppState) {
 fn render_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     let title = Paragraph::new(format!(
         "Database: {} | Reactor: {}",
-        app.db_path.display(),
+        &app.db_path,
         app.current_reactor().name
     ))
     .block(Block::default().borders(Borders::ALL).title("SKALA Graph"))

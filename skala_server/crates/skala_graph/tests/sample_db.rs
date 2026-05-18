@@ -1,11 +1,11 @@
 use std::collections::BTreeSet;
-use std::path::PathBuf;
 
+use camino::Utf8PathBuf;
 use skala_graph::app::AppState;
 use skala_graph::data::MetricKey;
 
-fn sample_db_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn sample_db_path() -> Utf8PathBuf {
+    Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
         .join("..")
@@ -18,8 +18,7 @@ async fn sample_database_loads_with_expected_defaults() {
     let db_path = sample_db_path();
     assert!(
         db_path.exists(),
-        "sample database should exist at {}",
-        db_path.display()
+        "sample database should exist at {db_path}",
     );
 
     let app = AppState::load(&db_path, Some("reactor_53"))

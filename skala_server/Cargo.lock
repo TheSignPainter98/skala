@@ -3065,6 +3065,7 @@ name = "skala_graph"
 version = "1.0.0"
 dependencies = [
  "anyhow",
+ "camino",
  "chrono",
  "crossterm",
  "ctrlc",
