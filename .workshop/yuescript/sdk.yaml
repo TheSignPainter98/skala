@@ -1,0 +1,14 @@
+name: yuescript
+version: "0.34.1"
+title: YueScript
+summary: A Moonscript dialect that compiles to Lua
+description: |
+  Installs the standalone `yue` binary from GitHub releases at the pinned
+  version. The binary is downloaded to `~/.local/bin/yue` (on PATH). The
+  standalone binary is used instead of the `yue` snap because the snap's strict
+  confinement prevents it from reading files under `/project`.
+base: ubuntu@24.04
+plugs:
+  cache:
+    interface: mount
+    workshop-target: /home/workshop/.cache/yue

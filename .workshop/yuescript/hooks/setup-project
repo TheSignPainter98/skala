@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+mkdir -p ~/.local/bin
+
+VERSION=0.34.1
+ARCH=linux-x86_64
+CACHE=/home/workshop/.cache/yue/yue
+
+if [ -x "$CACHE" ] && "$CACHE" --version | grep -q "$VERSION"; then
+    ln -sf "$CACHE" ~/.local/bin/yue
+    exit 0
+fi
+
+URL="https://github.com/IppClub/YueScript/releases/download/v${VERSION}/yue-${ARCH}.zip"
+SHA256=22a40c3dc0e2bb6f9714321899b57ae9827d451d016b1f26f560c00dbc02741f
+
+DOWNLOAD_DIR=$(mktemp -d)
+trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
+
+curl -fsSL "$URL" -o "$DOWNLOAD_DIR/yue.zip"
+echo "$SHA256  $DOWNLOAD_DIR/yue.zip" | sha256sum -c -
+unzip -o "$DOWNLOAD_DIR/yue.zip" -d "$DOWNLOAD_DIR"
+install -D -m 0755 "$DOWNLOAD_DIR/yue" "$CACHE"
+ln -sf "$CACHE" ~/.local/bin/yue
