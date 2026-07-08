@@ -3,22 +3,24 @@ set -eu
 mkdir -p ~/.local/bin
 
 VERSION=0.34.1
-ARCH=linux-x86_64
-CACHE=/home/workshop/.cache/yue/yue
+CACHE_DIR=/home/workshop/.cache/yue
+CACHE="$CACHE_DIR/yue"
 
-if [ -x "$CACHE" ] && "$CACHE" --version | grep -q "$VERSION"; then
+if [ -x "$CACHE" ] && "$CACHE" --version >/dev/null 2>&1; then
     ln -sf "$CACHE" ~/.local/bin/yue
     exit 0
 fi
 
-URL="https://github.com/IppClub/YueScript/releases/download/v${VERSION}/yue-${ARCH}.zip"
-SHA256=22a40c3dc0e2bb6f9714321899b57ae9827d451d016b1f26f560c00dbc02741f
+BUILD_DIR=$(mktemp -d)
+trap 'rm -rf "$BUILD_DIR"' EXIT
 
-DOWNLOAD_DIR=$(mktemp -d)
-trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
+curl -fsSL "https://github.com/IppClub/YueScript/archive/refs/tags/v${VERSION}.tar.gz" -o "$BUILD_DIR/yuescript.tar.gz"
+SHA256_EXPECTED=5c291001b6c210f4220ddf4bef0b0cffc7ba2b1cab4c70bc2e44f924c84db8c2
+echo "$SHA256_EXPECTED  $BUILD_DIR/yuescript.tar.gz" | sha256sum -c -
+tar xzf "$BUILD_DIR/yuescript.tar.gz" -C "$BUILD_DIR"
 
-curl -fsSL "$URL" -o "$DOWNLOAD_DIR/yue.zip"
-echo "$SHA256  $DOWNLOAD_DIR/yue.zip" | sha256sum -c -
-unzip -o "$DOWNLOAD_DIR/yue.zip" -d "$DOWNLOAD_DIR"
-install -D -m 0755 "$DOWNLOAD_DIR/yue" "$CACHE"
+SRC_DIR="$BUILD_DIR/YueScript-$VERSION"
+cd "$SRC_DIR"
+make release -j"$(nproc)"
+install -D -m 0755 "bin/release/yue" "$CACHE"
 ln -sf "$CACHE" ~/.local/bin/yue
