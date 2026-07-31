@@ -1,14 +1,14 @@
 name: skala-dev
 base: ubuntu@24.04
 connections:
-  - plug: pi-coding-agent:pi-config
+  - plug: omp:omp-home
     slot: system:mount
 sdks:
   - name: direnvrc
   - name: rust
-  - name: pi-coding-agent
-    channel: latest/edge
+  - name: omp
   - name: project-yuescript
 actions:
-  pi: direnv exec /project pi "$@"
+  omp: direnv exec /project omp "$@"
   yue: direnv exec /project yue "$@"
+  direnv: direnv "$@"
